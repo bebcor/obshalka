@@ -12,21 +12,86 @@ class VideoCallManager {
         this.isInCall = false;
         this.userName = null;
         
-        this.configuration = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
-        };
+	// ЗАМЕНИТЕ ВАШУ КОНФИГУРАЦИЮ НА ЭТУ:
+	this.configuration = {
+    	iceServers: [
+        // STUN серверы
+        	{ urls: 'stun:stun.l.google.com:19302' },
+        	{ urls: 'stun:stun1.l.google.com:19302' },
+        	{ urls: 'stun:stun2.l.google.com:19302' },
+        	{ urls: 'stun:stun3.l.google.com:19302' },
+        	{ urls: 'stun:stun4.l.google.com:19302' },
         
-        this.initialize();
+        // TURN серверы (несколько вариантов)
+        	{
+            	urls: 'turn:openrelay.metered.ca:80',
+            	username: 'openrelayproject',
+            	credential: 'openrelayproject'
+        	},
+        	{
+            	urls: 'turn:openrelay.metered.ca:443',
+            	username: 'openrelayproject',
+            	credential: 'openrelayproject'
+        	},
+        	{
+            	urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            	username: 'openrelayproject',
+            	credential: 'openrelayproject'
+        	},
+        	// Резервные TURN серверы
+        	{
+            	urls: 'turn:turn.anyfirewall.com:443?transport=tcp',
+            	username: 'webrtc',
+            	credential: 'webrtc'
+        	}
+    	],
+    	iceTransportPolicy: 'all',
+    	iceCandidatePoolSize: 10
+	};
+
+              
+    this.initialize();
     }
 
     initialize() {
         this.setupEventListeners();
         this.setupSocketConnection();
         this.updateUI();
+        this.bootstrapFromURL();
+        this.fetchIceServers();
+	this.testTurnServer();
     }
+
+	async testTurnServer() {
+    	try {
+        	const testPeerConnection = new RTCPeerConnection({
+            	iceServers: [{
+                	urls: 'turn:openrelay.metered.ca:80',
+                	username: 'openrelayproject',
+                	credential: 'openrelayproject'
+           	 }]
+        	});
+        
+        	testPeerConnection.onicecandidate = (e) => {
+            	if (e.candidate) {
+                	console.log('TURN candidate found:', e.candidate.type, e.candidate.protocol);
+            	} else {
+                	console.log('TURN gathering complete');
+            	}
+        	};
+        
+        // Создаем пустой оффер для активации ICE
+        	await testPeerConnection.createOffer();
+        	await testPeerConnection.setLocalDescription(await testPeerConnection.createOffer());
+        
+        	setTimeout(() => {
+            	testPeerConnection.close();
+        	}, 5000);
+        
+    	} catch (error) {
+        	console.error('TURN test failed:', error);
+    	}
+	}
 
     setupSocketConnection() {
         try {
@@ -89,11 +154,47 @@ class VideoCallManager {
         }
     }
 
+    async fetchIceServers() {
+        try {
+            const res = await fetch('/api/ice');
+            const data = await res.json();
+            if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+                this.configuration.iceServers = data.iceServers;
+                console.log('ICE servers loaded');
+            }
+        } catch (e) {
+            console.warn('Fallback to default ICE servers');
+        }
+    }
+
+    bootstrapFromURL() {
+        const path = window.location.pathname;
+        const deeplinkMatch = path.match(/^\/r\/([A-Za-z0-9_-]{3,})$/);
+        if (deeplinkMatch) {
+            const roomId = deeplinkMatch[1];
+            const input = document.getElementById('roomInput');
+            if (input) input.value = roomId;
+            // не авто-запускаем медиа, только автопросоединение к комнате
+            setTimeout(() => this.joinRoom(), 0);
+        }
+    }
+
     setupEventListeners() {
         // Room controls
         document.getElementById('createRoom').addEventListener('click', () => this.createRoom());
         document.getElementById('joinRoom').addEventListener('click', () => this.joinRoom());
         document.getElementById('endCall').addEventListener('click', () => this.leaveRoom());
+        const copyBtn = document.getElementById('copyLink');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+                if (!this.roomId) {
+                    this.showNotification('Сначала создайте или введите комнату', 'warning');
+                    return;
+                }
+                const shareUrl = `${window.location.origin}/r/${this.roomId}`;
+                this.copyShareLink(shareUrl);
+            });
+        }
         
         // Media controls
         document.getElementById('toggleAudio').addEventListener('click', () => this.toggleAudio());
@@ -132,6 +233,7 @@ class VideoCallManager {
         
         // Update video overlays
         this.updateVideoOverlays();
+        this.updateBadges();
     }
 
     updateVideoOverlays() {
@@ -187,13 +289,24 @@ class VideoCallManager {
             
             this.roomId = data.room_id;
             console.log('Room created with ID:', this.roomId);
-            this.showNotification(`Room created: ${this.roomId}`, 'success');
+            const shareUrl = `${window.location.origin}/r/${this.roomId}`;
+            this.showNotification(`Комната создана: ${this.roomId}`, 'success');
+            this.copyShareLink(shareUrl);
             
             this.joinRoomAfterCreation();
             
         } catch (error) {
             console.error('Error creating room:', error);
             this.showNotification('Failed to create room: ' + error.message, 'error');
+        }
+    }
+
+    async copyShareLink(url) {
+        try {
+            await navigator.clipboard.writeText(url);
+            this.showNotification('Ссылка на комнату скопирована в буфер обмена', 'info');
+        } catch (e) {
+            this.showNotification('Не удалось скопировать ссылку. Скопируйте вручную: ' + url, 'warning');
         }
     }
 
@@ -371,8 +484,14 @@ class VideoCallManager {
         
         // Clear all remote streams and video elements
         this.remoteStreams.forEach((stream, userId) => {
+            // wrapper and video share the same id today; prefer wrapper lookup first
+            const wrapper = document.getElementById(`remoteWrapper-${userId}`);
+            if (wrapper) {
+                wrapper.remove();
+                return;
+            }
             const videoElement = document.getElementById(`remoteVideo-${userId}`);
-            if (videoElement) {
+            if (videoElement && videoElement.parentElement) {
                 videoElement.parentElement.remove();
             }
         });
@@ -486,6 +605,7 @@ class VideoCallManager {
                 videoBtn.classList.toggle('active', videoEnabled);
                 videoBtn.classList.toggle('muted', !videoEnabled);
             }
+            this.updateBadges();
         } else {
             if (audioBtn) {
                 audioBtn.classList.remove('active');
@@ -495,6 +615,27 @@ class VideoCallManager {
                 videoBtn.classList.remove('active');
                 videoBtn.classList.add('muted');
             }
+            this.updateBadges();
+        }
+    }
+
+    updateBadges() {
+        const audioBadge = document.getElementById('badge-local-audio');
+        const videoBadge = document.getElementById('badge-local-video');
+        if (!audioBadge || !videoBadge) return;
+
+        if (this.localStream) {
+            const a = this.localStream.getAudioTracks()[0];
+            const v = this.localStream.getVideoTracks()[0];
+            audioBadge.classList.toggle('on', !!a && a.enabled);
+            audioBadge.classList.toggle('off', !(!!a && a.enabled));
+            videoBadge.classList.toggle('on', !!v && v.enabled);
+            videoBadge.classList.toggle('off', !(!!v && v.enabled));
+        } else {
+            audioBadge.classList.remove('on');
+            audioBadge.classList.add('off');
+            videoBadge.classList.remove('on');
+            videoBadge.classList.add('off');
         }
     }
 
@@ -550,79 +691,175 @@ class VideoCallManager {
         this.updateVideoOverlays();
     }
 
-    setupPeerConnection(targetUserId) {
-        if (this.remoteUsers.has(targetUserId)) {
-            console.log('Peer connection already exists for:', targetUserId);
-            return;
-        }
+	setupPeerConnection(targetUserId) {
+    	// Проверяем, нет ли уже соединения с этим пользователем
+    	if (this.remoteUsers.has(targetUserId)) {
+        	console.log('Peer connection already exists for:', targetUserId);
+        	return;
+    	}
 
-        try {
-            console.log('Setting up peer connection for:', targetUserId);
-            
-            const peerConnection = new RTCPeerConnection(this.configuration);
-            
-            if (this.localStream) {
-                this.localStream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, this.localStream);
-                });
-            }
-            
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    console.log('Sending ICE candidate to:', targetUserId, event.candidate);
-                    this.socket.emit('ice_candidate', {
-                        target_user_id: targetUserId,
-                        candidate: event.candidate
-                    });
-                } else {
-                    console.log('ICE gathering complete for:', targetUserId);
-                }
-            };
-            
-            peerConnection.ontrack = (event) => {
-                console.log('Remote track received from:', targetUserId);
+    	try {
+        	console.log('Setting up peer connection for:', targetUserId);
+        
+        	// Конфигурация ICE-серверов с STUN и TURN
+        	const configuration = {
+            	iceServers: [
+                	// STUN-серверы Google
+                	{ urls: 'stun:stun.l.google.com:19302' },
+                	{ urls: 'stun:stun1.l.google.com:19302' },
+                	{ urls: 'stun:stun2.l.google.com:19302' },
+                	{ urls: 'stun:stun3.l.google.com:19302' },
+                	{ urls: 'stun:stun4.l.google.com:19302' },
                 
-                if (!this.remoteStreams.has(targetUserId)) {
-                    const remoteStream = new MediaStream();
-                    this.remoteStreams.set(targetUserId, remoteStream);
-                    
-                    this.createRemoteVideoElement(targetUserId, remoteStream);
-                }
+                	// TURN-серверы для обхода сложных NAT и фаерволов
+                	{
+                    	urls: 'turn:openrelay.metered.ca:80',
+                    	username: 'openrelayproject',
+                    	credential: 'openrelayproject'
+                	},
+                	{
+                    	urls: 'turn:openrelay.metered.ca:443',
+                    	username: 'openrelayproject', 
+                    	credential: 'openrelayproject'
+                	},
+                	{
+                    	urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                    	username: 'openrelayproject',
+                    	credential: 'openrelayproject'
+                	},
+                	// Резервные TURN-серверы
+                	{
+                    	urls: 'turn:turn.anyfirewall.com:443?transport=tcp',
+                    	username: 'webrtc',
+                    	credential: 'webrtc'
+                	}
+            	],
+            	iceTransportPolicy: 'all', // Используем и relay и host кандидаты
+            	iceCandidatePoolSize: 10   // Увеличиваем пул ICE-кандидатов
+        	};
+
+        	// Создаем новый peer connection
+        	const peerConnection = new RTCPeerConnection(configuration);
+        
+        	// Добавляем локальные треки, если они есть
+        	if (this.localStream) {
+            	this.localStream.getTracks().forEach(track => {
+                	peerConnection.addTrack(track, this.localStream);
+            	});
+        	}
+        
+        	// Обработчик ICE-кандидатов
+        	peerConnection.onicecandidate = (event) => {
+            	if (event.candidate) {
+                	console.log('New ICE candidate for', targetUserId, ':', {
+                    	type: event.candidate.type,
+                    	protocol: event.candidate.protocol,
+                    	address: event.candidate.address,
+                    	port: event.candidate.port
+                	});
                 
-                const remoteStream = this.remoteStreams.get(targetUserId);
-                event.streams[0].getTracks().forEach(track => {
-                    if (!remoteStream.getTracks().some(t => t.id === track.id)) {
-                        remoteStream.addTrack(track);
-                    }
-                });
+                	// Отправляем кандидат через signaling-сервер
+                	this.socket.emit('ice_candidate', {
+                    	target_user_id: targetUserId,
+                    	candidate: event.candidate
+                	});
+            	} else {
+                	console.log('✅ ICE gathering complete for:', targetUserId);
+                	console.log('Local SDP description:', peerConnection.localDescription?.sdp);
+            	}
+        	};
+        
+        // Обработчик получения удаленных треков
+        	peerConnection.ontrack = (event) => {
+            	console.log('Remote track received from:', targetUserId, 
+                        	'Track kind:', event.track.kind, 
+                        	'Track readyState:', event.track.readyState,
+              	        	'Streams count:', event.streams.length);
+            
+            	// Создаем или получаем удаленный поток для этого пользователя
+            	if (!this.remoteStreams.has(targetUserId)) {
+                	const remoteStream = new MediaStream();
+                	this.remoteStreams.set(targetUserId, remoteStream);
+                	this.createRemoteVideoElement(targetUserId, remoteStream);
+            	}
+            
+            	// Добавляем полученный трек в поток
+            	const remoteStream = this.remoteStreams.get(targetUserId);
+            	event.streams[0].getTracks().forEach(track => {
+                	if (!remoteStream.getTracks().some(t => t.id === track.id)) {
+                    	remoteStream.addTrack(track);
+                    	console.log('Added track to remote stream:', track.kind);
+                	}
+            	});
+            
+            	this.updateVideoOverlays();
+        	};
+        
+        	// Обработчик изменения состояния соединения
+        	peerConnection.onconnectionstatechange = () => {
+            	const state = peerConnection.connectionState;
+            	console.log('Connection state with', targetUserId, ':', state);
+            
+            	if (state === 'connected') {
+                	this.showNotification('Call connected', 'success');
+                	console.log('✅ WebRTC connection established!');
+            	} else if (state === 'disconnected') {
+                	this.showNotification('Call disconnected', 'warning');
+            	} else if (state === 'failed') {
+                	console.error('❌ Connection failed - attempting ICE restart...');
+                	this.showNotification('Connection issues detected', 'warning');
                 
-                this.updateVideoOverlays();
-            };
+                	// Пытаемся перезапустить ICE через 3 секунды
+                	setTimeout(() => {
+                    	if (this.remoteUsers.has(targetUserId) && 
+                        	peerConnection.connectionState === 'failed') {
+                        	console.log('🔄 Attempting ICE restart for', targetUserId);
+                        	this.createOffer(targetUserId);
+                    	}
+                	}, 3000);
+            	}
+        	};
+        
+        	// Обработчик изменения состояния ICE-соединения
+        	peerConnection.oniceconnectionstatechange = () => {
+            	const iceState = peerConnection.iceConnectionState;
+            	console.log('ICE connection state with', targetUserId, ':', iceState);
             
-            peerConnection.onconnectionstatechange = () => {
-                console.log('Connection state with', targetUserId, ':', peerConnection.connectionState);
-                
-                if (peerConnection.connectionState === 'connected') {
-                    this.showNotification('Call connected', 'success');
-                } else if (peerConnection.connectionState === 'disconnected' || 
-                           peerConnection.connectionState === 'failed') {
-                    this.showNotification('Call disconnected', 'warning');
-                }
-            };
-            
-            peerConnection.oniceconnectionstatechange = () => {
-                console.log('ICE connection state with', targetUserId, ':', peerConnection.iceConnectionState);
-                if (peerConnection.iceConnectionState === 'failed') {
-                    console.error('ICE connection failed,可能需要 TURN сервер');
-                }
-            };
-            
-            this.remoteUsers.set(targetUserId, peerConnection);
-            
-        } catch (error) {
-            console.error('Error setting up peer connection:', error);
-        }
-    }
+            	if (iceState === 'connected' || iceState === 'completed') {
+                	console.log('✅ ICE connection successful!');
+            	} else if (iceState === 'disconnected') {
+                	console.warn('⚠️ ICE connection disconnected');
+            	} else if (iceState === 'failed') {
+                	console.error('❌ ICE connection failed - will trigger renegotiation');
+                	// Автоматический перезапуск через connectionstatechange
+            	}
+        	};
+        
+        // Обработчик необходимости переговоров (renegotiation)
+        	peerConnection.onnegotiationneeded = () => {
+            	console.log('Negotiation needed for:', targetUserId);
+        	};
+        
+        // Обработчик изменения состояния ICE gathering
+        	peerConnection.onicegatheringstatechange = () => {
+            	console.log('ICE gathering state for', targetUserId, ':', 
+                	        peerConnection.iceGatheringState);
+        	};
+        
+        // Сохраняем соединение в Map
+        	this.remoteUsers.set(targetUserId, peerConnection);
+        
+        	console.log('✅ Peer connection setup completed for:', targetUserId);
+        
+    	} catch (error) {
+        	console.error('❌ Error setting up peer connection:', error);
+        	this.showNotification('Failed to setup connection: ' + error.message, 'error');
+    	}
+	}
+
+
+
+
 
     // НОВЫЙ МЕТОД: создание видео элемента для удаленного пользователя
     createRemoteVideoElement(userId, stream) {
@@ -630,11 +867,16 @@ class VideoCallManager {
         
         const videoWrapper = document.createElement('div');
         videoWrapper.className = 'video-wrapper remote';
-        videoWrapper.id = `remoteVideo-${userId}`;
+        videoWrapper.id = `remoteWrapper-${userId}`;
         
         videoWrapper.innerHTML = `
             <video id="remoteVideo-${userId}" autoplay playsinline></video>
-            <div class="video-label">User ${userId.substring(0, 8)}</div>
+            <div class="video-label">User ${userId.substring(0, 8)}
+                <span class="badge-group">
+                    <span class="badge badge-audio on" title="Микрофон включен">🎤</span>
+                    <span class="badge badge-video on" title="Камера включена">📹</span>
+                </span>
+            </div>
             <div class="video-overlay">
                 <div class="overlay-icon">👤</div>
                 <p>Waiting for video...</p>
@@ -647,81 +889,92 @@ class VideoCallManager {
         videoElement.srcObject = stream;
     }
 
-    async createOffer(targetUserId) {
-        if (!this.remoteUsers.has(targetUserId)) {
-            console.error('No peer connection for:', targetUserId);
-            return;
-        }
+	async createOffer(targetUserId) {
+    		if (!this.remoteUsers.has(targetUserId)) {
+        		console.error('No peer connection for:', targetUserId);
+        	return;
+    	}
+    
+    	try {
+        	const peerConnection = this.remoteUsers.get(targetUserId);
         
-        try {
-            const peerConnection = this.remoteUsers.get(targetUserId);
-            const offer = await peerConnection.createOffer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true
-            });
-            
-            await peerConnection.setLocalDescription(offer);
-            
-            console.log('Sending offer to:', targetUserId);
-            
-            this.socket.emit('webrtc_offer', {
-                target_user_id: targetUserId,
-                offer: offer
-            });
-            
-        } catch (error) {
-            console.error('Error creating offer:', error);
-        }
-    }
-
+        	// ОСТОРОЖНО: Используем стандартные опции без переопределения
+        	const offer = await peerConnection.createOffer();
+        
+        	await peerConnection.setLocalDescription(offer);
+        
+        	console.log('📤 Sending offer to:', targetUserId);
+        	console.log('SDP offer direction check:');
+        	peerConnection.getTransceivers().forEach((transceiver, index) => {
+            	console.log(`Transceiver ${index}:`, {
+                	direction: transceiver.direction,
+                	currentDirection: transceiver.currentDirection,
+                	kind: transceiver.receiver.track?.kind || 'no track'
+            	});
+        	});
+        
+        	this.socket.emit('webrtc_offer', {
+            	target_user_id: targetUserId,
+            	offer: offer
+        	});
+        
+    	} catch (error) {
+        	console.error('Error creating offer:', error);
+    	}
+	}
     async handleWebRTCOffer(data) {
-        try {
-            console.log('Received offer from:', data.sender_id);
+    try {
+        console.log('Received offer from:', data.sender_id);
+    
+        // Если соединение с этим пользователем еще не создано, создаем его
+        if (!this.remoteUsers.has(data.sender_id)) {
+            this.setupPeerConnection(data.sender_id);
+        }
+    
+        const peerConnection = this.remoteUsers.get(data.sender_id);
         
-            if (!this.remoteUsers.has(data.sender_id)) {
-                this.setupPeerConnection(data.sender_id);
+        // Устанавливаем полученное предложение (offer) как удаленное описание
+        await peerConnection.setRemoteDescription(data.offer);
+    
+        // Создаем ответ (answer)
+        const answer = await peerConnection.createAnswer();
+        
+        // Устанавливаем созданный ответ как локальное описание
+        await peerConnection.setLocalDescription(answer);
+    
+        console.log('Sending answer to:', data.sender_id);
+        
+        // Отправляем ответ обратно инициатору через signaling-сервер
+        this.socket.emit('webrtc_answer', {
+            target_user_id: data.sender_id,
+            answer: answer
+        });
+    
+    } catch (error) {
+        console.error('Error handling WebRTC offer:', error);
+    }
+}
+
+   async handleWebRTCAnswer(data) {
+       try {
+           console.log('📥 Received ANSWER from:', data.sender_id);  // ✅
+           console.log('Answer SDP:', data.answer.sdp.substring(0, 100) + '...');  // ✅
+        
+           if (!this.remoteUsers.has(data.sender_id)) {
+               console.error('No peer connection for:', data.sender_id);
+               return;
            }
         
-            const peerConnection = this.remoteUsers.get(data.sender_id);
-            await peerConnection.setRemoteDescription(data.offer);
+           const peerConnection = this.remoteUsers.get(data.sender_id);
+           await peerConnection.setRemoteDescription(data.answer);  // ✅ используем data.answer
+           console.log('✅ Remote description set successfully');
         
-            // ИСПРАВЛЕНИЕ: Добавляем опции для создания ответа
-            const answerOptions = {
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true
-            };
-            const answer = await peerConnection.createAnswer(answerOptions);
-        
-            await peerConnection.setLocalDescription(answer);
-        
-            console.log('Sending answer to:', data.sender_id);
-        
-            this.socket.emit('webrtc_answer', {
-                target_user_id: data.sender_id,
-                answer: answer
-            });
-        
-        } catch (error) {
-            console.error('Error handling WebRTC offer:', error);
-        }
-    }
+       } catch (error) {
+           console.error('Error handling WebRTC answer:', error);
+       }
+   }
 
-    async handleWebRTCAnswer(data) {
-        try {
-            console.log('Received answer from:', data.sender_id);
-            
-            if (!this.remoteUsers.has(data.sender_id)) {
-                console.error('No peer connection for:', data.sender_id);
-                return;
-            }
-            
-            const peerConnection = this.remoteUsers.get(data.sender_id);
-            await peerConnection.setRemoteDescription(data.answer);
-            
-        } catch (error) {
-            console.error('Error handling WebRTC answer:', error);
-        }
-    }
+
 
     async handleICECandidate(data) {
         try {
