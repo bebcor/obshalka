@@ -28,7 +28,12 @@ redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 
 socketio = SocketIO(
     app,
-    cors_allowed_origins="https://obshalka.online",
+    cors_allowed_origins=[
+        "https://obshalka.online",
+        "http://obshalka.online", 
+        "https://109.73.201.242",
+        "http://109.73.201.242"
+    ],
     logger=True,
     engineio_logger=True,
     message_queue=redis_url,

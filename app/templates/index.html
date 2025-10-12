@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VideoMeet - Secure Video Conferencing</title>
+    <title>Obshalka - Secure Video Conferencing</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,6 +20,7 @@
         .room-icon::before { content: "🚪"; }
         .logo-icon::before { content: "📹"; }
         .call-icon::before { content: "💬"; }
+        .fullscreen-icon::before { content: "⛶"; }
     </style>
 </head>
 <body>
@@ -28,7 +29,7 @@
         <header class="header">
             <div class="logo">
                 <div class="logo-icon"></div>
-                <span>VideoMeet</span>
+                <span>Obshalka</span>
             </div>
             <div class="connection-info">
                 <div class="status-indicator">
@@ -110,6 +111,11 @@
                     <!-- Screen Share -->
                     <button id="shareScreen" class="btn-control" title="Share Screen">
                         <span class="icon screen-icon"></span>
+                    </button>
+
+                    <!-- Fullscreen Toggle -->
+                    <button id="toggleFullscreen" class="btn-control" title="Fullscreen">
+                        <span class="icon fullscreen-icon"></span>
                     </button>
                 </div>
                 

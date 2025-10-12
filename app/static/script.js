@@ -12,43 +12,42 @@ class VideoCallManager {
         this.isInCall = false;
         this.userName = null;
         
-	// ЗАМЕНИТЕ ВАШУ КОНФИГУРАЦИЮ НА ЭТУ:
-	this.configuration = {
-    	iceServers: [
-        // STUN серверы
-        	{ urls: 'stun:stun.l.google.com:19302' },
-        	{ urls: 'stun:stun1.l.google.com:19302' },
-        	{ urls: 'stun:stun2.l.google.com:19302' },
-        	{ urls: 'stun:stun3.l.google.com:19302' },
-        	{ urls: 'stun:stun4.l.google.com:19302' },
-        
-        // TURN серверы (несколько вариантов)
-        	{
-            	urls: 'turn:openrelay.metered.ca:80',
-            	username: 'openrelayproject',
-            	credential: 'openrelayproject'
-        	},
-        	{
-            	urls: 'turn:openrelay.metered.ca:443',
-            	username: 'openrelayproject',
-            	credential: 'openrelayproject'
-        	},
-        	{
-            	urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-            	username: 'openrelayproject',
-            	credential: 'openrelayproject'
-        	},
-        	// Резервные TURN серверы
-        	{
-            	urls: 'turn:turn.anyfirewall.com:443?transport=tcp',
-            	username: 'webrtc',
-            	credential: 'webrtc'
-        	}
-    	],
-    	iceTransportPolicy: 'all',
-    	iceCandidatePoolSize: 10
-	};
-
+// ОБНОВЛЕННАЯ КОНФИГУРАЦИЯ ДЛЯ ВАШЕГО СЕРВЕРА
+this.configuration = {
+    iceServers: [
+        // Ваш собственный STUN сервер
+        {
+            urls: 'stun:109.73.201.242:3478'
+        },
+        // Ваш собственный TURN сервер (UDP)
+        {
+            urls: 'turn:109.73.201.242:3478',
+            username: 'webrtc',  // Замените на реальный username
+            credential: 'webrtcpassword' // Замените на реальный password
+        },
+        // Ваш собственный TURN сервер (TCP)
+        {
+            urls: 'turn:109.73.201.242:3478?transport=tcp',
+            username: 'webrtc',
+            credential: 'webrtcpassword'
+        },
+        // Ваш собственный TURN сервер (TLS)
+        {
+            urls: 'turns:109.73.201.242:5349',
+            username: 'webrtc',
+            credential: 'webrtcpassword'
+        },
+        // Резервные публичные серверы (на случай проблем с вашим)
+        {
+            urls: 'stun:stun.l.google.com:19302'
+        },
+        {
+            urls: 'stun:global.stun.twilio.com:3478'
+        }
+    ],
+    iceTransportPolicy: 'all',
+    iceCandidatePoolSize: 10
+};
               
     this.initialize();
     }
@@ -179,35 +178,71 @@ class VideoCallManager {
         }
     }
 
-    setupEventListeners() {
-        // Room controls
-        document.getElementById('createRoom').addEventListener('click', () => this.createRoom());
-        document.getElementById('joinRoom').addEventListener('click', () => this.joinRoom());
-        document.getElementById('endCall').addEventListener('click', () => this.leaveRoom());
-        const copyBtn = document.getElementById('copyLink');
-        if (copyBtn) {
-            copyBtn.addEventListener('click', () => {
-                if (!this.roomId) {
-                    this.showNotification('Сначала создайте или введите комнату', 'warning');
-                    return;
-                }
-                const shareUrl = `${window.location.origin}/r/${this.roomId}`;
-                this.copyShareLink(shareUrl);
-            });
-        }
-        
-        // Media controls
-        document.getElementById('toggleAudio').addEventListener('click', () => this.toggleAudio());
-        document.getElementById('toggleVideo').addEventListener('click', () => this.toggleVideo());
-        document.getElementById('shareScreen').addEventListener('click', () => this.shareScreen());
-        
-        // Room input enter key
-        document.getElementById('roomInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.joinRoom();
-            }
-        });
-    }
+
+	setupEventListeners() {
+    	// Room controls
+    		const createRoomBtn = document.getElementById('createRoom');
+    		const joinRoomBtn = document.getElementById('joinRoom');
+    		const endCallBtn = document.getElementById('endCall');
+    		const roomInput = document.getElementById('roomInput');
+    
+    		if (createRoomBtn) {
+       			createRoomBtn.addEventListener('click', () => this.createRoom());
+    			}
+    
+    		if (joinRoomBtn) {
+        		joinRoomBtn.addEventListener('click', () => this.joinRoom());
+    			}
+    
+    		if (endCallBtn) {
+        		endCallBtn.addEventListener('click', () => this.leaveRoom());
+    			}
+    
+    		const copyBtn = document.getElementById('copyLink');
+    		if (copyBtn) {
+        		copyBtn.addEventListener('click', () => {
+            	if (!this.roomId) {
+                	this.showNotification('Сначала создайте или введите комнату', 'warning');
+                	return;
+            	}
+            	const shareUrl = `${window.location.origin}/r/${this.roomId}`;
+            	this.copyShareLink(shareUrl);
+        	});
+    	}
+    
+    	// Media controls
+    		const toggleAudioBtn = document.getElementById('toggleAudio');
+    		const toggleVideoBtn = document.getElementById('toggleVideo');
+    		const shareScreenBtn = document.getElementById('shareScreen');
+    		const toggleFullscreenBtn = document.getElementById('toggleFullscreen');
+    
+    		if (toggleAudioBtn) {
+        		toggleAudioBtn.addEventListener('click', () => this.toggleAudio());
+    		}
+    
+    		if (toggleVideoBtn) {
+        		toggleVideoBtn.addEventListener('click', () => this.toggleVideo());
+    		}
+    
+    		if (shareScreenBtn) {
+        		shareScreenBtn.addEventListener('click', () => this.shareScreen());
+    		}
+    
+    		if (toggleFullscreenBtn) {
+        		toggleFullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+    		}
+    
+    		// Room input enter key
+    		if (roomInput) {
+        		roomInput.addEventListener('keypress', (e) => {
+            	if (e.key === 'Enter') {
+                	this.joinRoom();
+            			}
+        		});
+    		}
+	}
+
+
 
     updateUI() {
         // Update connection status
@@ -1034,60 +1069,101 @@ class VideoCallManager {
         }
     }
 
-    async shareScreen() {
-        try {
-            const screenStream = await navigator.mediaDevices.getDisplayMedia({
-                video: {
-                    cursor: 'always',
-                    displaySurface: 'window'
-                },
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true
-                }
-            });
+
+	async shareScreen() {
+    	try {
+        	const screenStream = await navigator.mediaDevices.getDisplayMedia({
+            	video: {
+                	cursor: 'always',
+                	displaySurface: 'window'
+            	},
+            	audio: {
+                	echoCancellation: true,
+                	noiseSuppression: true
+            	}
+        	});
+        
+        	const videoTrack = screenStream.getVideoTracks()[0];
+        
+        	if (this.localStream) {
+            	const oldVideoTrack = this.localStream.getVideoTracks()[0];
             
-            const videoTrack = screenStream.getVideoTracks()[0];
+            	this.localStream.removeTrack(oldVideoTrack);
+            	this.localStream.addTrack(videoTrack);
             
-            if (this.localStream) {
-                const oldVideoTrack = this.localStream.getVideoTracks()[0];
-                
-                this.localStream.removeTrack(oldVideoTrack);
-                this.localStream.addTrack(videoTrack);
-                
-                const localVideo = document.getElementById('localVideo');
-                if (localVideo) {
-                    localVideo.srcObject = this.localStream;
-                }
-                
-                for (const [userId, peerConnection] of this.remoteUsers) {
-                    const sender = peerConnection.getSenders().find(s => 
-                        s.track && s.track.kind === 'video'
-                    );
-                    
-                    if (sender) {
-                        await sender.replaceTrack(videoTrack);
-                    }
-                    
-                    // ДОБАВЛЯЕМ: повторное согласование после замены трека
-                    await this.createOffer(userId);
-                }
-                
-                this.showNotification('Screen sharing started', 'success');
-                
-                videoTrack.onended = () => {
-                    this.showNotification('Screen sharing ended', 'info');
-                    this.toggleVideo();
-                };
-            }
+            	const localVideo = document.getElementById('localVideo');
+            	if (localVideo) {
+                	localVideo.srcObject = this.localStream;
+            	}
             
-        } catch (error) {
-            console.error('Error sharing screen:', error);
-            if (error.name !== 'NotAllowedError') {
-                this.showNotification('Failed to share screen: ' + error.message, 'error');
-            }
-        }
-    }
+            	for (const [userId, peerConnection] of this.remoteUsers) {
+                	const sender = peerConnection.getSenders().find(s => 
+                    	s.track && s.track.kind === 'video'
+                	);
+                
+                	if (sender) {
+                    	await sender.replaceTrack(videoTrack);
+                	}
+                
+                	// ДОБАВЛЯЕМ: повторное согласование после замены трека
+                	await this.createOffer(userId);
+            	}
+            
+            	this.showNotification('Screen sharing started', 'success');
+            
+            	videoTrack.onended = () => {
+                	this.showNotification('Screen sharing ended', 'info');
+                	this.toggleVideo();
+            	};
+        	}
+        
+    	} catch (error) {
+        	console.error('Error sharing screen:', error);
+        	if (error.name !== 'NotAllowedError') {
+            		this.showNotification('Failed to share screen: ' + error.message, 'error');
+        	}
+    	}
+	}
+
+	toggleFullscreen() {
+    	const container = document.querySelector('.container');
+    
+    	if (!document.fullscreenElement) {
+        	// Вход в полноэкранный режим
+        	if (container.requestFullscreen) {
+            		container.requestFullscreen();
+        	} else if (container.webkitRequestFullscreen) {
+            		container.webkitRequestFullscreen();
+        	} else if (container.msRequestFullscreen) {
+            		container.msRequestFullscreen();
+        	}
+        
+        	container.classList.add('fullscreen-mode');
+        	this.showNotification('Fullscreen mode enabled', 'info');
+    	} else {
+        	// Выход из полноэкранного режима
+        	if (document.exitFullscreen) {
+            		document.exitFullscreen();
+        	} else if (document.webkitExitFullscreen) {
+            		document.webkitExitFullscreen();
+        	} else if (document.msExitFullscreen) {
+            		document.msExitFullscreen();
+        	}
+        
+        	container.classList.remove('fullscreen-mode');
+        	this.showNotification('Fullscreen mode disabled', 'info');
+    	}
+	}	
+
+
+
+
+
+
+
+
+
+
 
     showNotification(message, type = 'info') {
         const notification = document.createElement('div');
@@ -1245,4 +1321,17 @@ class VideoCallManager {
 
 document.addEventListener('DOMContentLoaded', () => {
     window.videoCallManager = new VideoCallManager();
+});
+document.addEventListener('fullscreenchange', () => {
+    const container = document.querySelector('.container');
+    if (!document.fullscreenElement) {
+        container.classList.remove('fullscreen-mode');
+    }
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.fullscreenElement) {
+        const container = document.querySelector('.container');
+        container.classList.remove('fullscreen-mode');
+    }
 });
