@@ -95,8 +95,9 @@ body {
     position: relative;
     background: var(--surface);
     min-height: 300px;
+    overflow: hidden;
+    height: auto;
 }
-
 /* Video Wrappers - ТОЧНО КАК РАБОТАЛО */
 .video-wrapper {
     position: relative;
@@ -121,6 +122,8 @@ body {
 .video-wrapper.remote {
     width: 100%;
     height: 100%;
+    object-fit: cover;
+    object-position: center top;
 }
 
 video {
@@ -396,17 +399,11 @@ input[type="text"]::placeholder {
 
 /* Tablets */
 @media (max-width: 1024px) {
-    .controls {
-        padding: 16px 20px;
-    }
-    
-    .video-wrapper.local {
-        width: 250px;
-        height: 160px;
-        bottom: 90px;
-        right: 20px;
+    .video-container {
+        max-height: calc(100vh - 130px);
     }
 }
+
 
 /* Tablets and large phones */
 @media (max-width: 768px) {
@@ -445,39 +442,10 @@ input[type="text"]::placeholder {
 
 /* Mobile phones */
 @media (max-width: 640px) {
-    .header {
-        padding: 12px 16px;
-    }
-    
-    .controls {
-        padding: 12px;
-        gap: 12px;
-    }
-    
-    .room-controls {
-        flex-direction: column;
-        gap: 8px;
-        width: 100%;
-    }
-    
-    input[type="text"] {
-        min-width: 100%;
-        width: 100%;
-    }
-    
-    .room-info {
-        flex-direction: column;
-        gap: 8px;
-    }
-    
-    .video-wrapper.local {
-        width: 150px;
-        height: 100px;
-        bottom: 120px;
-        right: 12px;
+    .video-container {
+        max-height: calc(100vh - 120px);
     }
 }
-
 /* Small mobile phones */
 @media (max-width: 480px) {
     .video-wrapper.local {
@@ -524,4 +492,357 @@ input[type="text"]::placeholder {
         bottom: 70px;
         right: 16px;
     }
+}
+
+.participants-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+    padding: 16px;
+    width: 100%;
+    align-content: start;
+    overflow-y: auto;
+    min-height: 0;
+    box-sizing: border-box;
+}
+/* Карточка участника - ИСПРАВЛЕННАЯ ВЕРСИЯ */
+.participant-card {
+    position: relative;
+    background: var(--dark-blue);
+    border-radius: 12px;
+    overflow: hidden;
+    aspect-ratio: 16/9;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+.participant-card:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.participant-card video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+}
+
+/* Информация об участнике */
+.participant-info {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 8px 12px;
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.875rem;
+}
+
+.participant-name {
+    color: white;
+    font-weight: 600;
+}
+
+.participant-status {
+    display: flex;
+    gap: 8px;
+}
+
+.participant-status span {
+    font-size: 0.75rem;
+    opacity: 0.8;
+}
+
+/* Локальный участник - подсвечиваем */
+.local-participant {
+    border-color: var(--primary-blue);
+    order: -1; /* Всегда первый в сетке */
+}
+/* ФИКС ДЛЯ 1 УЧАСТНИКА - убираем скролл и центрируем */
+.participants-grid:has(.participant-card:only-of-type) {
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    padding-bottom: 40px; 
+    align-content: center;
+}
+
+/* Гарантируем что карточка занимает нормальный размер */
+.participants-grid:has(.participant-card:only-of-type) .participant-card {
+    max-width: 800px;
+    max-height: 450px; /* 16:9 пропорция для 800px ширины */
+    width: 80%;
+    height: auto;
+    margin-bottom: 40px;
+}
+
+/* Убираем скролл для одного участника */
+.participants-grid:has(.participant-card:only-of-type) {
+    overflow: hidden;
+}
+.empty-state-overlay {
+    display: flex;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #888;
+    z-index: 5;
+}
+/* Добавьте эти стили в конец файла */
+
+/* Стили для брендового логотипа */
+.empty-state-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+    z-index: 5;
+    pointer-events: none;
+}
+
+.brand-logo {
+    animation: fadeIn 1s ease-in-out;
+}
+
+.logo-icon-large {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.8;
+    filter: grayscale(0.3);
+}
+
+.brand-name {
+    font-size: 3.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+}
+
+.brand-tagline {
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 400;
+    letter-spacing: 0.05em;
+}
+
+/* Анимация плавного появления */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -45%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+/* Адаптивность для логотипа */
+@media (max-width: 768px) {
+    .brand-name {
+        font-size: 2.5rem;
+    }
+    
+    .logo-icon-large {
+        font-size: 3rem;
+    }
+    
+    .brand-tagline {
+        font-size: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .brand-name {
+        font-size: 2rem;
+    }
+    
+    .logo-icon-large {
+        font-size: 2.5rem;
+    }
+}
+.empty-state-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #888;
+    z-index: 10; /* Добавляем z-index чтобы был поверх других элементов */
+    display: flex; /* Гарантируем flex layout */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-container {
+    position: relative; /* Гарантируем позиционирование для absolute дочерних элементов */
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    background: var(--surface);
+    min-height: 300px;
+    overflow: hidden;
+    height: auto;
+}
+/* Скрываем старую надпись "Waiting for participant to join..." */
+.video-container::before {
+    display: none !important;
+}
+
+/* Гарантируем что логотип поверх всех элементов */
+.empty-state-overlay {
+    z-index: 1000;
+    pointer-events: none; /* Чтобы не мешал кликам */
+}
+
+/* Убираем возможные другие старые элементы */
+.waiting-message, 
+.waiting-text, 
+[class*="waiting"], 
+[class*="Waiting"] {
+    display: none !important;
+}
+.video-container {
+    position: relative;
+    min-height: 400px; /* Гарантируем минимальную высоту */
+}
+
+.empty-state-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: none; /* Скрыт по умолчанию */
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.brand-logo {
+    animation: fadeIn 1s ease-in-out;
+}
+
+.logo-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.8;
+}
+
+.brand-name {
+    font-size: 3.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+}
+
+.brand-tagline {
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 400;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translate(-50%, -45%); }
+    to { opacity: 1; transform: translate(-50%, -50%); }
+}
+/* Скрываем все старые надписи */
+.video-container::before,
+.video-container::after,
+.waiting-message,
+.waiting-text,
+[class*="waiting"],
+[class*="Waiting"] {
+    display: none !important;
+}
+
+/* Стили для нашего логотипа */
+.empty-state-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+    z-index: 1000;
+    display: none;
+}
+
+.brand-logo {
+    animation: fadeIn 1s ease-in-out;
+}
+
+.logo-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.8;
+}
+
+.brand-name {
+    font-size: 3.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+}
+
+.brand-tagline {
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 400;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translate(-50%, -45%); }
+    to { opacity: 1; transform: translate(-50%, -50%); }
+}
+/* Скрываем все старые элементы кроме нашего логотипа */
+.video-container::before,
+.video-container::after,
+.waiting-message,
+.waiting-text,
+[class*="waiting"],
+[class*="Waiting"],
+.empty-state-text,
+.overlay-icon:not(.brand-logo .logo-icon),
+.video-overlay:not(#localVideoOverlay) {
+    display: none !important;
+}
+
+/* Гарантируем что в бренд-логотипе только одна иконка камеры */
+.brand-logo .logo-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.8;
+}
+
+/* Скрываем лишние иконки статуса если они есть */
+.participant-status {
+    display: none !important;
 }

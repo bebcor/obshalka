@@ -1,16 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obshalka - Secure Video Conferencing</title>
+    <title>Obshalka - Видео Конференции</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
     <style>
-        /* Иконки для кнопок (можно заменить на SVG позже) */
         .icon { font-size: 1.25rem; }
         .mic-icon::before { content: "🎤"; }
         .video-icon::before { content: "📹"; }
@@ -21,11 +20,50 @@
         .logo-icon::before { content: "📹"; }
         .call-icon::before { content: "💬"; }
         .fullscreen-icon::before { content: "⛶"; }
+        
+        
+        .participant-name {
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .participant-status {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #2d2d2d;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #888;
+        }
+        
+        .overlay-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        
+        .empty-state-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #888;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
+        <!-- Шапка -->
         <header class="header">
             <div class="logo">
                 <div class="logo-icon"></div>
@@ -34,93 +72,97 @@
             <div class="connection-info">
                 <div class="status-indicator">
                     <div class="status-dot"></div>
-                    <span id="connectionStatus" class="status-disconnected">Disconnected</span>
+                    <span id="connectionStatus" class="status-disconnected">Не подключено</span>
                 </div>
             </div>
         </header>
 
-        <!-- Main Video Area -->
+        <!-- Основная область видео -->
         <div class="video-container">
-            <!-- Remote Video Stream -->
-            <div class="video-wrapper remote">
-                <video id="remoteVideo" autoplay playsinline></video>
-                <div class="video-label">Remote Participant</div>
-                
-                <!-- Overlay when no remote video -->
-                <div class="video-overlay" id="remoteVideoOverlay">
-                    <div class="overlay-icon">👤</div>
-                    <p>Waiting for participant to join...</p>
+            <!-- Сетка участников -->
+            <div class="participants-grid" id="participantsGrid">
+                <!-- Локальный участник - будет здесь всегда -->
+                <div class="participant-card local-participant" id="localParticipantCard">
+                    <video id="localVideo" autoplay muted playsinline></video>
+                    <div class="participant-info">
+                        <span class="participant-name">Вы</span>
+                        <div class="participant-status">
+                            <span class="status-audio" title="Микрофон">🎤</span>
+                            <span class="status-video" title="Камера">📹</span>
+                        </div>
+                    </div>
+                    <div class="video-overlay" id="localVideoOverlay">
+                        <div class="overlay-icon">📹</div>
+                        <p>Камера выключена</p>
+                    </div>
                 </div>
-            </div>
-
-            <!-- Local Video Stream (Picture-in-Picture) -->
-            <div class="video-wrapper local">
-                <video id="localVideo" autoplay muted playsinline></video>
-                <div class="video-label">You</div>
                 
-                <!-- Overlay when no local video -->
-                <div class="video-overlay" id="localVideoOverlay">
-                    <div class="overlay-icon">📹</div>
-                    <p>Camera is off</p>
-                </div>
+                <!-- Удаленные участники будут добавляться сюда автоматически через JS -->
             </div>
-        </div>
-
-        <!-- Controls Footer -->
+		<div class="empty-state-overlay" id="emptyStateOverlay">
+    			<div class="brand-logo">
+        			<div class="logo-icon">📹</div>
+        			<h1 class="brand-name">obshalka</h1>
+        			<p class="brand-tagline">видео-конференции</p>
+    			</div>
+		</div>
+		            
+	
+        <!-- Панель управления -->
         <div class="controls">
-            <!-- Room Controls (Left) -->
+            <!-- Управление комнатой (Слева) -->
             <div class="room-controls">
                 <button id="createRoom" class="btn btn-primary">
                     <span class="icon call-icon"></span>
-                    Create Room
+                    Создать комнату
                 </button>
                 
-                <input type="text" id="roomInput" placeholder="Enter Room ID">
+                <input type="text" id="roomInput" placeholder="Введите ID комнаты">
                 
                 <button id="joinRoom" class="btn btn-primary">
                     <span class="icon room-icon"></span>
-                    Join Room
+                    Войти в комнату
                 </button>
             </div>
 
-            <!-- Room Info (Center) -->
+            <!-- Информация о комнате (Центр) -->
             <div class="room-info">
                 <div class="room-info-item">
                     <span class="icon room-icon"></span>
-                    Room: <span id="roomIdDisplay">-</span>
+                    Комната: <span id="roomIdDisplay">-</span>
                 </div>
                 <div class="room-info-item">
                     <span class="icon users-icon"></span>
-                    Participants: <span id="participantsCount">0</span>
+                    Участники: <span id="participantsCount">0</span>
                 </div>
             </div>
 
-            <!-- Media Controls (Right) -->
+            <!-- Медиа-управление (Справа) -->
             <div class="media-controls">
                 <div class="control-group">
-                    <!-- Audio Control -->
-                    <button id="toggleAudio" class="btn-control active" title="Mute/Unmute">
+                    <!-- Аудио -->
+                    <button id="toggleAudio" class="btn-control active" title="Вкл/Выкл микрофон">
                         <span class="icon mic-icon"></span>
                     </button>
                     
-                    <!-- Video Control -->
-                    <button id="toggleVideo" class="btn-control active" title="Video On/Off">
+                    <!-- Видео -->
+                    <button id="toggleVideo" class="btn-control active" title="Вкл/Выкл камеру">
                         <span class="icon video-icon"></span>
                     </button>
                     
-                    <!-- Screen Share -->
-                    <button id="shareScreen" class="btn-control" title="Share Screen">
+                    <!-- Демонстрация экрана -->
+                    <button id="shareScreen" class="btn-control" title="Демонстрация экрана">
                         <span class="icon screen-icon"></span>
                     </button>
 
-                    <!-- Fullscreen Toggle -->
-                    <button id="toggleFullscreen" class="btn-control" title="Fullscreen">
+                    <!-- Полноэкранный режим -->
+                    <button id="toggleFullscreen" class="btn-control" title="Полноэкранный режим">
                         <span class="icon fullscreen-icon"></span>
                     </button>
                 </div>
                 
-                <!-- End Call Button -->
-                <button id="endCall" class="btn-end-call" title="End Call" style="display: none;">
+                <!-- Завершить звонок -->
+                <button id="endCall" class="btn-end-call" title="Завершить звонок" style="display: none;">
                     <span class="icon end-call-icon"></span>
                 </button>
             </div>
