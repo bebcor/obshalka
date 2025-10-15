@@ -651,8 +651,6 @@ async checkMediaDevices() {
 
 
 
-
-
 async restartAudioWithSelectedMicrophone() {
     if (!this.localStream) {
         console.log('❌ Локальный поток не активен');
@@ -707,6 +705,14 @@ async restartAudioWithSelectedMicrophone() {
         // ОБНОВЛЯЕМ соединения
         await this.updateAudioTracksInConnections();
         
+        // ВАЖНО: Пересоздаем офферы для всех соединений
+        if (this.remoteUsers.size > 0) {
+            console.log('🔄 Пересоздаем офферы после смены микрофона');
+            this.remoteUsers.forEach((peerConnection, userId) => {
+                this.createOffer(userId);
+            });
+        }
+        
         this.showNotification('Микрофон переключен', 'success');
         console.log('✅ Микрофон успешно переключен');
         
@@ -723,8 +729,12 @@ async restartAudioWithSelectedMicrophone() {
 }
 
 
+
+
+
+
 async updateAudioTracksInConnections() {
-    const audioTrack = this.localStream.getAudioTracks()[0];
+    const audioTrack = this.localStream?.getAudioTracks()[0];
     if (!audioTrack) {
         console.log('❌ Нет аудиотрека для обновления');
         return;
@@ -735,7 +745,7 @@ async updateAudioTracksInConnections() {
     const updatePromises = [];
     
     this.remoteUsers.forEach((peerConnection, userId) => {
-        const sender = peerConnection.getSenders().find(s => 
+        let sender = peerConnection.getSenders().find(s => 
             s.track && s.track.kind === 'audio'
         );
         
@@ -743,7 +753,14 @@ async updateAudioTracksInConnections() {
             console.log(`🔄 Обновляем аудиотрек для пользователя: ${userId}`);
             updatePromises.push(sender.replaceTrack(audioTrack));
         } else {
-            console.log(`❌ Не найден аудио-отправитель для пользователя: ${userId}`);
+            // ЕСЛИ отправителя нет - создаем новый
+            console.log(`🎯 Создаем новый аудио-отправитель для пользователя: ${userId}`);
+            try {
+                sender = peerConnection.addTrack(audioTrack, this.localStream);
+                console.log(`✅ Аудио-отправитель создан для: ${userId}`);
+            } catch (error) {
+                console.error(`❌ Ошибка создания аудио-отправителя: ${error}`);
+            }
         }
     });
     
@@ -754,8 +771,6 @@ async updateAudioTracksInConnections() {
         console.error('❌ Ошибка обновления аудиотреков:', error);
     }
 }
-
-
 
 
 
@@ -1654,9 +1669,16 @@ setupPeerConnection(targetUserId) {
                 // ДОБАВЛЯЕМ только если трек включен ИЛИ это аудио (аудио всегда добавляем)
                 if (track.kind === 'audio' || (track.kind === 'video' && track.enabled && !this.isSharingScreen)) {
                     console.log(`Adding ${track.kind} track to connection for ${targetUserId}`);
-                    peerConnection.addTrack(track, this.localStream);
+                    try {
+                        peerConnection.addTrack(track, this.localStream);
+                        console.log(`✅ ${track.kind} track added successfully`);
+                    } catch (error) {
+                        console.error(`❌ Error adding ${track.kind} track:`, error);
+                    }
                 }
             });
+        } else {
+            console.log('⚠️ No local stream available for peer connection');
         }
         
         peerConnection.onicecandidate = (event) => {
@@ -1715,7 +1737,6 @@ setupPeerConnection(targetUserId) {
         this.showNotification('Failed to setup connection', 'error');
     }
 }
-
 
 createRemoteVideoElement(userId, stream) {
     // УБЕЖДАЕМСЯ, что participantsGrid существует
@@ -1923,22 +1944,37 @@ createRemoteVideoElement(userId, stream) {
         }
     }
 
-    async handleICECandidate(data) {
-        try {
-            console.log('Received ICE candidate from:', data.sender_id);
-            
-            if (!this.remoteUsers.has(data.sender_id)) {
-                console.error('No peer connection for:', data.sender_id);
-                return;
-            }
-            
-            const peerConnection = this.remoteUsers.get(data.sender_id);
-            await peerConnection.addIceCandidate(data.candidate);
-            
-        } catch (error) {
-            console.error('Error adding ICE candidate:', error);
+
+async handleICECandidate(data) {
+    try {
+        console.log('Received ICE candidate from:', data.sender_id);
+        
+        if (!this.remoteUsers.has(data.sender_id)) {
+            console.error('No peer connection for:', data.sender_id);
+            return;
         }
+        
+        const peerConnection = this.remoteUsers.get(data.sender_id);
+        
+        // Проверяем, не закрыто ли уже соединение
+        if (peerConnection.connectionState === 'closed' || 
+            peerConnection.connectionState === 'disconnected' ||
+            peerConnection.connectionState === 'failed') {
+            console.log('⚠️ Peer connection is closed, ignoring ICE candidate');
+            return;
+        }
+        
+        await peerConnection.addIceCandidate(data.candidate);
+        console.log('✅ ICE candidate added successfully');
+        
+    } catch (error) {
+        console.error('Error adding ICE candidate:', error);
+        // Не показываем ошибку пользователю - это нормально при установке соединения
     }
+}
+
+
+
 
 async toggleAudio() {
     // Если локального потока нет - создаем его
@@ -1970,7 +2006,6 @@ async toggleAudio() {
         }
     }
 }
-
 
 
 
@@ -2033,8 +2068,9 @@ async startAudioOnly() {
         // ОБНОВЛЯЕМ соединения - добавляем только аудио
         await this.updateAudioTracksInConnections();
         
-        // ЕСЛИ есть подключенные пользователи - перезапускаем соединения для корректной работы
+        // ВАЖНО: Пересоздаем офферы для всех соединений
         if (this.remoteUsers.size > 0) {
+            console.log('🔄 Пересоздаем офферы для всех соединений после обновления аудио');
             this.remoteUsers.forEach((peerConnection, userId) => {
                 this.createOffer(userId);
             });
@@ -2058,7 +2094,6 @@ async startAudioOnly() {
         throw error;
     }
 }
-
 
 
 
@@ -2309,6 +2344,3 @@ showNotification(message, type = 'info') {
 document.addEventListener('DOMContentLoaded', () => {
     window.videoCallManager = new VideoCallManager();
 });
-
-
-
