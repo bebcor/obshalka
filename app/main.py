@@ -333,6 +333,20 @@ def handle_ice_candidate(data):
                       room=request.sid)
 
 
+@socketio.on('sync_video_state')
+def handle_sync_video_state(data):
+    room_id = data['room_id']
+    has_video = data['has_video']
+    is_screen_sharing = data['is_screen_sharing']
+    
+    emit('user_video_state_changed', {
+        'user_id': request.sid,
+        'has_video': has_video,
+        'is_screen_sharing': is_screen_sharing
+    }, room=room_id, include_self=False)
+
+
+
 if __name__ == '__main__':
     logger.info("Starting VideoMeet server...")
     socketio.run(

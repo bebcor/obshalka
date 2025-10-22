@@ -19,21 +19,40 @@ class VideoCallManager {
 	this.cameraStream = null;
 	this.hasVideoTrack = false;
         
-        this.configuration = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' },
-                {
-                    urls: 'turn:openrelay.metered.ca:80',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                }
-            ],
-            iceTransportPolicy: 'all',
-            iceCandidatePoolSize: 10
+this.configuration = {
+    iceServers: [
+        // Ваш собственный STUN сервер
+        {
+            urls: 'stun:109.73.201.242:3478'
+        },
+        // Ваш собственный TURN сервер (UDP)
+        {
+            urls: 'turn:109.73.201.242:3478',
+            username: 'webrtc',  // Замените на реальный username
+            credential: 'webrtcpassword' // Замените на реальный password
+        },
+        // Ваш собственный TURN сервер (TCP)
+        {
+            urls: 'turn:109.73.201.242:3478?transport=tcp',
+            username: 'webrtc',
+            credential: 'webrtcpassword'
+        },
+        // Ваш собственный TURN сервер (TLS)
+        {
+            urls: 'turns:109.73.201.242:5349',
+            username: 'webrtc',
+            credential: 'webrtcpassword'
+        },
+        // Резервные публичные серверы (на случай проблем с вашим)
+        {
+            urls: 'stun:stun.l.google.com:19302'
+        },
+        {
+            urls: 'stun:global.stun.twilio.com:3478'
+        }
+    ],
+    iceTransportPolicy: 'all',
+    iceCandidatePoolSize: 10
         };
               
         this.initialize();

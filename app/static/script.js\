@@ -1,0 +1,1253 @@
+class VideoCallManager {
+    constructor() {
+        this.localStream = null;
+        this.remoteStreams = new Map();
+        this.peerConnection = null;
+        this.roomId = null;
+        this.socket = null;
+        this.socketId = null;
+        this.remoteUsers = new Map();
+        this.isConnected = false;
+        this.isInCall = false;
+        this.userNames = new Map();
+        this.availableMicrophones = [];
+        this.selectedMicrophoneId = null;
+        this.availableCameras = [];
+        this.selectedCameraId = null;
+        this.isSharingScreen = false;
+        this.screenStream = null;
+        this.cameraStream = null;
+        this.hasVideoTrack = false;
+        this.previousStream = null;
+        
+        this.configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+              
+        this.initialize();
+    }
+
+    initialize() {
+        this.setupEventListeners();
+        this.setupSocketConnection();
+        this.updateUI();
+        this.bootstrapFromURL();
+        this.checkMediaDevices();
+
+        setTimeout(() => {
+            this.checkEmptyState();
+        }, 500);
+    }
+    
+    setupSocketConnection() {
+        try {
+            this.socket = io({
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000
+            });
+            
+            this.socket.on('connect', () => {
+                this.socketId = this.socket.id;
+                this.isConnected = true;
+                console.log('Connected to server with ID:', this.socketId);
+                this.updateUI();
+            });
+            
+            this.socket.on('disconnect', () => {
+                this.isConnected = false;
+                this.isInCall = false;
+                console.log('Disconnected from server');
+                this.cleanupCall();
+                this.updateUI();
+                this.showNotification('Connection lost', 'error');
+            });
+            
+            this.socket.on('connection_established', (data) => {
+                console.log('Connection established:', data.message);
+            });
+            
+            this.socket.on('room_info', (data) => {
+                this.handleRoomInfo(data);
+            });
+            
+            this.socket.on('user_joined', (data) => {
+                this.handleUserJoined(data);
+            });
+            
+            this.socket.on('user_left', (data) => {
+                this.handleUserLeft(data);
+            });
+            
+            this.socket.on('webrtc_offer', (data) => {
+                this.handleWebRTCOffer(data);
+            });
+            
+            this.socket.on('webrtc_answer', (data) => {
+                this.handleWebRTCAnswer(data);
+            });
+            
+            this.socket.on('ice_candidate', (data) => {
+                this.handleICECandidate(data);
+            });
+            
+            this.socket.on('error', (data) => {
+                console.error('Server error:', data.message);
+                this.showNotification('Error: ' + data.message, 'error');
+            });
+
+            this.socket.on('user_video_state_changed', (data) => {
+                this.handleUserVideoStateChanged(data);
+            });
+
+        } catch (error) {
+            console.error('Error setting up socket connection:', error);
+        }
+    }
+
+    async getMicrophones() {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            this.availableMicrophones = devices.filter(device => 
+                device.kind === 'audioinput' && device.deviceId
+            );
+            return this.availableMicrophones;
+        } catch (error) {
+            console.error('Error getting microphones:', error);
+            return [];
+        }
+    }
+
+    async getCameras() {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            this.availableCameras = devices.filter(device => 
+                device.kind === 'videoinput' && device.deviceId
+            );
+            return this.availableCameras;
+        } catch (error) {
+            console.error('Error getting cameras:', error);
+            return [];
+        }
+    }
+
+    handleUserVideoStateChanged(data) {
+        console.log('Video state changed:', data.user_id, data);
+        
+        const participantCard = document.getElementById(`participant-${data.user_id}`);
+        
+        if (data.has_video) {
+            if (!participantCard) {
+                this.createParticipantCard(data.user_id);
+            } else {
+                const videoElement = document.getElementById(`remoteVideo-${data.user_id}`);
+                const overlay = participantCard.querySelector('.video-overlay');
+                if (videoElement && overlay) {
+                    overlay.style.display = 'none';
+                    videoElement.style.display = 'block';
+                }
+            }
+        } else {
+            if (participantCard) {
+                const videoElement = document.getElementById(`remoteVideo-${data.user_id}`);
+                const overlay = participantCard.querySelector('.video-overlay');
+                if (videoElement && overlay) {
+                    overlay.style.display = 'flex';
+                    videoElement.style.display = 'none';
+                }
+            }
+        }
+        
+        this.checkEmptyState();
+    }
+
+    createParticipantCard(userId) {
+        const participantsGrid = document.getElementById('participantsGrid');
+        if (!participantsGrid) return;
+
+        if (document.getElementById(`participant-${userId}`)) return;
+
+        const participantCard = document.createElement('div');
+        participantCard.className = 'participant-card remote-participant';
+        participantCard.id = `participant-${userId}`;
+        
+        const userName = this.userNames.get(userId) || `User ${userId.substring(0, 8)}`;
+        
+        participantCard.innerHTML = `
+            <video id="remoteVideo-${userId}" autoplay playsinline></video>
+            <div class="participant-info">
+                <span class="participant-name">${userName}</span>
+                <div class="participant-status">
+                    <span class="status-audio">🎤</span>
+                    <span class="status-video">📹</span>
+                </div>
+            </div>
+            <div class="video-overlay">
+                <div class="overlay-icon">👤</div>
+                <p>Ожидание видео...</p>
+            </div>
+        `;
+        
+        participantsGrid.appendChild(participantCard);
+    }
+
+    syncVideoState() {
+        if (!this.socket || !this.roomId) return;
+        
+        const hasVideo = this.localStream?.getVideoTracks().some(track => track.enabled) || this.isSharingScreen;
+        
+        this.socket.emit('sync_video_state', {
+            room_id: this.roomId,
+            has_video: hasVideo,
+            is_screen_sharing: this.isSharingScreen
+        });
+    }
+
+    ensureLocalVideoElement() {
+        let localParticipantCard = document.getElementById('localParticipantCard');
+        
+        if (!localParticipantCard) {
+            const participantsGrid = document.getElementById('participantsGrid');
+            if (participantsGrid) {
+                participantsGrid.innerHTML = `
+                    <div class="participant-card local-participant" id="localParticipantCard" style="display: none;">
+                        <video id="localVideo" autoplay muted playsinline></video>
+                        <div class="participant-info">
+                            <span class="participant-name">Вы</span>
+                            <div class="participant-status">
+                                <span class="status-audio">🎤</span>
+                                <span class="status-video">📹</span>
+                            </div>
+                        </div>
+                        <div class="video-overlay" id="localVideoOverlay">
+                            <div class="overlay-icon">📹</div>
+                            <p>Камера выключена</p>
+                        </div>
+                    </div>
+                ` + participantsGrid.innerHTML;
+            }
+        }
+        
+        return document.getElementById('localParticipantCard');
+    }
+
+    setupEventListeners() {
+        const createRoomBtn = document.getElementById('createRoom');
+        const joinRoomBtn = document.getElementById('joinRoom');
+        const endCallBtn = document.getElementById('endCall');
+        const roomInput = document.getElementById('roomInput');
+        const toggleAudioBtn = document.getElementById('toggleAudio');
+        const toggleVideoBtn = document.getElementById('toggleVideo');
+        const shareScreenBtn = document.getElementById('shareScreen');
+        const toggleFullscreenBtn = document.getElementById('toggleFullscreen');
+        const copyBtn = document.getElementById('copyLink');
+
+        if (createRoomBtn) createRoomBtn.addEventListener('click', () => this.createRoom());
+        if (joinRoomBtn) joinRoomBtn.addEventListener('click', () => this.joinRoom());
+        if (endCallBtn) endCallBtn.addEventListener('click', () => this.leaveRoom());
+        if (toggleAudioBtn) toggleAudioBtn.addEventListener('click', () => this.toggleAudio());
+        if (toggleVideoBtn) toggleVideoBtn.addEventListener('click', () => this.toggleVideo());
+        if (shareScreenBtn) shareScreenBtn.addEventListener('click', () => this.shareScreen());
+        if (toggleFullscreenBtn) toggleFullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+
+        if (roomInput) {
+            roomInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.joinRoom();
+            });
+        }
+
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+                if (!this.roomId) {
+                    this.showNotification('Сначала создайте или введите комнату', 'warning');
+                    return;
+                }
+                const shareUrl = `${window.location.origin}/r/${this.roomId}`;
+                this.copyShareLink(shareUrl);
+            });
+        }
+    }
+
+    updateUI() {
+        const statusElement = document.getElementById('connectionStatus');
+        if (statusElement) {
+            statusElement.textContent = this.isConnected ? 'Connected' : 'Disconnected';
+            statusElement.className = this.isConnected ? 'status-connected' : 'status-disconnected';
+        }
+        
+        const endCallBtn = document.getElementById('endCall');
+        const roomControls = document.querySelector('.room-controls');
+        
+        if (this.isInCall) {
+            if (endCallBtn) endCallBtn.style.display = 'flex';
+            if (roomControls) {
+                roomControls.style.opacity = '0.5';
+                roomControls.style.pointerEvents = 'none';
+            }
+        } else {
+            if (endCallBtn) endCallBtn.style.display = 'none';
+            if (roomControls) {
+                roomControls.style.opacity = '1';
+                roomControls.style.pointerEvents = 'auto';
+            }
+        }
+        
+        this.updateVideoOverlays();
+    }
+
+    checkEmptyState() {
+        const emptyState = document.getElementById('emptyStateOverlay');
+        if (!emptyState) return;
+
+        const participantsGrid = document.getElementById('participantsGrid');
+        if (!participantsGrid) {
+            emptyState.style.display = 'flex';
+            return;
+        }
+
+        const remoteParticipants = participantsGrid.querySelectorAll('.remote-participant');
+        const hasRemoteParticipants = Array.from(remoteParticipants).some(
+            participant => participant.style.display !== 'none'
+        );
+
+        if (this.isInCall && !hasRemoteParticipants) {
+            emptyState.style.display = 'flex';
+        } else {
+            emptyState.style.display = 'none';
+        }
+    }
+
+    updateVideoOverlays() {
+        const localVideo = document.getElementById('localVideo');
+        const localOverlay = document.getElementById('localVideoOverlay');
+        const localParticipantCard = document.getElementById('localParticipantCard');
+        
+        if (localVideo && localOverlay && localParticipantCard) {
+            const shouldShowCard = this.localStream && (
+                this.localStream.getVideoTracks().length > 0 || 
+                this.isSharingScreen
+            );
+            
+            if (shouldShowCard) {
+                localParticipantCard.style.display = 'block';
+                
+                const hasVideo = this.localStream.getVideoTracks().length > 0 && 
+                               this.localStream.getVideoTracks()[0].enabled;
+                
+                if (hasVideo || this.isSharingScreen) {
+                    localOverlay.style.display = 'none';
+                    localVideo.style.display = 'block';
+                } else {
+                    localOverlay.style.display = 'flex';
+                    localVideo.style.display = 'none';
+                }
+            } else {
+                localParticipantCard.style.display = 'none';
+            }
+        }
+        
+        this.checkEmptyState();
+    }
+
+    updateControlButtons() {
+        const audioBtn = document.getElementById('toggleAudio');
+        const videoBtn = document.getElementById('toggleVideo');
+        
+        if (this.localStream) {
+            const audioTrack = this.localStream.getAudioTracks()[0];
+            const videoTrack = this.localStream.getVideoTracks()[0];
+            
+            if (audioBtn) {
+                audioBtn.style.display = 'flex';
+                if (audioTrack) {
+                    audioBtn.classList.toggle('active', audioTrack.enabled);
+                    audioBtn.classList.toggle('muted', !audioTrack.enabled);
+                } else {
+                    audioBtn.classList.remove('active');
+                    audioBtn.classList.add('muted');
+                }
+            }
+            
+            if (videoBtn) {
+                if (videoTrack) {
+                    videoBtn.style.display = 'flex';
+                    videoBtn.classList.toggle('active', videoTrack.enabled);
+                    videoBtn.classList.toggle('muted', !videoTrack.enabled);
+                } else {
+                    videoBtn.style.display = 'none';
+                }
+            }
+        } else {
+            if (audioBtn) {
+                audioBtn.style.display = 'flex';
+                audioBtn.classList.remove('active');
+                audioBtn.classList.add('muted');
+            }
+            if (videoBtn) {
+                videoBtn.style.display = 'none';
+            }
+        }
+    }
+
+    async createRoom() {
+        try {
+            this.showNotification('Creating room...', 'info');
+            
+            const response = await fetch('/api/create_room', { 
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+            const data = await response.json();
+            
+            if (data.error) throw new Error(data.error);
+            
+            this.roomId = data.room_id;
+            const shareUrl = `${window.location.origin}/r/${this.roomId}`;
+            this.showNotification(`Комната создана: ${this.roomId}`, 'success');
+            this.copyShareLink(shareUrl);
+            
+            this.joinRoomAfterCreation();
+            
+        } catch (error) {
+            console.error('Error creating room:', error);
+            this.showNotification('Failed to create room: ' + error.message, 'error');
+        }
+    }
+
+    async joinRoom() {
+        try {
+            this.roomId = document.getElementById('roomInput').value.trim();
+            
+            if (!this.roomId) {
+                this.showNotification('Please enter a room ID', 'warning');
+                return;
+            }
+            
+            this.showNotification('Checking room...', 'info');
+            
+            const response = await fetch(`/api/check_room/${this.roomId}`);
+            const data = await response.json();
+            
+            if (!data.exists) {
+                this.showNotification('Room does not exist', 'error');
+                return;
+            }
+            
+            this.joinRoomAfterCreation();
+            
+        } catch (error) {
+            console.error('Error joining room:', error);
+            this.showNotification('Failed to join room: ' + error.message, 'error');
+        }
+    }
+
+    joinRoomAfterCreation() {
+        if (!this.socket || !this.socket.connected) {
+            this.showNotification('Not connected to server', 'error');
+            return;
+        }
+        
+        if (!this.roomId) {
+            this.showNotification('No room ID specified', 'error');
+            return;
+        }
+        
+        this.showUserNameModal();
+    }
+
+    showUserNameModal() {
+        const modal = document.createElement('div');
+        modal.className = 'user-name-modal';
+        modal.innerHTML = `
+            <div class="modal-overlay">
+                <div class="modal-content">
+                    <h3>Join Video Call</h3>
+                    <p>Enter your name to join the room</p>
+                    <input type="text" id="userNameInput" placeholder="Your name" maxlength="20" value="User${Math.floor(Math.random() * 1000)}">
+                    <div class="modal-buttons">
+                        <button id="cancelJoin" class="btn btn-secondary">Cancel</button>
+                        <button id="confirmJoin" class="btn btn-primary">Join Room</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        const userNameInput = document.getElementById('userNameInput');
+        userNameInput.focus();
+        userNameInput.select();
+        
+        document.getElementById('confirmJoin').addEventListener('click', () => {
+            this.handleUserJoinConfirmation(modal);
+        });
+        
+        document.getElementById('cancelJoin').addEventListener('click', () => {
+            document.body.removeChild(modal);
+            this.showNotification('Join cancelled', 'info');
+        });
+        
+        userNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleUserJoinConfirmation(modal);
+        });
+    }
+
+    handleUserJoinConfirmation(modal) {
+        const userNameInput = document.getElementById('userNameInput');
+        const userName = userNameInput.value.trim();
+        
+        if (!userName) {
+            userNameInput.style.borderColor = 'var(--error)';
+            userNameInput.focus();
+            return;
+        }
+        
+        document.body.removeChild(modal);
+        
+        this.socket.emit('join_room', {
+            room_id: this.roomId,
+            user_name: userName
+        });
+        
+        this.isInCall = true;
+        this.updateUI();
+        this.showNotification(`Joined room ${this.roomId} as ${userName}`, 'success');
+        
+        this.showMediaPrompt();
+    }
+
+    showMediaPrompt() {
+        const mediaPrompt = document.createElement('div');
+        mediaPrompt.className = 'media-prompt-modal';
+        mediaPrompt.innerHTML = `
+            <div class="modal-overlay">
+                <div class="modal-content">
+                    <h3>Включение медиа-устройств</h3>
+                    <p>Выберите какие устройства включить</p>
+                    <div class="media-options">
+                        <button id="enableBoth" class="btn btn-primary">Камера и микрофон</button>
+                        <button id="enableAudioOnly" class="btn btn-secondary">Только микрофон</button>
+                        <button id="joinWithoutMedia" class="btn btn-tertiary">Без медиа-устройств</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(mediaPrompt);
+        
+        document.getElementById('enableBoth').addEventListener('click', async () => {
+            document.body.removeChild(mediaPrompt);
+            try {
+                await this.startVideo();
+                this.showNotification('Камера и микрофон включены', 'success');
+            } catch (error) {
+                console.error('Error enabling devices:', error);
+                this.showNotification('Не удалось включить медиа-устройства', 'error');
+            }
+        });
+
+        document.getElementById('enableAudioOnly').addEventListener('click', async () => {
+            document.body.removeChild(mediaPrompt);
+            try {
+                await this.startAudioOnly();
+                this.showNotification('Микрофон включен', 'success');
+            } catch (error) {
+                this.showNotification('Не удалось включить микрофон', 'warning');
+            }
+        });
+        
+        document.getElementById('joinWithoutMedia').addEventListener('click', () => {
+            document.body.removeChild(mediaPrompt);
+            this.hasVideoTrack = false;
+            this.showNotification('Вы вошли без медиа-устройств', 'info');
+            this.updateControlButtons();
+            this.updateVideoOverlays();
+        });
+    }
+
+    async startVideo() {
+        try {
+            const constraints = {
+                video: {
+                    width: { ideal: 1280 }, 
+                    height: { ideal: 720 }, 
+                    frameRate: { ideal: 30 }
+                },
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            };
+            
+            this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            this.ensureLocalVideoElement();
+            const localVideo = document.getElementById('localVideo');
+            const localParticipantCard = document.getElementById('localParticipantCard');
+            
+            if (localVideo) {
+                localVideo.srcObject = this.localStream;
+            }
+            
+            if (localParticipantCard) {
+                localParticipantCard.style.display = 'block';
+            }
+            
+            this.hasVideoTrack = true;
+            this.syncVideoState();
+            
+        } catch (cameraError) {
+            console.error('Camera error, trying audio only:', cameraError);
+            await this.startAudioOnly();
+            return;
+        }
+        
+        this.updateControlButtons();
+        this.updateVideoOverlays();
+        this.addTracksToExistingConnections();
+        
+        if (this.remoteUsers.size > 0) {
+            this.remoteUsers.forEach((peerConnection, userId) => {
+                this.createOffer(userId);
+            });
+        }
+    }
+
+    async startAudioOnly() {
+        try {
+            const audioConstraints = {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            };
+
+            const audioStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: audioConstraints 
+            });
+
+            if (this.localStream) {
+                const oldAudioTracks = this.localStream.getAudioTracks();
+                oldAudioTracks.forEach(track => {
+                    this.localStream.removeTrack(track);
+                    track.stop();
+                });
+                
+                audioStream.getAudioTracks().forEach(track => {
+                    this.localStream.addTrack(track);
+                });
+            } else {
+                this.localStream = audioStream;
+            }
+
+            this.hasVideoTrack = false;
+
+            await this.updateAudioTracksInConnections();
+            
+            if (this.remoteUsers.size > 0) {
+                this.remoteUsers.forEach((peerConnection, userId) => {
+                    this.createOffer(userId);
+                });
+            }
+
+            this.updateControlButtons();
+            this.updateVideoOverlays();
+
+            return true;
+        } catch (error) {
+            console.error('Error enabling audio:', error);
+            this.hasVideoTrack = false;
+            throw error;
+        }
+    }
+
+    async toggleAudio() {
+        if (!this.localStream) {
+            try {
+                await this.startAudioOnly();
+                this.showNotification('Микрофон включен', 'success');
+            } catch (error) {
+                this.showNotification('Не удалось включить микрофон', 'error');
+            }
+        } else {
+            const audioTracks = this.localStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                const enabled = !audioTracks[0].enabled;
+                audioTracks[0].enabled = enabled;
+                
+                this.updateControlButtons();
+                this.showNotification(enabled ? 'Микрофон включен' : 'Микрофон выключен', 'info');
+            } else {
+                await this.startAudioOnly();
+            }
+        }
+    }
+
+    async toggleVideo() {
+        if (this.isSharingScreen) {
+            this.showNotification('Остановите демонстрацию экрана чтобы выключить камеру', 'warning');
+            return;
+        }
+
+        if (!this.localStream) {
+            try {
+                await this.startVideo();
+            } catch (error) {
+                this.showNotification('Cannot enable camera without media access', 'error');
+            }
+            return;
+        }
+        
+        const videoTracks = this.localStream.getVideoTracks();
+        if (videoTracks.length > 0) {
+            const enabled = !videoTracks[0].enabled;
+            videoTracks[0].enabled = enabled;
+            
+            this.hasVideoTrack = enabled;
+            this.syncVideoState();
+            
+            this.updateControlButtons();
+            this.updateVideoOverlays();
+            this.showNotification(enabled ? 'Камера включена' : 'Камера выключена', 'info');
+        }
+    }
+
+    async shareScreen() {
+        if (this.isSharingScreen) {
+            await this.stopScreenShare();
+            return;
+        }
+
+        try {
+            this.ensureLocalVideoElement();
+
+            const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { 
+                    cursor: 'always', 
+                    displaySurface: 'window',
+                    frameRate: { ideal: 30 }
+                },
+                audio: true
+            });
+
+            const screenVideoTrack = screenStream.getVideoTracks()[0];
+            const screenAudioTracks = screenStream.getAudioTracks();
+            
+            if (!screenVideoTrack) {
+                throw new Error('Не удалось получить видео с экрана');
+            }
+
+            this.previousStream = this.localStream;
+            
+            const newStream = new MediaStream();
+            
+            newStream.addTrack(screenVideoTrack);
+            
+            screenAudioTracks.forEach(track => {
+                newStream.addTrack(track);
+            });
+
+            if (this.previousStream) {
+                const originalAudioTracks = this.previousStream.getAudioTracks();
+                originalAudioTracks.forEach(track => {
+                    if (screenAudioTracks.length === 0) {
+                        newStream.addTrack(track);
+                    }
+                });
+            }
+
+            this.localStream = newStream;
+            this.screenStream = screenStream;
+            this.isSharingScreen = true;
+            this.syncVideoState();
+
+            const localVideo = document.getElementById('localVideo');
+            if (localVideo) {
+                localVideo.srcObject = this.localStream;
+            }
+
+            this.updateVideoOverlays();
+            
+            await this.updateVideoTracksInConnections(screenVideoTrack);
+            
+            this.updateControlButtons();
+            
+            this.showNotification('Демонстрация экрана начата', 'success');
+
+            screenVideoTrack.onended = () => {
+                this.stopScreenShare();
+            };
+
+        } catch (error) {
+            console.error('Screen share error:', error);
+            if (error.name === 'NotAllowedError') {
+                this.showNotification('Демонстрация экрана отменена', 'info');
+            } else {
+                this.showNotification('Ошибка демонстрации экрана: ' + error.message, 'error');
+            }
+        }
+    }
+
+    async stopScreenShare() {
+        if (!this.isSharingScreen) return;
+        
+        if (this.screenStream) {
+            this.screenStream.getTracks().forEach(track => track.stop());
+            this.screenStream = null;
+        }
+        
+        if (this.previousStream) {
+            this.localStream = this.previousStream;
+            this.previousStream = null;
+        } else {
+            this.localStream = null;
+        }
+
+        const localVideo = document.getElementById('localVideo');
+        if (localVideo) {
+            localVideo.srcObject = this.localStream;
+        }
+
+        this.updateVideoOverlays();
+        
+        const videoTrack = this.localStream ? this.localStream.getVideoTracks()[0] : null;
+        await this.updateVideoTracksInConnections(videoTrack);
+        
+        this.isSharingScreen = false;
+        this.updateControlButtons();
+        this.syncVideoState();
+        
+        this.showNotification('Демонстрация экрана завершена', 'info');
+    }
+
+    async updateVideoTracksInConnections(newVideoTrack = null) {
+        const videoTrack = newVideoTrack || (this.localStream ? this.localStream.getVideoTracks()[0] : null);
+        
+        this.remoteUsers.forEach((peerConnection, userId) => {
+            const videoSender = peerConnection.getSenders().find(s => 
+                s.track && s.track.kind === 'video'
+            );
+            
+            if (videoSender) {
+                videoSender.replaceTrack(videoTrack);
+            } else if (videoTrack) {
+                peerConnection.addTrack(videoTrack, this.localStream);
+            }
+        });
+    }
+
+    async updateAudioTracksInConnections() {
+        const audioTrack = this.localStream?.getAudioTracks()[0];
+        if (!audioTrack) return;
+        
+        this.remoteUsers.forEach((peerConnection, userId) => {
+            const sender = peerConnection.getSenders().find(s => 
+                s.track && s.track.kind === 'audio'
+            );
+            
+            if (sender) {
+                sender.replaceTrack(audioTrack);
+            } else {
+                peerConnection.addTrack(audioTrack, this.localStream);
+            }
+        });
+    }
+
+    addTracksToExistingConnections() {
+        if (!this.localStream) return;
+        
+        this.remoteUsers.forEach((peerConnection, userId) => {
+            const existingSenders = peerConnection.getSenders();
+            const hasVideoSender = existingSenders.some(sender => sender.track && sender.track.kind === 'video');
+            const hasAudioSender = existingSenders.some(sender => sender.track && sender.track.kind === 'audio');
+            
+            if (!hasVideoSender) {
+                const videoTrack = this.localStream.getVideoTracks()[0];
+                if (videoTrack) peerConnection.addTrack(videoTrack, this.localStream);
+            }
+            
+            if (!hasAudioSender) {
+                const audioTrack = this.localStream.getAudioTracks()[0];
+                if (audioTrack) peerConnection.addTrack(audioTrack, this.localStream);
+            }
+        });
+    }
+
+    leaveRoom() {
+        if (this.socket && this.socket.connected && this.roomId) {
+            this.socket.emit('leave_room', { room_id: this.roomId });
+        }
+        
+        this.cleanupCall();
+        this.showNotification('Вы вышли из комнаты', 'info');
+        
+        this.roomId = null;
+        
+        const roomIdDisplay = document.getElementById('roomIdDisplay');
+        if (roomIdDisplay) {
+            roomIdDisplay.textContent = '-';
+        }
+        
+        this.updateUI();
+    }
+
+    cleanupCall() {
+        if (this.socket && this.roomId) {
+            this.socket.emit('sync_video_state', {
+                room_id: this.roomId,
+                has_video: false,
+                is_screen_sharing: false
+            });
+        }
+        
+        if (this.isSharingScreen) {
+            this.stopScreenShare();
+        }
+        
+        if (this.localStream) {
+            this.localStream.getTracks().forEach(track => track.stop());
+            this.localStream = null;
+        }
+        
+        this.remoteUsers.forEach((peerConnection, userId) => {
+            peerConnection.close();
+        });
+        this.remoteUsers.clear();
+        
+        this.remoteStreams.clear();
+        
+        const remoteParticipants = document.querySelectorAll('.remote-participant');
+        remoteParticipants.forEach(participant => {
+            participant.remove();
+        });
+        
+        const participantsCountElement = document.getElementById('participantsCount');
+        if (participantsCountElement) {
+            participantsCountElement.textContent = '0';
+        }
+        
+        const localVideo = document.getElementById('localVideo');
+        if (localVideo) {
+            localVideo.srcObject = null;
+        }
+        
+        const localParticipantCard = document.getElementById('localParticipantCard');
+        if (localParticipantCard) {
+            localParticipantCard.style.display = 'none';
+        }
+        
+        this.isInCall = false;
+        this.isSharingScreen = false;
+        
+        setTimeout(() => {
+            this.checkEmptyState();
+        }, 100);
+    }
+
+    handleRoomInfo(data) {
+        this.isInCall = true;
+        
+        document.getElementById('roomIdDisplay').textContent = this.roomId;
+        document.getElementById('participantsCount').textContent = data.participants.length;
+        
+        data.participants.forEach(participant => {
+            if (participant.socket_id !== this.socketId) {
+                this.setupPeerConnection(participant.socket_id);
+            }
+        });
+        
+        this.updateUI();
+        
+        setTimeout(() => {
+            this.checkEmptyState();
+        }, 100);
+    }
+
+    handleUserJoined(data) {
+        document.getElementById('participantsCount').textContent = data.participants_count;
+        
+        this.showNotification(`${data.user_name || 'User'} joined the room`, 'info');
+        
+        if (data.user_id !== this.socketId) {
+            this.userNames.set(data.user_id, data.user_name);
+            this.setupPeerConnection(data.user_id);
+            this.createOffer(data.user_id);
+        }
+        
+        setTimeout(() => {
+            this.checkEmptyState();
+        }, 100);
+    }
+
+    handleUserLeft(data) {
+        document.getElementById('participantsCount').textContent = data.participants_count;
+        
+        this.showNotification(`${data.user_name || 'User'} left the room`, 'info');
+        
+        if (this.remoteUsers.has(data.user_id)) {
+            this.remoteUsers.get(data.user_id).close();
+            this.remoteUsers.delete(data.user_id);
+        }
+        
+        if (this.remoteStreams.has(data.user_id)) {
+            this.remoteStreams.delete(data.user_id);
+        }
+        
+        const participantCard = document.getElementById(`participant-${data.user_id}`);
+        if (participantCard) {
+            participantCard.remove();
+        }
+        
+        setTimeout(() => {
+            this.checkEmptyState();
+        }, 100);
+    }
+
+    setupPeerConnection(targetUserId) {
+        if (this.remoteUsers.has(targetUserId)) return;
+
+        try {
+            const peerConnection = new RTCPeerConnection(this.configuration);
+            
+            if (this.localStream) {
+                this.localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, this.localStream);
+                });
+            }
+            
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    this.socket.emit('ice_candidate', {
+                        target_user_id: targetUserId,
+                        candidate: event.candidate
+                    });
+                }
+            };
+            
+            peerConnection.ontrack = (event) => {
+                const remoteStream = event.streams[0];
+                if (!remoteStream) return;
+                
+                this.remoteStreams.set(targetUserId, remoteStream);
+                this.createParticipantCard(targetUserId);
+                
+                const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                if (videoElement) {
+                    videoElement.srcObject = remoteStream;
+                    
+                    remoteStream.getTracks().forEach(track => {
+                        track.onended = () => {
+                            this.updateVideoOverlays();
+                        };
+                    });
+                    
+                    videoElement.play().catch(error => {
+                        this.showAudioActivationButton(videoElement, targetUserId);
+                    });
+                }
+                
+                this.updateVideoOverlays();
+            };
+            
+            peerConnection.onconnectionstatechange = () => {
+                const state = peerConnection.connectionState;
+                
+                if (state === 'connected') {
+                    this.showNotification('Call connected', 'success');
+                } else if (state === 'disconnected' || state === 'failed') {
+                    setTimeout(() => {
+                        if (this.remoteUsers.has(targetUserId)) {
+                            this.createOffer(targetUserId);
+                        }
+                    }, 2000);
+                }
+            };
+            
+            this.remoteUsers.set(targetUserId, peerConnection);
+            
+        } catch (error) {
+            console.error('Error setting up peer connection:', error);
+            this.showNotification('Failed to setup connection', 'error');
+        }
+    }
+
+    showAudioActivationButton(videoElement, userId) {
+        const participantCard = document.getElementById(`participant-${userId}`);
+        if (!participantCard) return;
+    
+        const oldBtn = participantCard.querySelector('.audio-activation-btn');
+        if (oldBtn) oldBtn.remove();
+    
+        const activateBtn = document.createElement('button');
+        activateBtn.className = 'audio-activation-btn';
+        activateBtn.innerHTML = '🔇 Нажми для звука';
+        activateBtn.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 10;
+        `;
+    
+        activateBtn.addEventListener('click', async () => {
+            try {
+                await videoElement.play();
+                activateBtn.remove();
+            } catch (error) {
+                console.error('Error activating audio:', error);
+            }
+        });
+    
+        participantCard.appendChild(activateBtn);
+    }
+
+    async createOffer(targetUserId) {
+        if (!this.remoteUsers.has(targetUserId)) return;
+        
+        try {
+            const peerConnection = this.remoteUsers.get(targetUserId);
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            
+            this.socket.emit('webrtc_offer', {
+                target_user_id: targetUserId,
+                offer: offer
+            });
+            
+        } catch (error) {
+            console.error('Error creating offer:', error);
+        }
+    }
+
+    async handleWebRTCOffer(data) {
+        try {
+            if (!this.remoteUsers.has(data.sender_id)) {
+                this.setupPeerConnection(data.sender_id);
+            }
+            
+            const peerConnection = this.remoteUsers.get(data.sender_id);
+            await peerConnection.setRemoteDescription(data.offer);
+            
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            this.socket.emit('webrtc_answer', {
+                target_user_id: data.sender_id,
+                answer: answer
+            });
+            
+        } catch (error) {
+            console.error('Error handling WebRTC offer:', error);
+        }
+    }
+
+    async handleWebRTCAnswer(data) {
+        try {
+            if (!this.remoteUsers.has(data.sender_id)) return;
+            
+            const peerConnection = this.remoteUsers.get(data.sender_id);
+            await peerConnection.setRemoteDescription(data.answer);
+            
+        } catch (error) {
+            console.error('Error handling WebRTC answer:', error);
+        }
+    }
+
+    async handleICECandidate(data) {
+        try {
+            if (!this.remoteUsers.has(data.sender_id)) return;
+            
+            const peerConnection = this.remoteUsers.get(data.sender_id);
+            
+            if (peerConnection.connectionState === 'closed' || 
+                peerConnection.connectionState === 'disconnected' ||
+                peerConnection.connectionState === 'failed') {
+                return;
+            }
+            
+            await peerConnection.addIceCandidate(data.candidate);
+            
+        } catch (error) {
+            console.error('Error adding ICE candidate:', error);
+        }
+    }
+
+    toggleFullscreen() {
+        const container = document.querySelector('.container');
+        
+        if (!document.fullscreenElement) {
+            if (container.requestFullscreen) container.requestFullscreen();
+            container.classList.add('fullscreen-mode');
+            this.showNotification('Fullscreen mode enabled', 'info');
+        } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+            container.classList.remove('fullscreen-mode');
+            this.showNotification('Fullscreen mode disabled', 'info');
+        }
+    }
+
+    bootstrapFromURL() {
+        const path = window.location.pathname;
+        const deeplinkMatch = path.match(/^\/r\/([A-Za-z0-9_-]{3,})$/);
+        if (deeplinkMatch) {
+            const roomId = deeplinkMatch[1];
+            const input = document.getElementById('roomInput');
+            if (input) input.value = roomId;
+            setTimeout(() => this.joinRoom(), 0);
+        }
+    }
+
+    copyShareLink(url) {
+        navigator.clipboard.writeText(url).then(() => {
+            this.showNotification('Ссылка скопирована', 'info');
+        }).catch(() => {
+            this.showNotification('Не удалось скопировать ссылку: ' + url, 'warning');
+        });
+    }
+
+    showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.innerHTML = `
+            <span class="notification-message">${message}</span>
+            <button class="notification-close">&times;</button>
+        `;
+
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
+
+        notification.querySelector('.notification-close').addEventListener('click', () => {
+            if (notification.parentNode) notification.remove();
+        });
+    }
+
+    async checkMediaDevices() {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            this.availableMicrophones = devices.filter(device => device.kind === 'audioinput');
+            this.availableCameras = devices.filter(device => device.kind === 'videoinput');
+            return { microphones: this.availableMicrophones, cameras: this.availableCameras };
+        } catch (error) {
+            console.error('Error checking media devices:', error);
+            return { microphones: [], cameras: [] };
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    window.videoCallManager = new VideoCallManager();
+});
