@@ -50,10 +50,11 @@ class VideoCallManager {
     setupWelcomeScreen() {
         // Проверяем, есть ли room_id в URL
         const path = window.location.pathname;
-        const roomMatch = path.match(/^\/r\/([A-Za-z0-9_-]{3,20})$/);
+        const roomMatch = path.match(/^\/r\/([A-Za-z0-9_-]{3,50})$/);
         
         if (roomMatch) {
             // Если есть room_id в URL, сразу показываем основную страницу
+            // bootstrapFromURL обработает подключение
             this.showMainScreen();
             return;
         }
@@ -138,9 +139,12 @@ class VideoCallManager {
             if (data.error) throw new Error(data.error);
             
             this.roomId = data.room_id;
-            // Меняем URL
+            // Меняем URL и переносимся в комнату
             window.history.pushState({}, '', `/r/${this.roomId}`);
             this.showMainScreen();
+            const shareUrl = `${window.location.origin}/r/${this.roomId}`;
+            showNotification(`Комната создана: ${this.roomId}`, 'success');
+            this.copyShareLink(shareUrl);
             await this.joinRoomAfterCreation();
             
         } catch (error) {
@@ -153,6 +157,11 @@ class VideoCallManager {
         try {
             if (!validateRoomId(roomId)) {
                 showNotification('Неверный ID комнаты', 'error');
+                // Если вызвано из bootstrapFromURL и комната неверная - возвращаемся на главную
+                if (window.location.pathname.startsWith('/r/')) {
+                    window.history.pushState({}, '', '/');
+                    this.setupWelcomeScreen();
+                }
                 return;
             }
 
@@ -162,11 +171,16 @@ class VideoCallManager {
             
             if (!data.exists) {
                 showNotification('Комната не найдена', 'error');
+                // Если вызвано из bootstrapFromURL и комната не найдена - возвращаемся на главную
+                if (window.location.pathname.startsWith('/r/')) {
+                    window.history.pushState({}, '', '/');
+                    this.setupWelcomeScreen();
+                }
                 return;
             }
             
             this.roomId = roomId;
-            // Меняем URL
+            // Меняем URL и переносимся в комнату
             window.history.pushState({}, '', `/r/${this.roomId}`);
             this.showMainScreen();
             await this.joinRoomAfterCreation();
@@ -174,6 +188,11 @@ class VideoCallManager {
         } catch (error) {
             console.error('Error joining room:', error);
             showNotification('Не удалось подключиться: ' + error.message, 'error');
+            // Если ошибка при загрузке из URL - возвращаемся на главную
+            if (window.location.pathname.startsWith('/r/')) {
+                window.history.pushState({}, '', '/');
+                this.setupWelcomeScreen();
+            }
         }
     }
     
@@ -762,28 +781,23 @@ async updateAudioTracksInConnections() {
 
     bootstrapFromURL() {
         const path = window.location.pathname;
-        const deeplinkMatch = path.match(/^\/r\/([A-Za-z0-9_-]{3,20})$/);
+        const deeplinkMatch = path.match(/^\/r\/([A-Za-z0-9_-]{3,50})$/);
         if (deeplinkMatch) {
             const roomId = deeplinkMatch[1];
             if (validateRoomId(roomId)) {
                 this.roomId = roomId;
-                const input = document.getElementById('roomInput');
-                if (input) input.value = roomId;
                 this.showMainScreen();
-                setTimeout(() => this.joinRoom(), 0);
+                // Проверяем комнату и подключаемся
+                setTimeout(() => {
+                    this.joinRoomFromWelcome(roomId);
+                }, 100);
             }
         }
     }
 
 setupEventListeners() {
-    // Room controls
-    const createRoomBtn = document.getElementById('createRoom');
-    const joinRoomBtn = document.getElementById('joinRoom');
+    // End call button
     const endCallBtn = document.getElementById('endCall');
-    const roomInput = document.getElementById('roomInput');
-
-    if (createRoomBtn) createRoomBtn.addEventListener('click', () => this.createRoom());
-    if (joinRoomBtn) joinRoomBtn.addEventListener('click', () => this.joinRoom());
     if (endCallBtn) endCallBtn.addEventListener('click', () => this.leaveRoom());
 
     // Media controls
@@ -796,13 +810,6 @@ setupEventListeners() {
     if (toggleVideoBtn) toggleVideoBtn.addEventListener('click', () => this.toggleVideo());
     if (shareScreenBtn) shareScreenBtn.addEventListener('click', () => this.shareScreen());
     if (toggleFullscreenBtn) toggleFullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
-
-    // Room input enter key
-    if (roomInput) {
-        roomInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.joinRoom();
-        });
-    }
 
     // Copy link button
     const copyBtn = document.getElementById('copyLink');
@@ -847,116 +854,6 @@ setupEventListeners() {
         oldSelectMicBtn.remove();
     }
 
-    // Добавляем стили для модальных окон
-    if (!document.querySelector('#settings-styles')) {
-        const styleElement = document.createElement('style');
-        styleElement.id = 'settings-styles';
-        styleElement.textContent = `
-            .settings-modal .modal-overlay,
-            .camera-selection-modal .modal-overlay,
-            .microphone-selection-modal .modal-overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.7);
-                backdrop-filter: blur(5px);
-                z-index: 1000;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-
-            .settings-modal .modal-content,
-            .camera-selection-modal .modal-content,
-            .microphone-selection-modal .modal-content {
-                background: var(--surface);
-                padding: 24px;
-                border-radius: 16px;
-                box-shadow: var(--shadow-lg);
-                max-width: 400px;
-                width: 90%;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
-
-            .settings-modal h3,
-            .camera-selection-modal h3,
-            .microphone-selection-modal h3 {
-                margin: 0 0 16px 0;
-                color: var(--text-primary);
-                text-align: center;
-            }
-
-            .settings-options {
-                display: flex;
-                flex-direction: column;
-                gap: 12px;
-                margin: 20px 0;
-            }
-
-            .btn-settings {
-                background: var(--surface-light);
-                color: var(--text-primary);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                padding: 12px 16px;
-                border-radius: 8px;
-                cursor: pointer;
-                text-align: left;
-                font-size: 14px;
-                transition: all 0.2s;
-            }
-
-            .btn-settings:hover {
-                background: var(--surface-hover);
-                border-color: var(--primary-blue);
-            }
-
-            .camera-list,
-            .microphone-list {
-                margin: 20px 0;
-                max-height: 300px;
-                overflow-y: auto;
-            }
-
-            .camera-item,
-            .microphone-item {
-                padding: 12px;
-                margin: 8px 0;
-                background: var(--surface-light);
-                border-radius: 8px;
-                cursor: pointer;
-                border: 1px solid transparent;
-            }
-
-            .camera-item:hover,
-            .microphone-item:hover {
-                background: var(--surface-hover);
-                border-color: var(--primary-blue);
-            }
-
-            .camera-item input[type="radio"],
-            .microphone-item input[type="radio"] {
-                margin-right: 10px;
-            }
-
-            .camera-item label,
-            .microphone-item label {
-                cursor: pointer;
-                color: var(--text-primary);
-                display: flex;
-                align-items: center;
-            }
-
-            .modal-buttons {
-                display: flex;
-                gap: 12px;
-                justify-content: flex-end;
-                margin-top: 20px;
-            }
-        `;
-        document.head.appendChild(styleElement);
-    }
 }
 
 
@@ -1045,71 +942,12 @@ updateVideoOverlays() {
 }
 
 
-    async createRoom() {
-        try {
-            console.log('Creating room...');
-            showNotification('Creating room...', 'info');
-            
-            const response = await fetch('/api/create_room', { 
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'}
-            });
-            const data = await response.json();
-            
-            if (data.error) throw new Error(data.error);
-            
-            this.roomId = data.room_id;
-            // Меняем URL
-            window.history.pushState({}, '', `/r/${this.roomId}`);
-            console.log('Room created with ID:', this.roomId);
-            const shareUrl = `${window.location.origin}/r/${this.roomId}`;
-            showNotification(`Комната создана: ${this.roomId}`, 'success');
-            this.copyShareLink(shareUrl);
-            
-            this.joinRoomAfterCreation();
-            
-        } catch (error) {
-            console.error('Error creating room:', error);
-            showNotification('Failed to create room: ' + error.message, 'error');
-        }
-    }
-
     async copyShareLink(url) {
         const success = await copyToClipboard(url);
         if (success) {
             showNotification('Ссылка скопирована', 'info');
         } else {
             showNotification('Не удалось скопировать ссылку: ' + url, 'warning');
-        }
-    }
-
-    async joinRoom() {
-        try {
-            this.roomId = document.getElementById('roomInput')?.value.trim();
-            
-            if (!this.roomId || !validateRoomId(this.roomId)) {
-                showNotification('Введите корректный ID комнаты', 'warning');
-                return;
-            }
-            
-            console.log('Checking room existence:', this.roomId);
-            showNotification('Проверка комнаты...', 'info');
-            
-            const response = await fetch(`/api/check_room/${this.roomId}`);
-            const data = await response.json();
-            
-            if (!data.exists) {
-                showNotification('Комната не найдена', 'error');
-                return;
-            }
-            
-            // Меняем URL
-            window.history.pushState({}, '', `/r/${this.roomId}`);
-            this.joinRoomAfterCreation();
-            
-        } catch (error) {
-            console.error('Error joining room:', error);
-            showNotification('Не удалось подключиться: ' + error.message, 'error');
         }
     }
 
@@ -1275,8 +1113,6 @@ showMediaPrompt() {
         
         if (this.socket && this.socket.connected && this.roomId) {
             this.socket.emit('leave_room', { room_id: this.roomId });
-            // Очищаем чат на сервере
-            this.socket.emit('clear_chat', { room_id: this.roomId });
             console.log('✅ Отправлен запрос на выход из комнаты');
         }
         

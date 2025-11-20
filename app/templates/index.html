@@ -11,7 +11,7 @@
     <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
 </head>
 <body>
-    <!-- Начальная страница -->
+    <!-- Стартовое окно -->
     <div class="welcome-screen" id="welcomeScreen">
         <div class="welcome-content">
             <div class="brand-logo-large">
@@ -30,7 +30,7 @@
                 </button>
             </div>
             <div class="join-room-form" id="joinRoomForm" style="display: none;">
-                <input type="text" id="welcomeRoomInput" placeholder="Введите ID комнаты" maxlength="20">
+                <input type="text" id="welcomeRoomInput" placeholder="Введите ID комнаты" maxlength="50">
                 <button id="welcomeJoinConfirm" class="btn btn-primary">
                     <span class="icon">✓</span>
                     <span class="btn-text">Подключиться</span>
@@ -84,21 +84,6 @@
         </div>
 
         <div class="controls">
-            <div class="room-controls">
-                <button id="createRoom" class="btn btn-primary">
-                    <span class="icon">💬</span>
-                    <span class="btn-text">Создать комнату</span>
-                </button>
-                
-                <div class="input-group">
-                    <input type="text" id="roomInput" placeholder="Введите ID комнаты">
-                    <button id="joinRoom" class="btn btn-primary">
-                        <span class="icon">🚪</span>
-                        <span class="btn-text">Войти</span>
-                    </button>
-                </div>
-            </div>
-
             <div class="room-info">
                 <div class="room-info-item">
                     <span class="icon">🚪</span>
@@ -126,14 +111,6 @@
                     <button id="shareScreen" class="btn-control" title="Демонстрация экрана">
                         <span class="icon">🖥️</span>
                     </button>
-                    
-                    <button id="showParticipants" class="btn-control" title="Участники">
-                        <span class="icon">👥</span>
-                    </button>
-                    
-                    <button id="showChat" class="btn-control" title="Чат">
-                        <span class="icon">💬</span>
-                    </button>
                 </div>
                 
                 <button id="endCall" class="btn-end-call" title="Завершить звонок" style="display: none;">
@@ -147,43 +124,6 @@
         </div>
     </div>
 
-    <!-- Модальное окно участников -->
-    <div class="modal-overlay" id="participantsModal" style="display: none;">
-        <div class="modal-content">
-            <h3>👥 Участники встречи</h3>
-            <div class="participants-list" id="participantsList">
-                <p class="loading-text">Загрузка...</p>
-            </div>
-            <div class="modal-buttons">
-                <button id="closeParticipantsModal" class="btn btn-secondary">Закрыть</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно чата -->
-    <div class="modal-overlay" id="chatModal" style="display: none;">
-        <div class="modal-content chat-modal-content">
-            <h3>💬 Чат</h3>
-            <div class="chat-messages" id="chatMessages">
-                <p class="empty-chat">Пока нет сообщений</p>
-            </div>
-            <div class="chat-input-container">
-                <input type="text" id="chatInput" placeholder="Введите сообщение..." maxlength="500">
-                <button id="sendChatMessage" class="btn btn-primary">Отправить</button>
-            </div>
-            <div class="modal-buttons">
-                <button id="closeChatModal" class="btn btn-secondary">Закрыть</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Подключаем модули JavaScript -->
-    <script src="{{ url_for('static', filename='js/config.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/media-devices.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/audio-visualizer.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/participants.js') }}"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
