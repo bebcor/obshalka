@@ -107,15 +107,8 @@ body {
 }
 
 .video-wrapper.local {
-    position: absolute;
-    bottom: 100px;
-    right: 24px;
-    width: 300px;
-    height: 200px;
-    border-radius: 16px;
-    border: 2px solid rgba(255, 255, 255, 0.1);
-    z-index: 10;
-    box-shadow: var(--shadow-lg);
+    width: 100%;
+    height: 100%;
 }
 
 .video-wrapper.remote {
@@ -139,6 +132,29 @@ video {
     border-radius: 20px;
     font-size: 0.75rem;
     backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.badge-group {
+    display: inline-flex;
+    gap: 4px;
+    margin-left: 4px;
+}
+
+.badge {
+    font-size: 0.7rem;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.badge.on {
+    opacity: 1;
+}
+
+.badge.off {
+    opacity: 0.4;
 }
 
 .video-overlay {
@@ -266,7 +282,7 @@ input[type="text"]::placeholder {
     background: var(--surface-light);
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -274,20 +290,84 @@ input[type="text"]::placeholder {
     overflow: hidden;
 }
 
+/* Эффект блика и переливания при наведении */
 .btn-control::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(255, 255, 255, 0.1);
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+        45deg,
+        transparent 30%,
+        rgba(255, 255, 255, 0.3) 50%,
+        transparent 70%
+    );
+    transform: rotate(45deg);
+    transition: all 0.6s ease;
     opacity: 0;
-    transition: opacity 0.2s ease;
 }
 
 .btn-control:hover::before {
+    animation: shimmer 1.5s infinite;
     opacity: 1;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%) translateY(-100%) rotate(45deg);
+    }
+    100% {
+        transform: translateX(100%) translateY(100%) rotate(45deg);
+    }
+}
+
+/* Эффект переливания цветов - только если нет специальных состояний */
+.btn-control:hover:not(.mic-speaking):not(.mic-muted):not(.video-active):not(.video-disabled) {
+    background: linear-gradient(135deg, var(--surface-light), var(--primary-blue), var(--surface-light));
+    background-size: 200% 200%;
+    animation: gradient-shift 2s ease infinite;
+    box-shadow: 0 0 20px rgba(37, 99, 235, 0.4);
+}
+
+@keyframes gradient-shift {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Состояния кнопки микрофона */
+.btn-control.mic-idle {
+    background: var(--surface-light);
+}
+
+.btn-control.mic-speaking {
+    background: var(--success);
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
+}
+
+.btn-control.mic-muted {
+    background: var(--error);
+}
+
+/* Состояния кнопки камеры */
+.btn-control.video-active {
+    background: var(--success);
+}
+
+.btn-control.video-inactive {
+    background: var(--surface-light);
+}
+
+.btn-control.video-disabled {
+    background: var(--error);
 }
 
 .btn-control.active {
@@ -357,10 +437,8 @@ input[type="text"]::placeholder {
     object-fit: cover;
 }
 
-.fullscreen-mode .video-wrapper.local {
-    bottom: 120px;
-    right: 32px;
-    z-index: 1000;
+.fullscreen-mode .video-wrapper.local video {
+    object-fit: cover;
 }
 
 /* Адаптивность для полноэкранного режима */
@@ -524,4 +602,206 @@ input[type="text"]::placeholder {
         bottom: 70px;
         right: 16px;
     }
+}
+
+/* Модальные окна для пользователей и чата */
+.users-modal-content,
+.chat-modal-content {
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 2rem;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.modal-close:hover {
+    color: var(--text-primary);
+}
+
+/* Список пользователей */
+.users-list {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 60vh;
+}
+
+.user-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: var(--surface-light);
+    transition: background 0.2s ease;
+}
+
+.user-item:hover {
+    background: var(--surface);
+}
+
+.user-item.current-user {
+    background: rgba(37, 99, 235, 0.2);
+    border: 1px solid var(--primary-blue);
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--primary-blue);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 1.125rem;
+    flex-shrink: 0;
+}
+
+.user-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.user-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.user-status {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.no-users {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 20px;
+}
+
+/* Чат */
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 50vh;
+    padding: 16px;
+    background: var(--surface);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.chat-message {
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--surface-light);
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.chat-message.own-message {
+    background: var(--primary-blue);
+    align-self: flex-end;
+    margin-left: auto;
+}
+
+.message-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 0.75rem;
+}
+
+.message-author {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.own-message .message-author {
+    color: white;
+}
+
+.message-time {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+}
+
+.own-message .message-time {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.message-text {
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+.own-message .message-text {
+    color: white;
+}
+
+.no-messages {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 20px;
+}
+
+.chat-input-container {
+    display: flex;
+    gap: 12px;
+}
+
+.chat-input-container input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    background: var(--surface-light);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.chat-input-container input:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.chat-input-container button {
+    padding: 12px 24px;
+    white-space: nowrap;
 }

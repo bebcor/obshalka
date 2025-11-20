@@ -39,14 +39,37 @@ const ICE_CONFIG = {
 const getPeerConnectionConfig = () => {
     return {
         iceServers: [
-            // STUN-серверы Google
+            // ВАШ СОБСТВЕННЫЙ STUN сервер (ПРИОРИТЕТ)
+            {
+                urls: 'stun:109.73.201.242:3478'
+            },
+            // ВАШ СОБСТВЕННЫЙ TURN сервер (UDP) - ПРИОРИТЕТ
+            {
+                urls: 'turn:109.73.201.242:3478',
+                username: 'webrtc',
+                credential: 'webrtcpassword'
+            },
+            // ВАШ СОБСТВЕННЫЙ TURN сервер (TCP) - ПРИОРИТЕТ
+            {
+                urls: 'turn:109.73.201.242:3478?transport=tcp',
+                username: 'webrtc',
+                credential: 'webrtcpassword'
+            },
+            // ВАШ СОБСТВЕННЫЙ TURN сервер (TLS) - ПРИОРИТЕТ
+            {
+                urls: 'turns:109.73.201.242:5349',
+                username: 'webrtc',
+                credential: 'webrtcpassword'
+            },
+            // Резервные STUN-серверы Google
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:stun3.l.google.com:19302' },
             { urls: 'stun:stun4.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' },
             
-            // TURN-серверы для обхода сложных NAT и фаерволов
+            // Резервные TURN-серверы для обхода сложных NAT и фаерволов
             {
                 urls: 'turn:openrelay.metered.ca:80',
                 username: 'openrelayproject',

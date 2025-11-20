@@ -64,12 +64,33 @@ class WebRTCManager {
             
                 // Добавляем полученный трек в поток
                 const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
+                const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                
                 event.streams[0].getTracks().forEach(track => {
                     if (!remoteStream.getTracks().some(t => t.id === track.id)) {
                         remoteStream.addTrack(track);
-                        console.log('Added track to remote stream:', track.kind);
+                        console.log('Added track to remote stream:', track.kind, track.id);
+                        
+                        // Если это аудио трек, убеждаемся что он воспроизводится
+                        if (track.kind === 'audio' && videoElement) {
+                            console.log('Audio track added, ensuring playback');
+                            videoElement.muted = false;
+                            videoElement.volume = 1.0;
+                            // Обновляем srcObject чтобы аудио начало воспроизводиться
+                            if (videoElement.srcObject !== remoteStream) {
+                                videoElement.srcObject = remoteStream;
+                            }
+                            videoElement.play().catch(err => {
+                                console.error('Error playing audio:', err);
+                            });
+                        }
                     }
                 });
+            
+                // Обновляем srcObject видео элемента на случай если поток изменился
+                if (videoElement && videoElement.srcObject !== remoteStream) {
+                    videoElement.srcObject = remoteStream;
+                }
             
                 this.videoCallManager.uiManager.updateVideoOverlays();
             };
@@ -114,24 +135,10 @@ class WebRTCManager {
             };
         
             // Обработчик необходимости переговоров (renegotiation)
-            let isNegotiating = false;
-            peerConnection.onnegotiationneeded = async () => {
+            peerConnection.onnegotiationneeded = () => {
                 console.log('Negotiation needed for:', targetUserId);
-                if (isNegotiating) {
-                    console.log('Already negotiating, skipping...');
-                    return;
-                }
-                isNegotiating = true;
-                try {
-                    await this.createOffer(targetUserId);
-                } catch (error) {
-                    console.error('Error during negotiation:', error);
-                } finally {
-                    // Сбрасываем флаг через небольшую задержку
-                    setTimeout(() => {
-                        isNegotiating = false;
-                    }, 1000);
-                }
+                // Не запускаем автоматически, чтобы избежать конфликтов
+                // Будем запускать вручную когда нужно
             };
         
             // Обработчик изменения состояния ICE gathering
@@ -176,12 +183,12 @@ class WebRTCManager {
         
             // Убеждаемся, что все transceivers правильно настроены
             peerConnection.getTransceivers().forEach((transceiver) => {
-                if (transceiver.direction === 'inactive' && transceiver.sender.track) {
-                    // Если есть трек, но направление inactive, меняем на sendrecv
-                    transceiver.direction = 'sendrecv';
-                } else if (transceiver.direction === 'recvonly' && transceiver.sender.track) {
-                    // Если есть трек, но направление recvonly, меняем на sendrecv
-                    transceiver.direction = 'sendrecv';
+                if (transceiver.sender.track) {
+                    // Если есть отправляемый трек, должно быть sendrecv или sendonly
+                    if (transceiver.direction === 'inactive' || transceiver.direction === 'recvonly') {
+                        transceiver.direction = 'sendrecv';
+                        console.log('Fixed transceiver direction for', transceiver.sender.track.kind);
+                    }
                 }
             });
         

@@ -2,6 +2,7 @@
 class MediaController {
     constructor(videoCallManager) {
         this.videoCallManager = videoCallManager;
+        this.audioAnalyzer = null;
     }
 
     async startVideo() {
@@ -26,6 +27,11 @@ class MediaController {
             
             this.videoCallManager.uiManager.updateControlButtons();
             this.videoCallManager.uiManager.updateVideoOverlays();
+            
+            // Запускаем анализ аудио
+            if (this.videoCallManager.audioAnalyzer) {
+                this.videoCallManager.audioAnalyzer.startAnalysis();
+            }
             
             // Добавляем треки во все существующие соединения
             this.videoCallManager.webrtcManager.addTracksToExistingConnections();
@@ -64,6 +70,15 @@ class MediaController {
         if (audioTracks.length > 0) {
             const enabled = !audioTracks[0].enabled;
             audioTracks[0].enabled = enabled;
+            
+            // Обновляем анализ аудио
+            if (this.videoCallManager.audioAnalyzer) {
+                if (enabled) {
+                    this.videoCallManager.audioAnalyzer.startAnalysis();
+                } else {
+                    this.videoCallManager.audioAnalyzer.stopAnalysis();
+                }
+            }
             
             this.videoCallManager.uiManager.updateControlButtons();
             this.videoCallManager.notificationManager.show(enabled ? 'Microphone on' : 'Microphone off', 'info');

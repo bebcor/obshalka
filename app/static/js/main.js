@@ -18,6 +18,9 @@ class VideoCallManager {
         this.mediaController = new MediaController(this);
         this.roomManager = new RoomManager(this);
         this.uiManager = new UIManager(this);
+        this.audioAnalyzer = new AudioAnalyzer(this);
+        this.usersManager = new UsersManager(this);
+        this.chatManager = new ChatManager(this);
         
         this.initialize();
     }
@@ -83,6 +86,18 @@ class VideoCallManager {
         if (toggleFullscreenBtn) {
             toggleFullscreenBtn.addEventListener('click', () => this.mediaController.toggleFullscreen());
         }
+        
+        // Users and Chat buttons
+        const showUsersBtn = document.getElementById('showUsers');
+        const showChatBtn = document.getElementById('showChat');
+        
+        if (showUsersBtn) {
+            showUsersBtn.addEventListener('click', () => this.usersManager.showUsersModal());
+        }
+        
+        if (showChatBtn) {
+            showChatBtn.addEventListener('click', () => this.chatManager.showChatModal());
+        }
 
         // Room input enter key
         if (roomInput) {
@@ -101,6 +116,9 @@ class VideoCallManager {
         document.getElementById('roomIdDisplay').textContent = this.roomId;
         document.getElementById('participantsCount').textContent = data.participants.length;
         
+        // Обновляем список пользователей
+        this.usersManager.updateParticipants(data.participants);
+        
         data.participants.forEach(participant => {
             if (participant.socket_id !== this.socketHandler.getSocketId()) {
                 this.webrtcManager.setupPeerConnection(participant.socket_id);
@@ -116,6 +134,9 @@ class VideoCallManager {
         
         this.notificationManager.show(`${data.user_name || 'User'} joined the room`, 'info');
         
+        // Обновляем список пользователей
+        this.usersManager.addParticipant(data.user_id, data.user_name);
+        
         if (data.user_id !== this.socketHandler.getSocketId()) {
             this.webrtcManager.setupPeerConnection(data.user_id);
             this.webrtcManager.createOffer(data.user_id);
@@ -127,6 +148,9 @@ class VideoCallManager {
         document.getElementById('participantsCount').textContent = data.participants_count;
         
         this.notificationManager.show(`${data.user_name || 'User'} left the room`, 'info');
+        
+        // Удаляем из списка пользователей
+        this.usersManager.removeParticipant(data.user_id);
         
         if (this.remoteUsers.has(data.user_id)) {
             this.remoteUsers.get(data.user_id).close();
@@ -148,6 +172,9 @@ class VideoCallManager {
             }
         }
         
+        // Обновляем grid layout
+        this.uiManager.updateGridLayout();
+        
         this.uiManager.updateVideoOverlays();
     }
 
@@ -163,7 +190,23 @@ class VideoCallManager {
         this.webrtcManager.handleICECandidate(data);
     }
 
+    handleChatMessage(data) {
+        const isOwn = data.user_id === this.socketHandler.getSocketId();
+        this.chatManager.addMessage(data.user_name, data.message, isOwn);
+    }
+
     cleanupCall() {
+        // Останавливаем анализ аудио
+        if (this.audioAnalyzer) {
+            this.audioAnalyzer.cleanup();
+        }
+        
+        // Очищаем чат
+        if (this.chatManager) {
+            this.chatManager.clearChat();
+            this.chatManager.closeChatModal();
+        }
+        
         // Close all peer connections
         this.remoteUsers.forEach((connection, userId) => {
             connection.close();
@@ -183,6 +226,64 @@ class VideoCallManager {
             }
         });
         this.remoteStreams.clear();
+        
+        // Восстанавливаем статический элемент если он был изменен
+        const videoContainer = document.querySelector('.video-container');
+        const existingStaticVideo = document.getElementById('remoteVideo');
+        if (!existingStaticVideo) {
+            // Восстанавливаем статический элемент безопасно
+            const staticWrapper = document.createElement('div');
+            staticWrapper.className = 'video-wrapper remote';
+            
+            const video = document.createElement('video');
+            video.id = 'remoteVideo';
+            video.autoplay = true;
+            video.playsInline = true;
+            
+            const label = document.createElement('div');
+            label.className = 'video-label';
+            label.textContent = 'Remote Participant';
+            
+            const overlay = document.createElement('div');
+            overlay.className = 'video-overlay';
+            overlay.id = 'remoteVideoOverlay';
+            
+            const overlayIcon = document.createElement('div');
+            overlayIcon.className = 'overlay-icon';
+            overlayIcon.textContent = '👤';
+            
+            const overlayText = document.createElement('p');
+            overlayText.textContent = 'Waiting for participant to join...';
+            
+            overlay.appendChild(overlayIcon);
+            overlay.appendChild(overlayText);
+            
+            staticWrapper.appendChild(video);
+            staticWrapper.appendChild(label);
+            staticWrapper.appendChild(overlay);
+            
+            videoContainer.insertBefore(staticWrapper, videoContainer.firstChild);
+        } else {
+            // Восстанавливаем оригинальный ID и содержимое
+            const wrapper = existingStaticVideo.closest('.video-wrapper.remote');
+            if (wrapper && wrapper.id && wrapper.id.startsWith('remoteWrapper-')) {
+                wrapper.id = '';
+                existingStaticVideo.id = 'remoteVideo';
+                existingStaticVideo.srcObject = null;
+                const label = wrapper.querySelector('.video-label');
+                if (label) {
+                    label.textContent = 'Remote Participant';
+                    // Удаляем badge-group если есть
+                    const badgeGroup = label.querySelector('.badge-group');
+                    if (badgeGroup) {
+                        badgeGroup.remove();
+                    }
+                }
+            }
+        }
+        
+        // Обновляем grid layout
+        this.uiManager.updateGridLayout();
         
         // Stop local stream
         if (this.localStream) {

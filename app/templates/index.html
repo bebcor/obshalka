@@ -21,6 +21,7 @@
         .logo-icon::before { content: "📹"; }
         .call-icon::before { content: "💬"; }
         .fullscreen-icon::before { content: "⛶"; }
+        .chat-icon::before { content: "💬"; }
     </style>
 </head>
 <body>
@@ -117,6 +118,16 @@
                     <button id="toggleFullscreen" class="btn-control" title="Fullscreen">
                         <span class="icon fullscreen-icon"></span>
                     </button>
+                    
+                    <!-- Users List Button -->
+                    <button id="showUsers" class="btn-control" title="Participants">
+                        <span class="icon users-icon"></span>
+                    </button>
+                    
+                    <!-- Chat Button -->
+                    <button id="showChat" class="btn-control" title="Chat">
+                        <span class="icon chat-icon"></span>
+                    </button>
                 </div>
                 
                 <!-- End Call Button -->
@@ -132,8 +143,11 @@
     <script src="{{ url_for('static', filename='js/notification.js') }}"></script>
     <script src="{{ url_for('static', filename='js/socket-handler.js') }}"></script>
     <script src="{{ url_for('static', filename='js/webrtc-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/audio-analyzer.js') }}"></script>
     <script src="{{ url_for('static', filename='js/media-controller.js') }}"></script>
     <script src="{{ url_for('static', filename='js/room-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/users-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chat-manager.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ui-manager.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>

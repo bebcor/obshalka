@@ -19,7 +19,7 @@ class SocketHandler {
                 this.socketId = this.socket.id;
                 this.isConnected = true;
                 console.log('Connected to server with ID:', this.socketId);
-                this.videoCallManager.updateUI();
+                this.videoCallManager.uiManager.updateUI();
             });
             
             this.socket.on('disconnect', () => {
@@ -27,7 +27,7 @@ class SocketHandler {
                 this.videoCallManager.isInCall = false;
                 console.log('Disconnected from server');
                 this.videoCallManager.cleanupCall();
-                this.videoCallManager.updateUI();
+                this.videoCallManager.uiManager.updateUI();
             });
             
             this.socket.on('connection_established', (data) => {
@@ -58,9 +58,15 @@ class SocketHandler {
                 this.videoCallManager.handleICECandidate(data);
             });
             
+            this.socket.on('chat_message', (data) => {
+                this.videoCallManager.handleChatMessage(data);
+            });
+            
             this.socket.on('error', (data) => {
                 console.error('Server error:', data.message);
-                this.videoCallManager.notificationManager.show('Error: ' + data.message, 'error');
+                // Безопасный вывод сообщения об ошибке (notificationManager.show использует textContent)
+                const errorMessage = data.message || 'Unknown error';
+                this.videoCallManager.notificationManager.show('Error: ' + errorMessage, 'error');
             });
             
         } catch (error) {

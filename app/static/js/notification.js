@@ -133,10 +133,18 @@ class NotificationManager {
     show(message, type = 'info') {
         const notification = document.createElement('div');
         notification.className = `notification notification-${type} fade-in`;
-        notification.innerHTML = `
-            <span class="notification-message">${message}</span>
-            <button class="notification-close">&times;</button>
-        `;
+        
+        // Безопасное создание элементов для предотвращения XSS
+        const messageSpan = document.createElement('span');
+        messageSpan.className = 'notification-message';
+        messageSpan.textContent = message; // Используем textContent вместо innerHTML
+        
+        const closeButton = document.createElement('button');
+        closeButton.className = 'notification-close';
+        closeButton.textContent = '×';
+        
+        notification.appendChild(messageSpan);
+        notification.appendChild(closeButton);
         
         document.body.appendChild(notification);
         
