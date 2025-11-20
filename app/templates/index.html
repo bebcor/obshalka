@@ -1,154 +1,189 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obshalka - Secure Video Conferencing</title>
+    <title>Obshalka - Видео Конференции</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
-    <style>
-        /* Иконки для кнопок (можно заменить на SVG позже) */
-        .icon { font-size: 1.25rem; }
-        .mic-icon::before { content: "🎤"; }
-        .video-icon::before { content: "📹"; }
-        .screen-icon::before { content: "🖥️"; }
-        .end-call-icon::before { content: "📞"; }
-        .users-icon::before { content: "👥"; }
-        .room-icon::before { content: "🚪"; }
-        .logo-icon::before { content: "📹"; }
-        .call-icon::before { content: "💬"; }
-        .fullscreen-icon::before { content: "⛶"; }
-        .chat-icon::before { content: "💬"; }
-    </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="logo">
-                <div class="logo-icon"></div>
-                <span>Obshalka</span>
+    <!-- Начальная страница -->
+    <div class="welcome-screen" id="welcomeScreen">
+        <div class="welcome-content">
+            <div class="brand-logo-large">
+                <div class="logo-icon-large">📹</div>
+                <h1 class="brand-name-large">obshalka</h1>
+                <p class="brand-tagline-large">видео-конференции</p>
             </div>
-            <div class="connection-info">
-                <div class="status-indicator">
-                    <div class="status-dot"></div>
-                    <span id="connectionStatus" class="status-disconnected">Disconnected</span>
-                </div>
-            </div>
-        </header>
-
-        <!-- Main Video Area -->
-        <div class="video-container">
-            <!-- Remote Video Stream -->
-            <div class="video-wrapper remote">
-                <video id="remoteVideo" autoplay playsinline></video>
-                <div class="video-label">Remote Participant</div>
-                
-                <!-- Overlay when no remote video -->
-                <div class="video-overlay" id="remoteVideoOverlay">
-                    <div class="overlay-icon">👤</div>
-                    <p>Waiting for participant to join...</p>
-                </div>
-            </div>
-
-            <!-- Local Video Stream (Picture-in-Picture) -->
-            <div class="video-wrapper local">
-                <video id="localVideo" autoplay muted playsinline></video>
-                <div class="video-label">You</div>
-                
-                <!-- Overlay when no local video -->
-                <div class="video-overlay" id="localVideoOverlay">
-                    <div class="overlay-icon">📹</div>
-                    <p>Camera is off</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Controls Footer -->
-        <div class="controls">
-            <!-- Room Controls (Left) -->
-            <div class="room-controls">
-                <button id="createRoom" class="btn btn-primary">
-                    <span class="icon call-icon"></span>
-                    Create Room
+            <div class="welcome-buttons">
+                <button id="welcomeCreateRoom" class="btn btn-welcome btn-primary">
+                    <span class="icon">💬</span>
+                    <span class="btn-text">Создать встречу</span>
                 </button>
-                
-                <input type="text" id="roomInput" placeholder="Enter Room ID">
-                
-                <button id="joinRoom" class="btn btn-primary">
-                    <span class="icon room-icon"></span>
-                    Join Room
+                <button id="welcomeJoinRoom" class="btn btn-welcome btn-secondary">
+                    <span class="icon">🚪</span>
+                    <span class="btn-text">Подключиться к встрече</span>
                 </button>
             </div>
-
-            <!-- Room Info (Center) -->
-            <div class="room-info">
-                <div class="room-info-item">
-                    <span class="icon room-icon"></span>
-                    Room: <span id="roomIdDisplay">-</span>
-                </div>
-                <div class="room-info-item">
-                    <span class="icon users-icon"></span>
-                    Participants: <span id="participantsCount">0</span>
-                </div>
-            </div>
-
-            <!-- Media Controls (Right) -->
-            <div class="media-controls">
-                <div class="control-group">
-                    <!-- Audio Control -->
-                    <button id="toggleAudio" class="btn-control active" title="Mute/Unmute">
-                        <span class="icon mic-icon"></span>
-                    </button>
-                    
-                    <!-- Video Control -->
-                    <button id="toggleVideo" class="btn-control active" title="Video On/Off">
-                        <span class="icon video-icon"></span>
-                    </button>
-                    
-                    <!-- Screen Share -->
-                    <button id="shareScreen" class="btn-control" title="Share Screen">
-                        <span class="icon screen-icon"></span>
-                    </button>
-
-                    <!-- Fullscreen Toggle -->
-                    <button id="toggleFullscreen" class="btn-control" title="Fullscreen">
-                        <span class="icon fullscreen-icon"></span>
-                    </button>
-                    
-                    <!-- Users List Button -->
-                    <button id="showUsers" class="btn-control" title="Participants">
-                        <span class="icon users-icon"></span>
-                    </button>
-                    
-                    <!-- Chat Button -->
-                    <button id="showChat" class="btn-control" title="Chat">
-                        <span class="icon chat-icon"></span>
-                    </button>
-                </div>
-                
-                <!-- End Call Button -->
-                <button id="endCall" class="btn-end-call" title="End Call" style="display: none;">
-                    <span class="icon end-call-icon"></span>
+            <div class="join-room-form" id="joinRoomForm" style="display: none;">
+                <input type="text" id="welcomeRoomInput" placeholder="Введите ID комнаты" maxlength="20">
+                <button id="welcomeJoinConfirm" class="btn btn-primary">
+                    <span class="icon">✓</span>
+                    <span class="btn-text">Подключиться</span>
+                </button>
+                <button id="welcomeJoinCancel" class="btn btn-secondary">
+                    <span class="btn-text">Отмена</span>
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Модули приложения -->
+    <div class="container" id="mainContainer" style="display: none;">
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">📹</div>
+                <span class="logo-text">Obshalka</span>
+            </div>
+            <div class="connection-info">
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span id="connectionStatus" class="status-disconnected">Не подключено</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="video-container">
+            <div class="participants-grid" id="participantsGrid">
+                <div class="participant-card local-participant" id="localParticipantCard">
+                    <video id="localVideo" autoplay muted playsinline></video>
+                    <div class="participant-info">
+                        <span class="participant-name">Вы</span>
+                        <div class="participant-status">
+                            <span class="status-audio">🎤</span>
+                            <span class="status-video">📹</span>
+                        </div>
+                    </div>
+                    <div class="video-overlay" id="localVideoOverlay">
+                        <div class="overlay-icon">📹</div>
+                        <p>Камера выключена</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="empty-state-overlay" id="emptyStateOverlay">
+                <div class="brand-logo">
+                    <div class="logo-icon-large">📹</div>
+                    <h1 class="brand-name">obshalka</h1>
+                    <p class="brand-tagline">видео-конференции</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="room-controls">
+                <button id="createRoom" class="btn btn-primary">
+                    <span class="icon">💬</span>
+                    <span class="btn-text">Создать комнату</span>
+                </button>
+                
+                <div class="input-group">
+                    <input type="text" id="roomInput" placeholder="Введите ID комнаты">
+                    <button id="joinRoom" class="btn btn-primary">
+                        <span class="icon">🚪</span>
+                        <span class="btn-text">Войти</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="room-info">
+                <div class="room-info-item">
+                    <span class="icon">🚪</span>
+                    <span class="info-text">Комната: <span id="roomIdDisplay">-</span></span>
+                </div>
+                <div class="room-info-item">
+                    <span class="icon">👥</span>
+                    <span class="info-text">Участники: <span id="participantsCount">0</span></span>
+                </div>
+                <button id="copyLink" class="btn btn-secondary copy-btn">
+                    <span class="icon">📋</span>
+                </button>
+            </div>
+
+            <div class="media-controls">
+                <div class="control-group">
+                    <button id="toggleAudio" class="btn-control active" title="Вкл/Выкл микрофон">
+                        <span class="icon">🎤</span>
+                    </button>
+                    
+                    <button id="toggleVideo" class="btn-control active" title="Вкл/Выкл камеру">
+                        <span class="icon">📹</span>
+                    </button>
+                    
+                    <button id="shareScreen" class="btn-control" title="Демонстрация экрана">
+                        <span class="icon">🖥️</span>
+                    </button>
+                    
+                    <button id="showParticipants" class="btn-control" title="Участники">
+                        <span class="icon">👥</span>
+                    </button>
+                    
+                    <button id="showChat" class="btn-control" title="Чат">
+                        <span class="icon">💬</span>
+                    </button>
+                </div>
+                
+                <button id="endCall" class="btn-end-call" title="Завершить звонок" style="display: none;">
+                    <span class="icon">📞</span>
+                </button>
+
+                <button id="toggleFullscreen" class="btn-control" title="Полноэкранный режим">
+                    <span class="icon">⛶</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно участников -->
+    <div class="modal-overlay" id="participantsModal" style="display: none;">
+        <div class="modal-content">
+            <h3>👥 Участники встречи</h3>
+            <div class="participants-list" id="participantsList">
+                <p class="loading-text">Загрузка...</p>
+            </div>
+            <div class="modal-buttons">
+                <button id="closeParticipantsModal" class="btn btn-secondary">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно чата -->
+    <div class="modal-overlay" id="chatModal" style="display: none;">
+        <div class="modal-content chat-modal-content">
+            <h3>💬 Чат</h3>
+            <div class="chat-messages" id="chatMessages">
+                <p class="empty-chat">Пока нет сообщений</p>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" id="chatInput" placeholder="Введите сообщение..." maxlength="500">
+                <button id="sendChatMessage" class="btn btn-primary">Отправить</button>
+            </div>
+            <div class="modal-buttons">
+                <button id="closeChatModal" class="btn btn-secondary">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Подключаем модули JavaScript -->
     <script src="{{ url_for('static', filename='js/config.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/notification.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/socket-handler.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/webrtc-manager.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/audio-analyzer.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/media-controller.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/room-manager.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/users-manager.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/chat-manager.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/ui-manager.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/media-devices.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/audio-visualizer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/participants.js') }}"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
