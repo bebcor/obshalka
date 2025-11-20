@@ -4,6 +4,22 @@ class UIManager {
         this.videoCallManager = videoCallManager;
     }
 
+    showMainScreen() {
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const mainContainer = document.getElementById('mainContainer');
+        
+        if (welcomeScreen) welcomeScreen.style.display = 'none';
+        if (mainContainer) mainContainer.style.display = 'flex';
+    }
+
+    showWelcomeScreen() {
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const mainContainer = document.getElementById('mainContainer');
+        
+        if (welcomeScreen) welcomeScreen.style.display = 'flex';
+        if (mainContainer) mainContainer.style.display = 'none';
+    }
+
     updateUI() {
         // Update connection status
         const statusElement = document.getElementById('connectionStatus');

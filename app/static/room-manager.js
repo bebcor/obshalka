@@ -10,8 +10,8 @@ class RoomManager {
         if (deeplinkMatch) {
             const roomId = deeplinkMatch[1];
             this.videoCallManager.roomId = roomId;
-            const input = document.getElementById('roomInput');
-            if (input) input.value = roomId;
+            // Показываем основной интерфейс
+            this.videoCallManager.uiManager.showMainScreen();
             // не авто-запускаем медиа, только автопросоединение к комнате
             setTimeout(() => this.joinRoomFromURL(), 0);
         }
@@ -20,29 +20,36 @@ class RoomManager {
     async joinRoomFromURL() {
         try {
             if (!this.videoCallManager.roomId) {
+                // Если нет roomId, возвращаемся на стартовое окно
+                this.videoCallManager.uiManager.showWelcomeScreen();
                 return;
             }
             
             console.log('Checking room existence from URL:', this.videoCallManager.roomId);
-            this.videoCallManager.notificationManager.show('Checking room...', 'info');
+            this.videoCallManager.notificationManager.show('Проверка комнаты...', 'info');
             
             const response = await fetch(`/api/check_room/${this.videoCallManager.roomId}`);
             const data = await response.json();
             
             if (!data.exists) {
-                this.videoCallManager.notificationManager.show('Room does not exist', 'error');
-                // Перенаправляем на главную страницу через 2 секунды
-                setTimeout(() => {
-                    window.location.href = '/';
-                }, 2000);
+                this.videoCallManager.notificationManager.show('Комната не найдена', 'error');
+                // Возвращаемся на стартовое окно
+                this.videoCallManager.roomId = null;
+                window.history.pushState({}, '', '/');
+                this.videoCallManager.uiManager.showWelcomeScreen();
                 return;
             }
             
+            // Комната существует, подключаемся
             this.joinRoomAfterCreation();
             
         } catch (error) {
             console.error('Error joining room from URL:', error);
-            this.videoCallManager.notificationManager.show('Failed to join room: ' + error.message, 'error');
+            this.videoCallManager.notificationManager.show('Не удалось подключиться: ' + error.message, 'error');
+            // Возвращаемся на стартовое окно при ошибке
+            this.videoCallManager.roomId = null;
+            window.history.pushState({}, '', '/');
+            this.videoCallManager.uiManager.showWelcomeScreen();
         }
     }
 
@@ -59,10 +66,10 @@ class RoomManager {
         }
     }
 
-    async createRoom() {
+    async createRoomFromWelcome() {
         try {
             console.log('Creating room...');
-            this.videoCallManager.notificationManager.show('Creating room...', 'info');
+            this.videoCallManager.notificationManager.show('Создание комнаты...', 'info');
             
             const response = await fetch('/api/create_room', { 
                 method: 'POST',
@@ -79,9 +86,10 @@ class RoomManager {
             this.videoCallManager.roomId = data.room_id;
             console.log('Room created with ID:', this.videoCallManager.roomId);
             
-            // Обновляем URL без перезагрузки страницы
+            // Обновляем URL и показываем основной интерфейс
             const newUrl = `/r/${this.videoCallManager.roomId}`;
             window.history.pushState({ roomId: this.videoCallManager.roomId }, '', newUrl);
+            this.videoCallManager.uiManager.showMainScreen();
             
             const shareUrl = `${window.location.origin}${newUrl}`;
             this.videoCallManager.notificationManager.show(`Комната создана: ${this.videoCallManager.roomId}`, 'success');
@@ -91,8 +99,13 @@ class RoomManager {
             
         } catch (error) {
             console.error('Error creating room:', error);
-            this.videoCallManager.notificationManager.show('Failed to create room: ' + error.message, 'error');
+            this.videoCallManager.notificationManager.show('Не удалось создать комнату: ' + error.message, 'error');
         }
+    }
+
+    async createRoom() {
+        // Старый метод для обратной совместимости
+        return this.createRoomFromWelcome();
     }
 
     async copyShareLink(url) {
@@ -104,41 +117,44 @@ class RoomManager {
         }
     }
 
-    async joinRoom() {
+    async joinRoomFromWelcome(roomId) {
         try {
-            this.videoCallManager.roomId = document.getElementById('roomInput').value.trim();
-            
-            if (!this.videoCallManager.roomId) {
-                this.videoCallManager.notificationManager.show('Please enter a room ID', 'warning');
+            if (!roomId || !/^[A-Za-z0-9_-]{3,50}$/.test(roomId)) {
+                this.videoCallManager.notificationManager.show('Неверный ID комнаты', 'error');
                 return;
             }
+
+            console.log('Checking room existence:', roomId);
+            this.videoCallManager.notificationManager.show('Проверка комнаты...', 'info');
             
-            // Валидация room_id на клиенте
-            if (!/^[A-Za-z0-9_-]{3,50}$/.test(this.videoCallManager.roomId)) {
-                this.videoCallManager.notificationManager.show('Invalid room ID format. Use only letters, numbers, dashes and underscores (3-50 characters)', 'error');
-                return;
-            }
-            
-            console.log('Checking room existence:', this.videoCallManager.roomId);
-            this.videoCallManager.notificationManager.show('Checking room...', 'info');
-            
-            const response = await fetch(`/api/check_room/${this.videoCallManager.roomId}`);
+            const response = await fetch(`/api/check_room/${roomId}`);
             const data = await response.json();
             
             if (!data.exists) {
-                this.videoCallManager.notificationManager.show('Room does not exist', 'error');
+                this.videoCallManager.notificationManager.show('Комната не найдена', 'error');
                 return;
             }
             
-            // Обновляем URL без перезагрузки страницы
+            this.videoCallManager.roomId = roomId;
+            // Обновляем URL и показываем основной интерфейс
             const newUrl = `/r/${this.videoCallManager.roomId}`;
             window.history.pushState({ roomId: this.videoCallManager.roomId }, '', newUrl);
+            this.videoCallManager.uiManager.showMainScreen();
             
             this.joinRoomAfterCreation();
             
         } catch (error) {
             console.error('Error joining room:', error);
-            this.videoCallManager.notificationManager.show('Failed to join room: ' + error.message, 'error');
+            this.videoCallManager.notificationManager.show('Не удалось подключиться: ' + error.message, 'error');
+        }
+    }
+
+    async joinRoom() {
+        // Старый метод для обратной совместимости
+        const roomInput = document.getElementById('roomInput');
+        const roomId = roomInput?.value.trim();
+        if (roomId) {
+            return this.joinRoomFromWelcome(roomId);
         }
     }
 
@@ -206,10 +222,12 @@ class RoomManager {
         }
         
         this.videoCallManager.cleanupCall();
-        this.videoCallManager.notificationManager.show('Left the room', 'info');
+        this.videoCallManager.notificationManager.show('Вы вышли из комнаты', 'info');
         
-        // Перенаправляем на главную страницу
-        window.location.href = '/';
+        // Возвращаемся на стартовое окно
+        this.videoCallManager.roomId = null;
+        window.history.pushState({}, '', '/');
+        this.videoCallManager.uiManager.showWelcomeScreen();
     }
 }
 

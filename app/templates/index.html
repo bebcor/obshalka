@@ -124,6 +124,18 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <!-- Подключаем модули JavaScript -->
+    <script src="{{ url_for('static', filename='config.js') }}"></script>
+    <script src="{{ url_for('static', filename='utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='notification.js') }}"></script>
+    <script src="{{ url_for('static', filename='socket-handler.js') }}"></script>
+    <script src="{{ url_for('static', filename='webrtc-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='media-controller.js') }}"></script>
+    <script src="{{ url_for('static', filename='room-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='ui-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='audio-analyzer.js') }}"></script>
+    <script src="{{ url_for('static', filename='users-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='chat-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
 </body>
 </html>

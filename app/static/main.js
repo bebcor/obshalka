@@ -26,6 +26,7 @@ class VideoCallManager {
     }
 
     initialize() {
+        this.setupWelcomeScreen();
         this.setupEventListeners();
         this.socketHandler.setup();
         this.uiManager.updateUI();
@@ -34,20 +35,162 @@ class VideoCallManager {
         this.webrtcManager.testTurnServer();
     }
 
+    setupWelcomeScreen() {
+        // Проверяем, есть ли room_id в URL
+        const path = window.location.pathname;
+        const roomMatch = path.match(/^\/r\/([A-Za-z0-9_-]{3,50})$/);
+        
+        if (roomMatch) {
+            // Если есть room_id в URL, сразу показываем основную страницу
+            this.uiManager.showMainScreen();
+            return;
+        }
+
+        // Иначе показываем стартовое окно
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const mainContainer = document.getElementById('mainContainer');
+        
+        if (welcomeScreen) welcomeScreen.style.display = 'flex';
+        if (mainContainer) mainContainer.style.display = 'none';
+
+        // Обработчики для стартового окна
+        const welcomeCreateBtn = document.getElementById('welcomeCreateRoom');
+        const welcomeJoinBtn = document.getElementById('welcomeJoinRoom');
+        const welcomeJoinConfirm = document.getElementById('welcomeJoinConfirm');
+        const welcomeJoinCancel = document.getElementById('welcomeJoinCancel');
+        const joinRoomForm = document.getElementById('joinRoomForm');
+        const welcomeRoomInput = document.getElementById('welcomeRoomInput');
+
+        if (welcomeCreateBtn) {
+            welcomeCreateBtn.addEventListener('click', () => {
+                this.roomManager.createRoomFromWelcome();
+            });
+        }
+
+        if (welcomeJoinBtn) {
+            welcomeJoinBtn.addEventListener('click', () => {
+                if (joinRoomForm) {
+                    joinRoomForm.style.display = 'flex';
+                    if (welcomeRoomInput) welcomeRoomInput.focus();
+                }
+            });
+        }
+
+        if (welcomeJoinConfirm) {
+            welcomeJoinConfirm.addEventListener('click', () => {
+                const roomId = welcomeRoomInput?.value.trim();
+                if (roomId && /^[A-Za-z0-9_-]{3,50}$/.test(roomId)) {
+                    this.roomManager.joinRoomFromWelcome(roomId);
+                } else {
+                    this.notificationManager.show('Введите корректный ID комнаты', 'warning');
+                }
+            });
+        }
+
+        if (welcomeJoinCancel) {
+            welcomeJoinCancel.addEventListener('click', () => {
+                if (joinRoomForm) joinRoomForm.style.display = 'none';
+                if (welcomeRoomInput) welcomeRoomInput.value = '';
+            });
+        }
+
+        if (welcomeRoomInput) {
+            welcomeRoomInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    const roomId = welcomeRoomInput.value.trim();
+                    if (roomId && /^[A-Za-z0-9_-]{3,50}$/.test(roomId)) {
+                        this.roomManager.joinRoomFromWelcome(roomId);
+                    }
+                }
+            });
+        }
+
+        // Проверяем дублирование окна (если уже открыта вкладка с комнатой)
+        this.checkDuplicateWindow();
+    }
+
+    checkDuplicateWindow() {
+        // Проверяем есть ли уже открытая вкладка с этой же комнатой
+        const path = window.location.pathname;
+        const roomMatch = path.match(/^\/r\/([A-Za-z0-9_-]{3,50})$/);
+        
+        if (!roomMatch) return;
+        
+        const roomId = roomMatch[1];
+        // Используем BroadcastChannel для проверки дублирования
+        const channel = new BroadcastChannel('obshalka_rooms');
+        let duplicateFound = false;
+        let checkTimeout;
+        
+        // Слушаем сообщения от других вкладок
+        channel.onmessage = (event) => {
+            if (event.data.type === 'room_opened' && event.data.roomId === roomId && !duplicateFound) {
+                duplicateFound = true;
+                clearTimeout(checkTimeout);
+                // Показываем модальное окно подтверждения
+                this.showDuplicateWindowModal(roomId);
+            }
+            
+            if (event.data.type === 'check_room' && event.data.roomId === roomId) {
+                // Отвечаем что комната уже открыта
+                channel.postMessage({ type: 'room_exists', roomId: roomId });
+            }
+        };
+        
+        // Отправляем запрос на проверку
+        channel.postMessage({ type: 'check_room', roomId: roomId });
+        
+        // Ждем ответа 500мс, если нет ответа - продолжаем
+        checkTimeout = setTimeout(() => {
+            if (!duplicateFound) {
+                // Отправляем сообщение о том что мы открыли эту комнату
+                channel.postMessage({ type: 'room_opened', roomId: roomId });
+            }
+        }, 500);
+    }
+
+    showDuplicateWindowModal(roomId) {
+        // Скрываем стартовое окно пока показываем модальное
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        if (welcomeScreen) welcomeScreen.style.display = 'none';
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay duplicate-window-modal';
+        modal.style.display = 'flex';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <h3>⚠️ Подключение к встрече</h3>
+                <p>Вы уже подключены к этой встрече в другой вкладке.</p>
+                <p>Вы хотите подключиться к встрече <strong>${roomId}</strong> в этой вкладке?</p>
+                <div class="modal-buttons">
+                    <button id="confirmDuplicateJoin" class="btn btn-primary">
+                        <span class="icon">✓</span>
+                        <span class="btn-text">Подключиться</span>
+                    </button>
+                    <button id="cancelDuplicateJoin" class="btn btn-secondary">
+                        <span class="btn-text">Отмена</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+
+        document.getElementById('confirmDuplicateJoin').addEventListener('click', () => {
+            document.body.removeChild(modal);
+            this.uiManager.showMainScreen();
+            this.roomManager.joinRoomFromWelcome(roomId);
+        });
+
+        document.getElementById('cancelDuplicateJoin').addEventListener('click', () => {
+            document.body.removeChild(modal);
+            window.location.href = '/';
+        });
+    }
+
     setupEventListeners() {
-        // Room controls
-        const createRoomBtn = document.getElementById('createRoom');
-        const joinRoomBtn = document.getElementById('joinRoom');
+        // End call button
         const endCallBtn = document.getElementById('endCall');
-        const roomInput = document.getElementById('roomInput');
-
-        if (createRoomBtn) {
-            createRoomBtn.addEventListener('click', () => this.roomManager.createRoom());
-        }
-
-        if (joinRoomBtn) {
-            joinRoomBtn.addEventListener('click', () => this.roomManager.joinRoom());
-        }
 
         if (endCallBtn) {
             endCallBtn.addEventListener('click', () => this.roomManager.leaveRoom());
@@ -99,14 +242,6 @@ class VideoCallManager {
             showChatBtn.addEventListener('click', () => this.chatManager.showChatModal());
         }
 
-        // Room input enter key
-        if (roomInput) {
-            roomInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    this.roomManager.joinRoom();
-                }
-            });
-        }
     }
 
     handleRoomInfo(data) {
