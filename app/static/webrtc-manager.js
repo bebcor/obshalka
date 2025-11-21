@@ -477,6 +477,28 @@ class WebRTCManager {
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
             await peerConnection.setRemoteDescription(data.answer);
             console.log('✅ Remote description set successfully');
+            
+            // ВАЖНО: Проверяем, есть ли уже треки в соединении после установки remote description
+            // Иногда треки приходят до того, как срабатывает событие ontrack
+            setTimeout(() => {
+                const receivers = peerConnection.getReceivers();
+                console.log(`🔍 Проверка receivers после установки remote description для ${data.sender_id}:`, receivers.length);
+                receivers.forEach((receiver, index) => {
+                    const track = receiver.track;
+                    console.log(`  Receiver ${index}: kind=${receiver.track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
+                    if (track && track.readyState === 'live') {
+                        // Если трек уже есть и активен, но еще не обработан - обрабатываем его
+                        const remoteStream = this.videoCallManager.remoteStreams.get(data.sender_id);
+                        if (remoteStream && !remoteStream.getTracks().some(t => t.id === track.id)) {
+                            console.log(`✅ Трек ${track.kind} уже активен для ${data.sender_id}, но еще не обработан, обрабатываем...`);
+                            // Добавляем трек в поток
+                            remoteStream.addTrack(track);
+                            // Обновляем UI
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                        }
+                    }
+                });
+            }, 100);
         
         } catch (error) {
             console.error('Error handling WebRTC answer:', error);
