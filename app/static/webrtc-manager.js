@@ -203,9 +203,32 @@ class WebRTCManager {
                 
                 // ВАЖНО: Если трек null (replaceTrack(null) был вызван), удаляем все видео треки из потока
                 if (!track) {
-                    console.log(`🗑️ Трек null получен для ${targetUserId}, удаляем все видео треки из потока`);
+                    console.log(`🗑️ [ontrack] Трек null получен для ${targetUserId}, удаляем все видео треки из потока`);
                     const videoTracks = remoteStream.getVideoTracks();
                     videoTracks.forEach(vt => remoteStream.removeTrack(vt));
+                    
+                    // КРИТИЧНО: Очищаем srcObject и скрываем карточку немедленно
+                    const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                    const participantCard = document.getElementById(`participant-${targetUserId}`);
+                    if (videoElement) {
+                        console.log(`🔄 [ontrack] Очищаем srcObject для ${targetUserId} (трек null)`);
+                        videoElement.pause();
+                        videoElement.srcObject = null;
+                        try {
+                            videoElement.load();
+                        } catch (e) {}
+                    }
+                    if (participantCard) {
+                        console.log(`🔄 [ontrack] Скрываем карточку для ${targetUserId} (трек null)`);
+                        participantCard.style.setProperty('display', 'none', 'important');
+                        participantCard.style.setProperty('visibility', 'hidden', 'important');
+                        participantCard.style.setProperty('opacity', '0', 'important');
+                        participantCard.style.setProperty('width', '0', 'important');
+                        participantCard.style.setProperty('height', '0', 'important');
+                        participantCard.style.setProperty('overflow', 'hidden', 'important');
+                        participantCard.style.setProperty('pointer-events', 'none', 'important');
+                    }
+                    
                     this.videoCallManager.uiManager.updateVideoOverlays();
                     this.videoCallManager.checkEmptyState();
                     return;

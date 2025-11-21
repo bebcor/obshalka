@@ -205,28 +205,9 @@ class MediaController {
             
             // ЕСЛИ выключаем камеру - удаляем видео-трек из соединений
             if (!enabled) {
+                console.log('🔄 [toggleVideo] Выключаем камеру, вызываем updateVideoTracksInConnections(null)');
                 await this.updateVideoTracksInConnections(null);
-                // КРИТИЧНО: Сразу скрываем все удаленные карточки для всех участников
-                // Проходим по всем удаленным участникам и скрываем их карточки
-                this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
-                    const videoElement = document.getElementById(`remoteVideo-${userId}`);
-                    const participantCard = document.getElementById(`participant-${userId}`);
-                    if (videoElement && participantCard) {
-                        // Очищаем srcObject и скрываем карточку
-                        videoElement.pause();
-                        videoElement.srcObject = null;
-                        try {
-                            videoElement.load();
-                        } catch (e) {}
-                        participantCard.style.setProperty('display', 'none', 'important');
-                        participantCard.style.setProperty('visibility', 'hidden', 'important');
-                        participantCard.style.setProperty('opacity', '0', 'important');
-                        participantCard.style.setProperty('width', '0', 'important');
-                        participantCard.style.setProperty('height', '0', 'important');
-                        participantCard.style.setProperty('overflow', 'hidden', 'important');
-                        participantCard.style.setProperty('pointer-events', 'none', 'important');
-                    }
-                });
+                // ВАЖНО: Карточки других участников скроются автоматически когда придет трек null в ontrack
                 // Принудительно обновляем UI после небольшой задержки, чтобы изменения применились
                 setTimeout(() => {
                     this.videoCallManager.uiManager.updateVideoOverlays();
@@ -646,9 +627,18 @@ class MediaController {
                 }
             } else {
                 // ЕСЛИ трека нет - удаляем видео-отправитель если есть
-                console.log(`🗑️ Удаляем видео-трек для пользователя: ${userId}`);
+                console.log(`🗑️ [updateVideoTracksInConnections] Удаляем видео-трек для пользователя: ${userId}, videoSender=${videoSender ? 'есть' : 'нет'}`);
                 if (videoSender) {
-                    updatePromises.push(videoSender.replaceTrack(null));
+                    console.log(`🔄 [updateVideoTracksInConnections] Вызываем replaceTrack(null) для ${userId}`);
+                    updatePromises.push(
+                        videoSender.replaceTrack(null).then(() => {
+                            console.log(`✅ [updateVideoTracksInConnections] replaceTrack(null) выполнен для ${userId}`);
+                        }).catch(err => {
+                            console.error(`❌ [updateVideoTracksInConnections] Ошибка replaceTrack(null) для ${userId}:`, err);
+                        })
+                    );
+                } else {
+                    console.warn(`⚠️ [updateVideoTracksInConnections] Нет videoSender для ${userId}, не можем вызвать replaceTrack(null)`);
                 }
             }
         });
