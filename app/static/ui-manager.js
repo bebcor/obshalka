@@ -339,48 +339,50 @@ class UIManager {
             // Если дошли сюда - значит нет активного видео
             // НЕТ активного видео - СКРЫВАЕМ карточку и ОЧИЩАЕМ srcObject
             console.log(`❌ [updateVideoOverlays ${userId}] НЕТ активного видео в receivers - скрываем карточку`);
+            
+            // ВАЖНО: Сначала удаляем ВСЕ видео треки из потока
+            const allVideoTracks = stream.getVideoTracks();
+            allVideoTracks.forEach(track => {
+                console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек из потока:`, track.id);
+                stream.removeTrack(track);
+            });
                 
-                // КРИТИЧНО: Полностью останавливаем и очищаем видео элемент
-                if (videoElement) {
-                    console.log(`🔄 [updateVideoOverlays ${userId}] Полностью очищаем видео элемент (нет активного видео)`);
-                    
-                    // Останавливаем воспроизведение
-                    videoElement.pause();
-                    
-                    // Очищаем srcObject
-                    videoElement.srcObject = null;
-                    
-                    // Используем load() для полной перезагрузки элемента
-                    try {
-                        videoElement.load();
-                    } catch (e) {
-                        console.warn(`⚠️ [updateVideoOverlays ${userId}] Ошибка load():`, e);
-                    }
-                    
-                    // Скрываем элемент
-                    videoElement.style.setProperty('display', 'none', 'important');
-                    
-                    // Проверяем и очищаем еще раз через небольшую задержку
-                    setTimeout(() => {
-                        if (videoElement.srcObject !== null) {
-                            console.warn(`⚠️ [updateVideoOverlays ${userId}] srcObject не очистился, очищаем принудительно`);
-                            videoElement.srcObject = null;
-                            videoElement.pause();
-                            try {
-                                videoElement.load();
-                            } catch (e) {
-                                // Игнорируем ошибки
-                            }
-                        }
-                    }, 100);
+            // КРИТИЧНО: Полностью останавливаем и очищаем видео элемент ПОСЛЕ удаления треков
+            if (videoElement) {
+                console.log(`🔄 [updateVideoOverlays ${userId}] Полностью очищаем видео элемент (нет активного видео)`);
+                
+                // Сначала останавливаем воспроизведение
+                videoElement.pause();
+                
+                // КРИТИЧНО: Полностью очищаем srcObject когда нет активного видео
+                // Это предотвращает показ черного экрана
+                videoElement.srcObject = null;
+                
+                // Используем load() для полной перезагрузки элемента
+                try {
+                    videoElement.load();
+                } catch (e) {
+                    // Игнорируем ошибки load()
                 }
                 
-                // Удаляем ВСЕ видео треки из потока
-                const allVideoTracks = stream.getVideoTracks();
-                allVideoTracks.forEach(track => {
-                    console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек из потока:`, track.id);
-                    stream.removeTrack(track);
-                });
+                // Скрываем элемент
+                videoElement.style.setProperty('display', 'none', 'important');
+                
+                // Проверяем и очищаем еще раз через небольшую задержку
+                setTimeout(() => {
+                    const currentSrcObject = videoElement.srcObject;
+                    if (currentSrcObject && currentSrcObject.getVideoTracks().length > 0) {
+                        console.warn(`⚠️ [updateVideoOverlays ${userId}] В srcObject все еще есть видео треки, очищаем принудительно`);
+                        videoElement.srcObject = null;
+                        videoElement.pause();
+                        try {
+                            videoElement.load();
+                        } catch (e) {
+                            // Игнорируем ошибки
+                        }
+                    }
+                }, 100);
+            }
                 
                 // Скрываем карточку полностью
                 participantCard.style.setProperty('display', 'none', 'important');

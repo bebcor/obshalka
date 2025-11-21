@@ -488,7 +488,10 @@ class WebRTCManager {
                         videoElement.srcObject = remoteStream;
                         // Пробуем воспроизвести видео
                         videoElement.play().catch(err => {
-                            console.warn(`⚠️ [ontrack ${targetUserId}] Ошибка play:`, err);
+                            // Игнорируем ошибки связанные с aborted - это нормально при очистке
+                            if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
+                                console.warn(`⚠️ [ontrack ${targetUserId}] Ошибка play:`, err);
+                            }
                         });
                     }
                 } else {
@@ -496,8 +499,16 @@ class WebRTCManager {
                     // Это предотвращает показ черного экрана
                     if (videoElement.srcObject === remoteStream || videoElement.srcObject !== null) {
                         console.log(`🔄 [ontrack ${targetUserId}] Очищаем srcObject (нет активных видео треков)`);
-                        videoElement.srcObject = null;
+                        // Сначала останавливаем воспроизведение
                         videoElement.pause();
+                        // Потом очищаем srcObject
+                        videoElement.srcObject = null;
+                        // Используем load() для полной очистки
+                        try {
+                            videoElement.load();
+                        } catch (e) {
+                            // Игнорируем ошибки load()
+                        }
                     }
                 }
             }
