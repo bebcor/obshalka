@@ -186,6 +186,17 @@ class UIManager {
                     console.log(`🔍 Удаленная карточка ${userId}: видео треки есть, но неактивны:`);
                     tracksInfo.forEach((trackInfo, index) => {
                         console.log(`  Трек ${index}:`, trackInfo);
+                        // Показываем почему трек неактивен
+                        const track = activeVideoTracks[index];
+                        if (track) {
+                            const reasons = [];
+                            if (!track.enabled) reasons.push('enabled=false');
+                            if (track.readyState !== 'live') reasons.push(`readyState=${track.readyState}`);
+                            if (track.muted) reasons.push('muted=true');
+                            if (reasons.length > 0) {
+                                console.log(`    Причина неактивности: ${reasons.join(', ')}`);
+                            }
+                        }
                     });
                 }
             } else if (hasActiveVideo) {

@@ -121,10 +121,13 @@ class WebRTCManager {
                     };
                     
                     track.onunmute = () => {
-                        console.log(`Трек ${track.kind} включен для пользователя ${targetUserId}`);
+                        console.log(`Трек ${track.kind} включен для пользователя ${targetUserId}, muted: ${track.muted}, enabled: ${track.enabled}`);
                         previousMuted = false; // Обновляем previousMuted
-                        this.videoCallManager.uiManager.updateVideoOverlays();
-                        this.videoCallManager.checkEmptyState();
+                        // ВАЖНО: Обновляем UI с небольшой задержкой, чтобы дать браузеру время обновить состояние трека
+                        setTimeout(() => {
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.checkEmptyState();
+                        }, 50);
                     };
                     
                     const checkTrackState = () => {
