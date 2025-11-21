@@ -81,7 +81,7 @@ class ChatManager {
         }
         
         // Отправляем сообщение на сервер
-        this.videoCallManager.socketHandler.emit('chat_message', {
+        this.videoCallManager.socket.emit('chat_message', {
             room_id: this.videoCallManager.roomId,
             message: message,
             user_name: this.videoCallManager.userName || 'Anonymous'
@@ -90,11 +90,11 @@ class ChatManager {
         chatInput.value = '';
     }
 
-    addMessage(userName, message, isOwn = false) {
+    addMessage(userName, message, isOwn = false, timestamp = null) {
         const messageObj = {
             userName: userName,
             message: message,
-            timestamp: new Date(),
+            timestamp: timestamp ? new Date(timestamp) : new Date(),
             isOwn: isOwn
         };
         
@@ -116,7 +116,8 @@ class ChatManager {
         }
         
         return this.messages.map(msg => {
-            const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', { 
+            const timestamp = msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp);
+            const time = timestamp.toLocaleTimeString('ru-RU', { 
                 hour: '2-digit', 
                 minute: '2-digit' 
             });

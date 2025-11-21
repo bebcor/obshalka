@@ -7,24 +7,113 @@ class MediaController {
 
     async startVideo() {
         try {
-            this.videoCallManager.localStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    frameRate: { ideal: 30 }
-                },
-                audio: {
+            // ПРОВЕРЯЕМ доступность камер ДО запроса
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const hasCamera = devices.some(device => device.kind === 'videoinput');
+            
+            console.log('📹 Доступность камеры:', hasCamera);
+            
+            if (!hasCamera) {
+                console.log('🎯 Камера не найдена, запрашиваем только микрофон');
+                
+                // СКРЫВАЕМ ВИДЕО-ПЛАШКУ ЕСЛИ КАМЕРЫ НЕТ
+                const localOverlay = document.getElementById('localVideoOverlay');
+                if (localOverlay) {
+                    localOverlay.style.display = 'none';
+                }
+                
+                const audioConstraints = this.videoCallManager.selectedMicrophoneId ? {
+                    deviceId: { ideal: this.videoCallManager.selectedMicrophoneId },
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true
+                } : {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                };
+                
+                this.videoCallManager.localStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: audioConstraints 
+                });
+                
+                this.videoCallManager.hasVideoTrack = false; // НЕТ ВИДЕОТРЕКА
+                
+            } else {
+                // ЕСЛИ камера есть - запрашиваем оба с ВЫБРАННОЙ КАМЕРОЙ
+                const constraints = {
+                    video: this.videoCallManager.selectedCameraId ? {
+                        deviceId: { exact: this.videoCallManager.selectedCameraId },
+                        width: { ideal: 1280 }, 
+                        height: { ideal: 720 }, 
+                        frameRate: { ideal: 30 }
+                    } : {
+                        width: { ideal: 1280 }, 
+                        height: { ideal: 720 }, 
+                        frameRate: { ideal: 30 }
+                    },
+                    audio: this.videoCallManager.selectedMicrophoneId ? {
+                        deviceId: { ideal: this.videoCallManager.selectedMicrophoneId },
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    } : {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                };
+                
+                console.log('🎥 Запрашиваем медиа с constraints:', constraints);
+                
+                try {
+                    // СОЗДАЕМ ОТДЕЛЬНЫЙ поток для камеры
+                    this.videoCallManager.cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    
+                    // ЕСЛИ уже есть локальный поток (от экрана), добавляем в него камеру
+                    if (this.videoCallManager.localStream) {
+                        // Удаляем старые видео треки перед добавлением камеры
+                        const oldVideoTracks = this.videoCallManager.localStream.getVideoTracks();
+                        oldVideoTracks.forEach(track => {
+                            this.videoCallManager.localStream.removeTrack(track);
+                            if (!track.label.includes('screen') && !track.label.includes('window') && !track.label.includes('display')) {
+                                track.stop();
+                            }
+                        });
+                        
+                        // Добавляем треки камеры
+                        this.videoCallManager.cameraStream.getTracks().forEach(track => {
+                            this.videoCallManager.localStream.addTrack(track);
+                        });
+                    } else {
+                        // ЕСЛИ нет локального потока - создаем из камеры
+                        this.videoCallManager.localStream = this.videoCallManager.cameraStream;
+                    }
+                    
+                    const localVideo = document.getElementById('localVideo');
+                    const localParticipantCard = document.getElementById('localParticipantCard');
+                    
+                    if (localVideo) {
+                        localVideo.srcObject = this.videoCallManager.localStream;
+                        localVideo.style.display = 'block';
+                    }
+                    
+                    // ПОКАЗЫВАЕМ карточку локального участника
+                    if (localParticipantCard) {
+                        localParticipantCard.style.display = 'block';
+                    }
+                    
+                    this.videoCallManager.hasVideoTrack = true; // ЕСТЬ ВИДЕОТРЕК
+                    
+                } catch (cameraError) {
+                    console.error('❌ Ошибка доступа к камере, пробуем только микрофон:', cameraError);
+                    // Если камера недоступна, пробуем только микрофон
+                    await this.startAudioOnly();
+                    return;
                 }
-            });
-            
-            const localVideo = document.getElementById('localVideo');
-            if (localVideo) {
-                localVideo.srcObject = this.videoCallManager.localStream;
             }
             
+            // ОБНОВЛЯЕМ UI и соединения
             this.videoCallManager.uiManager.updateControlButtons();
             this.videoCallManager.uiManager.updateVideoOverlays();
             
@@ -36,12 +125,13 @@ class MediaController {
             // Добавляем треки во все существующие соединения
             this.videoCallManager.webrtcManager.addTracksToExistingConnections();
             
-            // Если есть активные соединения, запускаем renegotiation
             if (this.videoCallManager.remoteUsers.size > 0) {
                 this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
                     this.videoCallManager.webrtcManager.createOffer(userId);
                 });
             }
+            
+            console.log('✅ Камера успешно запущена');
             
         } catch (error) {
             console.error('Error accessing media devices:', error);
@@ -57,35 +147,52 @@ class MediaController {
     }
 
     async toggleAudio() {
+        // Если локального потока нет - создаем его
         if (!this.videoCallManager.localStream) {
             try {
-                await this.startVideo();
+                await this.startAudioOnly();
+                this.videoCallManager.notificationManager.show('Микрофон включен', 'success');
             } catch (error) {
-                this.videoCallManager.notificationManager.show('Cannot enable microphone without media access', 'error');
+                this.videoCallManager.notificationManager.show('Не удалось включить микрофон', 'error');
                 return;
             }
-        }
-        
-        const audioTracks = this.videoCallManager.localStream.getAudioTracks();
-        if (audioTracks.length > 0) {
-            const enabled = !audioTracks[0].enabled;
-            audioTracks[0].enabled = enabled;
-            
-            // Обновляем анализ аудио
-            if (this.videoCallManager.audioAnalyzer) {
-                if (enabled) {
-                    this.videoCallManager.audioAnalyzer.startAnalysis();
-                } else {
-                    this.videoCallManager.audioAnalyzer.stopAnalysis();
+        } else {
+            // Если поток есть - переключаем состояние аудио
+            const audioTracks = this.videoCallManager.localStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                const enabled = !audioTracks[0].enabled;
+                audioTracks[0].enabled = enabled;
+                
+                // Обновляем анализ аудио
+                if (this.videoCallManager.audioAnalyzer) {
+                    if (enabled) {
+                        this.videoCallManager.audioAnalyzer.startAnalysis();
+                    } else {
+                        this.videoCallManager.audioAnalyzer.stopAnalysis();
+                    }
                 }
+                
+                this.videoCallManager.uiManager.updateControlButtons();
+                this.videoCallManager.notificationManager.show(enabled ? 'Микрофон включен' : 'Микрофон выключен', 'info');
+                
+                // Обновляем соединения только если трек включен
+                if (enabled) {
+                    await this.updateAudioTracksInConnections();
+                }
+            } else {
+                // Если аудио-треков нет, но поток есть - добавляем аудио
+                await this.startAudioOnly();
             }
-            
-            this.videoCallManager.uiManager.updateControlButtons();
-            this.videoCallManager.notificationManager.show(enabled ? 'Microphone on' : 'Microphone off', 'info');
         }
     }
 
     async toggleVideo() {
+        // ЕСЛИ демонстрируем экран - не выключаем видео, а переключаем между камерой и экраном
+        if (this.videoCallManager.isSharingScreen) {
+            this.videoCallManager.notificationManager.show('Остановите демонстрацию экрана чтобы выключить камеру', 'warning');
+            return;
+        }
+
         if (!this.videoCallManager.localStream) {
             try {
                 await this.startVideo();
@@ -100,38 +207,81 @@ class MediaController {
             const enabled = !videoTracks[0].enabled;
             videoTracks[0].enabled = enabled;
             
+            // ОБНОВЛЯЕМ ФЛАГ
+            this.videoCallManager.hasVideoTrack = enabled;
+            
+            // ЕСЛИ выключаем камеру - удаляем видео-трек из соединений
+            if (!enabled) {
+                await this.updateVideoTracksInConnections(null);
+            } else {
+                // ЕСЛИ включаем камеру - добавляем видео-трек в соединения
+                await this.updateVideoTracksInConnections(videoTracks[0]);
+            }
+            
             this.videoCallManager.uiManager.updateControlButtons();
             this.videoCallManager.uiManager.updateVideoOverlays();
-            this.videoCallManager.notificationManager.show(enabled ? 'Camera on' : 'Camera off', 'info');
+            this.videoCallManager.notificationManager.show(enabled ? 'Камера включена' : 'Камера выключена', 'info');
         }
     }
 
     async shareScreen() {
+        // ЕСЛИ уже демонстрируем экран - останавливаем
+        if (this.videoCallManager.isSharingScreen) {
+            await this.stopScreenShare();
+            return;
+        }
+
         try {
+            console.log('🖥️ Начинаем демонстрацию экрана...');
+            
             const screenStream = await navigator.mediaDevices.getDisplayMedia({
                 video: {
                     cursor: 'always',
-                    displaySurface: 'window'
+                    displaySurface: 'window',
+                    frameRate: { ideal: 30 }
                 },
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true
-                }
+                audio: false
             });
         
-            const videoTrack = screenStream.getVideoTracks()[0];
+            const screenVideoTrack = screenStream.getVideoTracks()[0];
+            
+            if (!screenVideoTrack) {
+                throw new Error('Не удалось получить видео с экрана');
+            }
+
+            // СОХРАНЯЕМ предыдущий поток для восстановления
+            this.videoCallManager.previousStream = this.videoCallManager.localStream;
+            
+            // СОЗДАЕМ НОВЫЙ поток только с экраном
+            const newStream = new MediaStream();
+            newStream.addTrack(screenVideoTrack);
+            
+            // ДОБАВЛЯЕМ аудио из предыдущего потока если есть
+            if (this.videoCallManager.previousStream) {
+                const audioTracks = this.videoCallManager.previousStream.getAudioTracks();
+                audioTracks.forEach(track => {
+                    newStream.addTrack(track);
+                });
+            }
+
+            // ОБНОВЛЯЕМ локальный поток
+            this.videoCallManager.localStream = newStream;
+            this.videoCallManager.screenStream = screenStream;
+            this.videoCallManager.hasVideoTrack = true; // ЕСТЬ ВИДЕО (ЭКРАН)
         
             if (this.videoCallManager.localStream) {
                 const oldVideoTrack = this.videoCallManager.localStream.getVideoTracks()[0];
             
-                // Останавливаем старый трек
-                if (oldVideoTrack) {
+                // Останавливаем старый трек (если был)
+                if (oldVideoTrack && oldVideoTrack !== screenVideoTrack) {
                     oldVideoTrack.stop();
                     this.videoCallManager.localStream.removeTrack(oldVideoTrack);
                 }
                 
-                // Добавляем новый трек экрана
-                this.videoCallManager.localStream.addTrack(videoTrack);
+                // Добавляем новый трек экрана (если еще не добавлен)
+                if (!this.videoCallManager.localStream.getVideoTracks().includes(screenVideoTrack)) {
+                    this.videoCallManager.localStream.addTrack(screenVideoTrack);
+                }
             
                 const localVideo = document.getElementById('localVideo');
                 if (localVideo) {
@@ -177,30 +327,35 @@ class MediaController {
                     }
                 }
             
-                this.videoCallManager.notificationManager.show('Screen sharing started', 'success');
-            
-                videoTrack.onended = async () => {
-                    console.log('Screen sharing ended');
-                    this.videoCallManager.notificationManager.show('Screen sharing ended', 'info');
-                    
-                    // Останавливаем трек экрана
-                    videoTrack.stop();
-                    
-                    // Если есть старая камера, можно попробовать вернуть её
-                    // Но проще просто выключить видео
-                    const videoTracks = this.videoCallManager.localStream.getVideoTracks();
-                    if (videoTracks.length > 0) {
-                        videoTracks[0].stop();
-                        this.videoCallManager.localStream.removeTrack(videoTracks[0]);
-                    }
-                    
-                    // Обновляем UI
-                    this.videoCallManager.uiManager.updateControlButtons();
-                    this.videoCallManager.uiManager.updateVideoOverlays();
+                // ОБНОВЛЯЕМ видео элемент
+                const localVideo = document.getElementById('localVideo');
+                if (localVideo) {
+                    localVideo.srcObject = this.videoCallManager.localStream;
+                }
+
+                // ОБНОВЛЯЕМ ОВЕРЛЕИ - показываем видео
+                this.videoCallManager.uiManager.updateVideoOverlays();
+                
+                // ОБНОВЛЯЕМ соединения с новым видео-треком
+                await this.updateVideoTracksInConnections(screenVideoTrack);
+                
+                this.videoCallManager.isSharingScreen = true;
+                this.videoCallManager.uiManager.updateControlButtons();
+                
+                this.videoCallManager.notificationManager.show('Демонстрация экрана начата', 'success');
+                console.log('✅ Демонстрация экрана активна');
+
+                // Обработчик завершения демонстрации пользователем
+                screenVideoTrack.onended = () => {
+                    console.log('Демонстрация экрана завершена пользователем');
+                    this.stopScreenShare();
                 };
             } else {
                 // Если нет локального потока, создаем новый
-                this.videoCallManager.localStream = screenStream;
+                this.videoCallManager.localStream = newStream;
+                this.videoCallManager.screenStream = screenStream;
+                this.videoCallManager.hasVideoTrack = true;
+                
                 const localVideo = document.getElementById('localVideo');
                 if (localVideo) {
                     localVideo.srcObject = this.videoCallManager.localStream;
@@ -218,18 +373,13 @@ class MediaController {
                     }, 100);
                 }
                 
-                this.videoCallManager.notificationManager.show('Screen sharing started', 'success');
+                this.videoCallManager.isSharingScreen = true;
+                this.videoCallManager.uiManager.updateControlButtons();
+                this.videoCallManager.notificationManager.show('Демонстрация экрана начата', 'success');
                 
-                videoTrack.onended = async () => {
-                    console.log('Screen sharing ended');
-                    this.videoCallManager.notificationManager.show('Screen sharing ended', 'info');
-                    videoTrack.stop();
-                    if (this.videoCallManager.localStream) {
-                        this.videoCallManager.localStream.getTracks().forEach(track => track.stop());
-                        this.videoCallManager.localStream = null;
-                    }
-                    this.videoCallManager.uiManager.updateControlButtons();
-                    this.videoCallManager.uiManager.updateVideoOverlays();
+                screenVideoTrack.onended = () => {
+                    console.log('Демонстрация экрана завершена пользователем');
+                    this.stopScreenShare();
                 };
             }
         
@@ -268,6 +418,365 @@ class MediaController {
         
             container.classList.remove('fullscreen-mode');
             this.videoCallManager.notificationManager.show('Fullscreen mode disabled', 'info');
+        }
+    }
+
+    async stopScreenShare() {
+        if (!this.videoCallManager.isSharingScreen) return;
+
+        console.log('🖥️ Останавливаем демонстрацию экрана...');
+        
+        // ОСТАНАВЛИВАЕМ поток экрана
+        if (this.videoCallManager.screenStream) {
+            this.videoCallManager.screenStream.getTracks().forEach(track => {
+                track.stop();
+            });
+            this.videoCallManager.screenStream = null;
+        }
+        
+        // ВОССТАНАВЛИВАЕМ предыдущий поток
+        if (this.videoCallManager.previousStream) {
+            this.videoCallManager.localStream = this.videoCallManager.previousStream;
+            this.videoCallManager.previousStream = null;
+            
+            // ПРОВЕРЯЕМ ЕСТЬ ЛИ ВИДЕОТРЕК В ВОССТАНОВЛЕННОМ ПОТОКЕ
+            const videoTrack = this.videoCallManager.localStream.getVideoTracks()[0];
+            this.videoCallManager.hasVideoTrack = !!(videoTrack && videoTrack.enabled);
+        } else {
+            this.videoCallManager.localStream = null;
+            this.videoCallManager.hasVideoTrack = false;
+        }
+        
+        // ОБНОВЛЯЕМ видео элемент
+        const localVideo = document.getElementById('localVideo');
+        if (localVideo) {
+            localVideo.srcObject = this.videoCallManager.localStream;
+        }
+
+        // ОБНОВЛЯЕМ ОВЕРЛЕИ
+        this.videoCallManager.uiManager.updateVideoOverlays();
+        
+        // ОБНОВЛЯЕМ соединения - либо с камерой, либо без видео
+        const videoTrack = this.videoCallManager.localStream ? this.videoCallManager.localStream.getVideoTracks()[0] : null;
+        await this.updateVideoTracksInConnections(videoTrack);
+        
+        this.videoCallManager.isSharingScreen = false;
+        this.videoCallManager.uiManager.updateControlButtons();
+        
+        this.videoCallManager.notificationManager.show('Демонстрация экрана завершена', 'info');
+        console.log('✅ Демонстрация экрана остановлена');
+    }
+
+    async startAudioOnly() {
+        try {
+            const audioConstraints = this.videoCallManager.selectedMicrophoneId ? {
+                deviceId: { exact: this.videoCallManager.selectedMicrophoneId },
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            } : {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            };
+
+            console.log('🎤 Запрашиваем аудио с constraints:', audioConstraints);
+            const audioStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: audioConstraints 
+            });
+
+            // ВСЕГДА СОЗДАЕМ НОВЫЙ ПОТОК ДЛЯ АУДИО
+            if (this.videoCallManager.localStream) {
+                // Удаляем старые аудиотреки если есть
+                const oldAudioTracks = this.videoCallManager.localStream.getAudioTracks();
+                oldAudioTracks.forEach(track => {
+                    this.videoCallManager.localStream.removeTrack(track);
+                    track.stop();
+                });
+                
+                // Добавляем новые аудиотреки
+                audioStream.getAudioTracks().forEach(track => {
+                    this.videoCallManager.localStream.addTrack(track);
+                });
+            } else {
+                // Если потока нет - создаем новый
+                this.videoCallManager.localStream = audioStream;
+            }
+
+            // СКРЫВАЕМ ВИДЕО-ПЛАШКУ ПРИ ТОЛЬКО АУДИО
+            const localOverlay = document.getElementById('localVideoOverlay');
+            if (localOverlay) {
+                localOverlay.style.display = 'none';
+            }
+
+            // ПОКАЗЫВАЕМ карточку локального участника (даже если только аудио)
+            const localParticipantCard = document.getElementById('localParticipantCard');
+            if (localParticipantCard) {
+                localParticipantCard.style.display = 'block';
+            }
+
+            // СКРЫВАЕМ видео элемент если нет видео-треков
+            const localVideo = document.getElementById('localVideo');
+            if (localVideo) {
+                localVideo.style.display = 'none';
+            }
+
+            this.videoCallManager.hasVideoTrack = false; // НЕТ ВИДЕОТРЕКА
+
+            // ОБНОВЛЯЕМ соединения - добавляем только аудио
+            await this.updateAudioTracksInConnections();
+            
+            // ВАЖНО: Пересоздаем офферы для всех соединений
+            if (this.videoCallManager.remoteUsers.size > 0) {
+                console.log('🔄 Пересоздаем офферы для всех соединений после обновления аудио');
+                this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
+                    this.videoCallManager.webrtcManager.createOffer(userId);
+                });
+            }
+
+            this.videoCallManager.uiManager.updateControlButtons();
+            this.videoCallManager.uiManager.updateVideoOverlays();
+
+            return true;
+        } catch (error) {
+            console.error('❌ Ошибка включения аудио:', error);
+            this.videoCallManager.hasVideoTrack = false;
+            
+            // ЕСЛИ ВЫБРАННЫЙ МИКРОФОН НЕДОСТУПЕН - ПРОБУЕМ ПО УМОЛЧАНИЮ
+            if ((error.name === 'OverconstrainedError' || error.name === 'NotFoundError') && this.videoCallManager.selectedMicrophoneId) {
+                console.log('🔄 Выбранный микрофон недоступен, пробуем с настройками по умолчанию...');
+                this.videoCallManager.selectedMicrophoneId = null;
+                return await this.startAudioOnly();
+            }
+            
+            throw error;
+        }
+    }
+
+    async restartAudioWithSelectedMicrophone() {
+        if (!this.videoCallManager.localStream) {
+            console.log('❌ Локальный поток не активен');
+            this.videoCallManager.notificationManager.show('Сначала включите микрофон', 'warning');
+            return;
+        }
+        
+        try {
+            console.log('🔄 Переключаем микрофон на:', this.videoCallManager.selectedMicrophoneId);
+            
+            // СОХРАНЯЕМ текущее состояние аудио
+            const wasAudioEnabled = this.videoCallManager.localStream.getAudioTracks()[0]?.enabled || false;
+            
+            const audioConstraints = this.videoCallManager.selectedMicrophoneId ? {
+                deviceId: { exact: this.videoCallManager.selectedMicrophoneId },
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            } : {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            };
+            
+            console.log('🎤 Создаем новый аудиопоток с constraints:', audioConstraints);
+            
+            // СОЗДАЕМ новый аудио поток
+            const newAudioStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: audioConstraints 
+            });
+            
+            const newAudioTrack = newAudioStream.getAudioTracks()[0];
+            
+            // ВОССТАНАВЛИВАЕМ предыдущее состояние
+            newAudioTrack.enabled = wasAudioEnabled;
+            
+            // ЗАМЕНА аудио-трека в существующем потоке
+            const oldAudioTracks = this.videoCallManager.localStream.getAudioTracks();
+            
+            // УДАЛЯЕМ старые аудио-треки
+            oldAudioTracks.forEach(track => {
+                this.videoCallManager.localStream.removeTrack(track);
+                track.stop();
+            });
+            
+            // ДОБАВЛЯЕМ новый аудио-трек
+            this.videoCallManager.localStream.addTrack(newAudioTrack);
+            
+            // ОБНОВЛЯЕМ UI
+            this.videoCallManager.uiManager.updateControlButtons();
+            
+            // ОБНОВЛЯЕМ соединения
+            await this.updateAudioTracksInConnections();
+            
+            // ВАЖНО: Пересоздаем офферы для всех соединений
+            if (this.videoCallManager.remoteUsers.size > 0) {
+                console.log('🔄 Пересоздаем офферы после смены микрофона');
+                this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
+                    this.videoCallManager.webrtcManager.createOffer(userId);
+                });
+            }
+            
+            this.videoCallManager.notificationManager.show('Микрофон переключен', 'success');
+            console.log('✅ Микрофон успешно переключен');
+            
+        } catch (error) {
+            console.error('❌ Ошибка переключения микрофона:', error);
+            
+            if (error.name === 'OverconstrainedError' || error.name === 'NotFoundError') {
+                this.videoCallManager.notificationManager.show('Выбранный микрофон недоступен', 'error');
+                this.videoCallManager.selectedMicrophoneId = null;
+            } else {
+                this.videoCallManager.notificationManager.show('Ошибка переключения микрофона: ' + error.message, 'error');
+            }
+        }
+    }
+
+    async restartVideoWithSelectedCamera() {
+        if (!this.videoCallManager.localStream) {
+            console.log('❌ Локальный поток не активен');
+            this.videoCallManager.notificationManager.show('Сначала включите камеру', 'warning');
+            return;
+        }
+        
+        try {
+            console.log('🔄 Переключаем камеру на:', this.videoCallManager.selectedCameraId);
+            
+            // СОХРАНЯЕМ текущее состояние видео
+            const wasVideoEnabled = this.videoCallManager.localStream.getVideoTracks()[0]?.enabled || false;
+            
+            const videoConstraints = this.videoCallManager.selectedCameraId ? {
+                deviceId: { exact: this.videoCallManager.selectedCameraId },
+                width: { ideal: 1280 }, 
+                height: { ideal: 720 }, 
+                frameRate: { ideal: 30 }
+            } : {
+                width: { ideal: 1280 }, 
+                height: { ideal: 720 }, 
+                frameRate: { ideal: 30 }
+            };
+            
+            console.log('📷 Создаем новый видеопоток с constraints:', videoConstraints);
+            
+            // СОЗДАЕМ новый видео поток
+            const newVideoStream = await navigator.mediaDevices.getUserMedia({ 
+                video: videoConstraints 
+            });
+            
+            const newVideoTrack = newVideoStream.getVideoTracks()[0];
+            
+            // ВОССТАНАВЛИВАЕМ предыдущее состояние
+            newVideoTrack.enabled = wasVideoEnabled;
+            
+            // ЗАМЕНА видео-трека в существующем потоке
+            const oldVideoTracks = this.videoCallManager.localStream.getVideoTracks();
+            
+            // УДАЛЯЕМ старые видео-треки
+            oldVideoTracks.forEach(track => {
+                this.videoCallManager.localStream.removeTrack(track);
+                track.stop();
+            });
+            
+            // ДОБАВЛЯЕМ новый видео-трек
+            this.videoCallManager.localStream.addTrack(newVideoTrack);
+            
+            // ОБНОВЛЯЕМ UI
+            this.videoCallManager.uiManager.updateControlButtons();
+            
+            // ОБНОВЛЯЕМ видео элемент
+            const localVideo = document.getElementById('localVideo');
+            if (localVideo) {
+                localVideo.srcObject = this.videoCallManager.localStream;
+            }
+            
+            // ОБНОВЛЯЕМ соединения
+            await this.updateVideoTracksInConnections(newVideoTrack);
+            
+            this.videoCallManager.notificationManager.show('Камера переключена', 'success');
+            console.log('✅ Камера успешно переключена');
+            
+        } catch (error) {
+            console.error('❌ Ошибка переключения камеры:', error);
+            
+            if (error.name === 'OverconstrainedError' || error.name === 'NotFoundError') {
+                this.videoCallManager.notificationManager.show('Выбранная камера недоступна', 'error');
+                this.videoCallManager.selectedCameraId = null;
+            } else {
+                this.videoCallManager.notificationManager.show('Ошибка переключения камеры: ' + error.message, 'error');
+            }
+        }
+    }
+
+    async updateVideoTracksInConnections(newVideoTrack = null) {
+        console.log('🔄 Обновляем видеотреки в соединениях...');
+        
+        const videoTrack = newVideoTrack || (this.videoCallManager.localStream ? this.videoCallManager.localStream.getVideoTracks()[0] : null);
+        
+        const updatePromises = [];
+        
+        this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
+            const videoSender = peerConnection.getSenders().find(s => 
+                s.track && s.track.kind === 'video'
+            );
+            
+            if (videoSender) {
+                console.log(`🔄 Обновляем видео-трек для пользователя: ${userId}`);
+                updatePromises.push(videoSender.replaceTrack(videoTrack));
+            } else if (videoTrack) {
+                // ЕСЛИ отправителя нет, но есть трек - добавляем
+                console.log(`🎯 Добавляем видео-трек для пользователя: ${userId}`);
+                peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
+            } else {
+                // ЕСЛИ трека нет - удаляем видео-отправитель если есть
+                console.log(`🗑️ Удаляем видео-трек для пользователя: ${userId}`);
+                if (videoSender) {
+                    updatePromises.push(videoSender.replaceTrack(null));
+                }
+            }
+        });
+        
+        try {
+            await Promise.all(updatePromises);
+            console.log('✅ Все видеотреки обновлены');
+        } catch (error) {
+            console.error('❌ Ошибка обновления видеотреков:', error);
+        }
+    }
+
+    async updateAudioTracksInConnections() {
+        const audioTrack = this.videoCallManager.localStream?.getAudioTracks()[0];
+        if (!audioTrack) {
+            console.log('❌ Нет аудиотрека для обновления');
+            return;
+        }
+        
+        console.log('🔄 Обновляем аудиотреки в соединениях...');
+        
+        const updatePromises = [];
+        
+        this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
+            let sender = peerConnection.getSenders().find(s => 
+                s.track && s.track.kind === 'audio'
+            );
+            
+            if (sender) {
+                console.log(`🔄 Обновляем аудиотрек для пользователя: ${userId}`);
+                updatePromises.push(sender.replaceTrack(audioTrack));
+            } else {
+                // ЕСЛИ отправителя нет - создаем новый
+                console.log(`🎯 Создаем новый аудио-отправитель для пользователя: ${userId}`);
+                try {
+                    sender = peerConnection.addTrack(audioTrack, this.videoCallManager.localStream);
+                    console.log(`✅ Аудио-отправитель создан для: ${userId}`);
+                } catch (error) {
+                    console.error(`❌ Ошибка создания аудио-отправителя: ${error}`);
+                }
+            }
+        });
+        
+        try {
+            await Promise.all(updatePromises);
+            console.log('✅ Все аудиотреки обновлены');
+        } catch (error) {
+            console.error('❌ Ошибка обновления аудиотреков:', error);
         }
     }
 }

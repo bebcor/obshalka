@@ -14,17 +14,30 @@ class WebRTCManager {
         try {
             console.log('Setting up peer connection for:', targetUserId);
         
-            // Конфигурация ICE-серверов
-            const configuration = getPeerConnectionConfig();
+            // Конфигурация ICE-серверов - используем this.configuration из VideoCallManager
+            const configuration = this.videoCallManager.configuration;
 
             // Создаем новый peer connection
             const peerConnection = new RTCPeerConnection(configuration);
         
-            // Добавляем локальные треки, если они есть
+            // ДОБАВЛЯЕМ ТОЛЬКО АКТИВНЫЕ ТРЕКИ из текущего локального потока (ТОЧНАЯ КОПИЯ ОРИГИНАЛА)
             if (this.videoCallManager.localStream) {
                 this.videoCallManager.localStream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, this.videoCallManager.localStream);
+                    // ДОБАВЛЯЕМ только если трек включен ИЛИ это аудио (аудио всегда добавляем)
+                    // В оригинале проверялось !this.isSharingScreen для видео
+                    const isSharingScreen = this.videoCallManager.isSharingScreen || false;
+                    if (track.kind === 'audio' || (track.kind === 'video' && track.enabled && !isSharingScreen)) {
+                        console.log(`Adding ${track.kind} track to connection for ${targetUserId}`);
+                        try {
+                            peerConnection.addTrack(track, this.videoCallManager.localStream);
+                            console.log(`✅ ${track.kind} track added successfully`);
+                        } catch (error) {
+                            console.error(`❌ Error adding ${track.kind} track:`, error);
+                        }
+                    }
                 });
+            } else {
+                console.log('⚠️ No local stream available for peer connection');
             }
         
             // Обработчик ICE-кандидатов
@@ -38,7 +51,7 @@ class WebRTCManager {
                     });
                 
                     // Отправляем кандидат через signaling-сервер
-                    this.videoCallManager.socketHandler.emit('ice_candidate', {
+                    this.videoCallManager.socket.emit('ice_candidate', {
                         target_user_id: targetUserId,
                         candidate: event.candidate
                     });
@@ -204,7 +217,7 @@ class WebRTCManager {
                 });
             });
         
-            this.videoCallManager.socketHandler.emit('webrtc_offer', {
+            this.videoCallManager.socket.emit('webrtc_offer', {
                 target_user_id: targetUserId,
                 offer: offer
             });
@@ -278,7 +291,7 @@ class WebRTCManager {
             });
             
             // Отправляем ответ обратно инициатору через signaling-сервер
-            this.videoCallManager.socketHandler.emit('webrtc_answer', {
+            this.videoCallManager.socket.emit('webrtc_answer', {
                 target_user_id: data.sender_id,
                 answer: answer
             });

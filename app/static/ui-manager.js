@@ -24,9 +24,8 @@ class UIManager {
         // Update connection status
         const statusElement = document.getElementById('connectionStatus');
         if (statusElement) {
-            const isConnected = this.videoCallManager.socketHandler.getIsConnected();
-            statusElement.textContent = isConnected ? 'Connected' : 'Disconnected';
-            statusElement.className = isConnected ? 'status-connected' : 'status-disconnected';
+            statusElement.textContent = this.videoCallManager.isConnected ? 'Connected' : 'Disconnected';
+            statusElement.className = this.videoCallManager.isConnected ? 'status-connected' : 'status-disconnected';
         }
         
         // Show/hide call controls based on state
@@ -68,19 +67,26 @@ class UIManager {
         
         // Remote video overlays для всех пользователей
         this.videoCallManager.remoteStreams.forEach((stream, userId) => {
-            const remoteVideo = document.getElementById(`remoteVideo-${userId}`);
-            const remoteOverlay = remoteVideo?.parentElement.querySelector('.video-overlay');
+            const videoElement = document.getElementById(`remoteVideo-${userId}`);
+            const participantCard = document.getElementById(`participant-${userId}`);
+            const overlay = participantCard?.querySelector('.video-overlay');
             
-            if (remoteVideo && remoteOverlay) {
-                if (stream && remoteVideo.srcObject) {
-                    const videoTracks = stream.getVideoTracks();
-                    if (videoTracks.length > 0 && videoTracks[0].readyState === 'live') {
-                        remoteOverlay.style.display = 'none';
-                    } else {
-                        remoteOverlay.style.display = 'flex';
-                    }
+            if (videoElement && overlay && participantCard) {
+                const videoTracks = stream.getVideoTracks();
+                const hasVideo = videoTracks.length > 0 && videoTracks[0].readyState === 'live';
+                
+                if (hasVideo) {
+                    overlay.style.display = 'none';
+                    videoElement.style.display = 'block';
+                    participantCard.style.display = 'block';
                 } else {
-                    remoteOverlay.style.display = 'flex';
+                    overlay.style.display = 'flex';
+                    videoElement.style.display = 'none';
+                    // НЕ СКРЫВАЕМ карточку если есть аудио
+                    const audioTracks = stream.getAudioTracks();
+                    if (audioTracks.length === 0) {
+                        participantCard.style.display = 'none';
+                    }
                 }
             }
         });
@@ -160,168 +166,145 @@ class UIManager {
     }
 
     createRemoteVideoElement(userId, stream) {
-        const videoContainer = document.querySelector('.video-container');
+        // УБЕЖДАЕМСЯ, что participantsGrid существует
+        let participantsGrid = document.getElementById('participantsGrid');
         
-        // Проверяем, есть ли уже статический элемент remoteVideo
-        const existingStaticVideo = document.getElementById('remoteVideo');
-        const existingStaticWrapper = existingStaticVideo?.closest('.video-wrapper.remote');
-        
-        // Если есть статический элемент и это первый пользователь, используем его
-        if (existingStaticWrapper && this.videoCallManager.remoteStreams.size === 0) {
-            console.log('Using existing static remote video element for first user');
-            const videoElement = existingStaticVideo;
-            videoElement.id = `remoteVideo-${userId}`;
-            existingStaticWrapper.id = `remoteWrapper-${userId}`;
-            videoElement.srcObject = stream;
-            videoElement.volume = 1.0;
-            videoElement.muted = false;
-            
-            // Обновляем label безопасно
-            const label = existingStaticWrapper.querySelector('.video-label');
-            if (label) {
-                // Очищаем содержимое
-                label.textContent = '';
-                
-                // Создаем текстовый узел для имени пользователя
-                const userNameText = document.createTextNode(`User ${userId.substring(0, 8)} `);
-                label.appendChild(userNameText);
-                
-                // Создаем badge-group
-                const badgeGroup = document.createElement('span');
-                badgeGroup.className = 'badge-group';
-                
-                const audioBadge = document.createElement('span');
-                audioBadge.className = 'badge badge-audio on';
-                audioBadge.title = 'Микрофон включен';
-                audioBadge.textContent = '🎤';
-                
-                const videoBadge = document.createElement('span');
-                videoBadge.className = 'badge badge-video on';
-                videoBadge.title = 'Камера включена';
-                videoBadge.textContent = '📹';
-                
-                badgeGroup.appendChild(audioBadge);
-                badgeGroup.appendChild(videoBadge);
-                label.appendChild(badgeGroup);
+        if (!participantsGrid) {
+            console.warn("⚠️ participantsGrid не найден, создаем...");
+            const videoContainer = document.querySelector('.video-container');
+            if (videoContainer) {
+                participantsGrid = document.createElement('div');
+                participantsGrid.id = 'participantsGrid';
+                participantsGrid.className = 'participants-grid';
+                videoContainer.appendChild(participantsGrid);
+                console.log("✅ participantsGrid создан");
+            } else {
+                console.error("❌ Не удалось создать participantsGrid: video-container не найден");
+                return;
             }
-            
-            videoElement.onloadedmetadata = () => {
-                videoElement.play().catch(err => {
-                    console.error('Error playing remote video/audio:', err);
-                });
-            };
-            
-            // Обновляем grid с учетом локального видео
-            this.updateGridLayout();
+        }
+
+        if (document.getElementById(`participant-${userId}`)) {
+            console.log('Participant card already exists for:', userId);
             return;
         }
         
-        // Для остальных пользователей создаем новые элементы безопасно
-        const videoWrapper = document.createElement('div');
-        videoWrapper.className = 'video-wrapper remote';
-        videoWrapper.id = `remoteWrapper-${userId}`;
+        const participantCard = document.createElement('div');
+        participantCard.className = 'participant-card remote-participant';
+        participantCard.id = `participant-${userId}`;
         
-        // Создаем video элемент
-        const videoElement = document.createElement('video');
-        videoElement.id = `remoteVideo-${userId}`;
-        videoElement.autoplay = true;
-        videoElement.playsInline = true;
-        videoElement.muted = false;
+        const userName = this.videoCallManager.userNames.get(userId) || `User ${userId.substring(0, 8)}`;
         
-        // Создаем label
-        const label = document.createElement('div');
-        label.className = 'video-label';
+        participantCard.innerHTML = `
+            <video id="remoteVideo-${userId}" autoplay playsinline></video>
+            <div class="participant-info">
+                <span class="participant-name">${this.escapeHtml(userName)}</span>
+                <div class="participant-status">
+                    <span class="status-audio" title="Микрофон">🎤</span>
+                    <span class="status-video" title="Камера">📹</span>
+                </div>
+            </div>
+            <div class="video-overlay">
+                <div class="overlay-icon">👤</div>
+                <p>Ожидание видео...</p>
+            </div>
+        `;
         
-        const userNameText = document.createTextNode(`User ${userId.substring(0, 8)} `);
-        label.appendChild(userNameText);
-        
-        const badgeGroup = document.createElement('span');
-        badgeGroup.className = 'badge-group';
-        
-        const audioBadge = document.createElement('span');
-        audioBadge.className = 'badge badge-audio on';
-        audioBadge.title = 'Микрофон включен';
-        audioBadge.textContent = '🎤';
-        
-        const videoBadge = document.createElement('span');
-        videoBadge.className = 'badge badge-video on';
-        videoBadge.title = 'Камера включена';
-        videoBadge.textContent = '📹';
-        
-        badgeGroup.appendChild(audioBadge);
-        badgeGroup.appendChild(videoBadge);
-        label.appendChild(badgeGroup);
-        
-        // Создаем overlay
-        const overlay = document.createElement('div');
-        overlay.className = 'video-overlay';
-        
-        const overlayIcon = document.createElement('div');
-        overlayIcon.className = 'overlay-icon';
-        overlayIcon.textContent = '👤';
-        
-        const overlayText = document.createElement('p');
-        overlayText.textContent = 'Waiting for video...';
-        
-        overlay.appendChild(overlayIcon);
-        overlay.appendChild(overlayText);
-        
-        // Собираем все вместе
-        videoWrapper.appendChild(videoElement);
-        videoWrapper.appendChild(label);
-        videoWrapper.appendChild(overlay);
-        
-        videoContainer.appendChild(videoWrapper);
+        participantsGrid.appendChild(participantCard);
         
         const videoElement = document.getElementById(`remoteVideo-${userId}`);
         if (videoElement) {
             videoElement.srcObject = stream;
-        }
-        
-        // Убеждаемся что аудио воспроизводится
-        videoElement.volume = 1.0;
-        videoElement.muted = false;
-        
-        // Обработчик для воспроизведения аудио
-        videoElement.onloadedmetadata = () => {
-            videoElement.play().catch(err => {
-                console.error('Error playing remote video/audio:', err);
+
+            // ДОБАВЛЯЕМ ОБРАБОТЧИКИ ДЛЯ СЛЕДЕНИЯ ЗА СОСТОЯНИЕМ ТРЕКОВ
+            stream.getTracks().forEach(track => {
+                track.onended = () => {
+                    console.log(`Трек ${track.kind} завершился для пользователя ${userId}`);
+                    this.updateVideoOverlays();
+                };
+                
+                track.onmute = () => {
+                    console.log(`Трек ${track.kind} заглушен для пользователя ${userId}`);
+                    this.updateVideoOverlays();
+                };
+                
+                track.onunmute = () => {
+                    console.log(`Трек ${track.kind} включен для пользователя ${userId}`);
+                    this.updateVideoOverlays();
+                };
             });
-        };
-        
-        // Обновляем grid с учетом локального видео
-        this.updateGridLayout();
+            
+            videoElement.play().catch(error => {
+                console.log('Автовоспроизведение звука заблокировано:', error);
+                this.showAudioActivationButton(videoElement, userId);
+            });
+            
+            // ВАЖНО: Обновляем состояние после создания видео элемента
+            setTimeout(() => {
+                this.videoCallManager.checkEmptyState();
+            }, 100);
+        } else {
+            console.error('❌ Video element not found after creation for:', userId);
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    showAudioActivationButton(videoElement, userId) {
+        const participantCard = document.getElementById(`participant-${userId}`);
+        if (!participantCard) return;
+    
+        // Удаляем старую кнопку если есть
+        const oldBtn = participantCard.querySelector('.audio-activation-btn');
+        if (oldBtn) oldBtn.remove();
+    
+        const activateBtn = document.createElement('button');
+        activateBtn.className = 'audio-activation-btn';
+        activateBtn.innerHTML = '🔇 Нажми для звука';
+        activateBtn.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 10;
+        `;
+    
+        activateBtn.addEventListener('click', async () => {
+            try {
+                await videoElement.play();
+                activateBtn.remove();
+                console.log('✅ Звук активирован для:', userId);
+            } catch (error) {
+                console.error('Ошибка активации звука:', error);
+            }
+        });
+    
+        participantCard.appendChild(activateBtn);
     }
     
     updateGridLayout() {
-        const videoContainer = document.querySelector('.video-container');
-        const localVideoWrapper = document.querySelector('.video-wrapper.local');
-        const hasLocalVideo = localVideoWrapper !== null;
-        
-        // Считаем общее количество участников (локальный + удаленные)
-        const remoteCount = this.videoCallManager.remoteStreams.size;
-        const totalCount = (hasLocalVideo ? 1 : 0) + remoteCount;
-        
-        if (totalCount === 0) {
-            videoContainer.style.gridTemplateColumns = '1fr';
-            videoContainer.style.gridTemplateRows = '';
-        } else if (totalCount === 1) {
-            videoContainer.style.gridTemplateColumns = '1fr';
-            videoContainer.style.gridTemplateRows = '';
-        } else if (totalCount === 2) {
-            videoContainer.style.gridTemplateColumns = '1fr 1fr';
-            videoContainer.style.gridTemplateRows = '';
-        } else if (totalCount === 3) {
-            videoContainer.style.gridTemplateColumns = 'repeat(2, 1fr)';
-            videoContainer.style.gridTemplateRows = 'repeat(2, 1fr)';
-        } else if (totalCount === 4) {
-            videoContainer.style.gridTemplateColumns = 'repeat(2, 1fr)';
-            videoContainer.style.gridTemplateRows = 'repeat(2, 1fr)';
-        } else {
-            // Для большего количества используем адаптивную сетку
-            videoContainer.style.gridTemplateColumns = 'repeat(auto-fit, minmax(300px, 1fr))';
-            videoContainer.style.gridTemplateRows = '';
+        // НЕ изменяем grid стили - они управляются CSS через .participants-grid
+        // CSS уже настроен правильно: grid-template-columns: repeat(auto-fit, minmax(300px, 1fr))
+        // Просто убеждаемся что participantsGrid существует
+        const participantsGrid = document.getElementById('participantsGrid');
+        if (!participantsGrid) {
+            console.warn('participantsGrid не найден при обновлении grid layout');
+            return;
         }
+        
+        // CSS автоматически адаптирует сетку в зависимости от количества элементов
+        // Дополнительные стили не нужны - CSS делает все сам
+        console.log('Grid layout обновлен (управляется CSS)');
     }
 }
 

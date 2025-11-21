@@ -159,7 +159,7 @@ class RoomManager {
     }
 
     joinRoomAfterCreation() {
-        if (!this.videoCallManager.socketHandler.getSocket() || !this.videoCallManager.socketHandler.getSocket().connected) {
+        if (!this.videoCallManager.socket || !this.videoCallManager.socket.connected) {
             this.videoCallManager.notificationManager.show('Not connected to server. Please try again.', 'error');
             return;
         }
@@ -179,7 +179,7 @@ class RoomManager {
             (userName) => {
                 this.videoCallManager.userName = userName;
                 
-                this.videoCallManager.socketHandler.emit('join_room', {
+                this.videoCallManager.socket.emit('join_room', {
                     room_id: this.videoCallManager.roomId,
                     user_name: this.videoCallManager.userName
                 });
@@ -213,10 +213,10 @@ class RoomManager {
     }
 
     leaveRoom() {
-        if (this.videoCallManager.socketHandler.getSocket() && 
-            this.videoCallManager.socketHandler.getSocket().connected && 
+        if (this.videoCallManager.socket && 
+            this.videoCallManager.socket.connected && 
             this.videoCallManager.roomId) {
-            this.videoCallManager.socketHandler.emit('leave_room', {
+            this.videoCallManager.socket.emit('leave_room', {
                 room_id: this.videoCallManager.roomId
             });
         }

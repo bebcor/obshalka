@@ -68,7 +68,7 @@ class UsersManager {
 
         let html = '';
         this.participants.forEach((participant, userId) => {
-            const isCurrentUser = userId === this.videoCallManager.socketHandler.getSocketId();
+            const isCurrentUser = userId === this.videoCallManager.socketId;
             html += `
                 <div class="user-item ${isCurrentUser ? 'current-user' : ''}">
                     <div class="user-avatar">${participant.name.charAt(0).toUpperCase()}</div>
