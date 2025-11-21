@@ -301,44 +301,31 @@ class UIManager {
             
             if (hasActiveVideo) {
                 // Есть активное видео - показываем карточку
-                // НО: Дополнительная проверка - если videoElement не воспроизводится или пустой, скрываем
+                participantCard.style.setProperty('display', 'block', 'important');
+                participantCard.style.removeProperty('visibility');
+                participantCard.style.removeProperty('opacity');
+                participantCard.style.removeProperty('width');
+                participantCard.style.removeProperty('height');
+                participantCard.style.removeProperty('overflow');
+                participantCard.style.removeProperty('pointer-events');
+                
+                if (overlay) overlay.style.display = 'none';
                 if (videoElement) {
-                    // Проверяем что videoElement действительно воспроизводит видео
-                    const isPlaying = !videoElement.paused && !videoElement.ended && videoElement.readyState > 2;
-                    const hasSrcObject = videoElement.srcObject !== null;
-                    const videoTracksInSrcObject = videoElement.srcObject ? videoElement.srcObject.getVideoTracks() : [];
-                    const hasActiveTracksInSrcObject = videoTracksInSrcObject.some(t => t.enabled && !t.muted && t.readyState === 'live');
-                    
-                    // КРИТИЧНО: Если videoElement не воспроизводится или нет активных треков - скрываем карточку
-                    if (!hasSrcObject || !hasActiveTracksInSrcObject || (!isPlaying && videoElement.readyState === 0)) {
-                        console.log(`❌ [${userId}] Видео элемент не воспроизводится: hasSrcObject=${hasSrcObject}, hasActiveTracks=${hasActiveTracksInSrcObject}, isPlaying=${isPlaying}, readyState=${videoElement.readyState}`);
-                        hasActiveVideo = false; // Переопределяем чтобы попасть в блок скрытия
-                    } else {
-                        // Видео активно - показываем карточку
-                        participantCard.style.setProperty('display', 'block', 'important');
-                        participantCard.style.removeProperty('visibility');
-                        participantCard.style.removeProperty('opacity');
-                        participantCard.style.removeProperty('width');
-                        participantCard.style.removeProperty('height');
-                        participantCard.style.removeProperty('overflow');
-                        participantCard.style.removeProperty('pointer-events');
-                        
-                        if (overlay) overlay.style.display = 'none';
-                        videoElement.style.setProperty('display', 'block', 'important');
-                        if (videoElement.srcObject !== stream) {
-                            videoElement.srcObject = stream;
-                        }
-                        videoElement.play().catch(err => {
-                            if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
-                                console.warn(`⚠️ [updateVideoOverlays ${userId}] Ошибка play:`, err);
-                            }
-                        });
-                        return; // Выходим, не переходим к логике скрытия
+                    videoElement.style.setProperty('display', 'block', 'important');
+                    // ВАЖНО: Устанавливаем srcObject если он еще не установлен или отличается
+                    if (videoElement.srcObject !== stream) {
+                        console.log(`🔄 [updateVideoOverlays ${userId}] Устанавливаем srcObject для videoElement`);
+                        videoElement.srcObject = stream;
                     }
-                } else {
-                    // Нет videoElement - скрываем карточку
-                    hasActiveVideo = false;
+                    // ВАЖНО: Убеждаемся что видео воспроизводится
+                    videoElement.play().catch(err => {
+                        if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
+                            console.warn(`⚠️ [updateVideoOverlays ${userId}] Ошибка play:`, err);
+                        }
+                    });
                 }
+                console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео)`);
+                return; // Выходим, не переходим к логике скрытия
             }
             
             // Если дошли сюда - значит нет активного видео
