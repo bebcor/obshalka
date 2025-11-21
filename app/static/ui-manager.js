@@ -161,15 +161,16 @@ class UIManager {
             // Проверяем наличие активного видео трека (enabled и live)
             // ВАЖНО: проверяем что трек не только есть, но и активен
             // Также проверяем что трек не null (когда replaceTrack(null) был вызван)
-            // ВАЖНО: ИГНОРИРУЕМ muted при первой проверке, если трек enabled и live
-            // Трек может быть временно muted при инициализации, но потом станет unmuted
+            // ВАЖНО: Трек должен быть enabled И readyState === 'live' И НЕ muted
+            // Если трек muted, это значит что камера выключена или трек заменен на null
             const hasActiveVideo = activeVideoTracks.length > 0 && 
                                   activeVideoTracks.some(track => {
                                       if (!track) return false;
-                                      // ВАЖНО: Если трек enabled и live, считаем его активным даже если muted
-                                      // Это нужно потому что трек может быть временно muted при инициализации
+                                      // ВАЖНО: Трек активен ТОЛЬКО если он enabled, live И НЕ muted
+                                      // Если трек muted, это значит что камера выключена
                                       const isActive = track.readyState === 'live' && 
-                                                      track.enabled;
+                                                      track.enabled &&
+                                                      !track.muted;
                                       // Логируем каждый трек для отладки
                                       if (activeVideoTracks.length > 0) {
                                           console.log(`🔍 Проверка видео трека для ${userId}:`, {
@@ -178,7 +179,7 @@ class UIManager {
                                               enabled: track.enabled,
                                               muted: track.muted,
                                               isActive: isActive,
-                                              note: isActive && track.muted ? 'Трек активен, но muted (может быть временно)' : ''
+                                              reason: !isActive ? (track.muted ? 'muted' : !track.enabled ? 'disabled' : track.readyState !== 'live' ? 'not live' : 'unknown') : 'active'
                                           });
                                       }
                                       return isActive;

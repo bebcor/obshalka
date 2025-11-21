@@ -172,6 +172,17 @@ class WebRTCManager {
                     
                     const checkTrackState = () => {
                         if (track.readyState === 'ended') {
+                            console.log(`🗑️ Трек ${track.kind} завершился для ${targetUserId}, удаляем из потока`);
+                            remoteStream.removeTrack(track);
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.checkEmptyState();
+                            return;
+                        }
+                        
+                        // ВАЖНО: Если видео трек muted, это значит камера выключена
+                        // Удаляем трек из потока чтобы карточка скрылась
+                        if (track.kind === 'video' && track.muted && track.readyState === 'live') {
+                            console.log(`🗑️ Видео трек для ${targetUserId} muted (камера выключена), удаляем из потока`);
                             remoteStream.removeTrack(track);
                             this.videoCallManager.uiManager.updateVideoOverlays();
                             this.videoCallManager.checkEmptyState();
@@ -182,6 +193,11 @@ class WebRTCManager {
                         if (track.enabled !== previousEnabled) {
                             console.log(`Трек ${track.kind} enabled изменился для пользователя ${targetUserId}: ${previousEnabled} -> ${track.enabled}`);
                             previousEnabled = track.enabled;
+                            // Если видео трек disabled, удаляем его
+                            if (track.kind === 'video' && !track.enabled) {
+                                console.log(`🗑️ Видео трек для ${targetUserId} disabled, удаляем из потока`);
+                                remoteStream.removeTrack(track);
+                            }
                             this.videoCallManager.uiManager.updateVideoOverlays();
                             this.videoCallManager.checkEmptyState();
                         }
@@ -190,6 +206,11 @@ class WebRTCManager {
                         if (track.muted !== previousMuted) {
                             console.log(`Трек ${track.kind} muted изменился для пользователя ${targetUserId}: ${previousMuted} -> ${track.muted}`);
                             previousMuted = track.muted;
+                            // Если видео трек muted, удаляем его
+                            if (track.kind === 'video' && track.muted) {
+                                console.log(`🗑️ Видео трек для ${targetUserId} стал muted, удаляем из потока`);
+                                remoteStream.removeTrack(track);
+                            }
                             this.videoCallManager.uiManager.updateVideoOverlays();
                             this.videoCallManager.checkEmptyState();
                         }
