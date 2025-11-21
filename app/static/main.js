@@ -802,8 +802,11 @@ class VideoCallManager {
             this.usersManager.addParticipant(this.socketId, this.userName);
         }
         
+        // СОЗДАЕМ peer connections для всех участников
+        // НО если локального потока еще нет - создадим соединения позже, когда поток появится
         data.participants.forEach(participant => {
             if (participant.socket_id !== this.socketId) {
+                // Создаем соединение даже без локального потока - треки добавим позже
                 this.webrtcManager.setupPeerConnection(participant.socket_id);
             }
         });

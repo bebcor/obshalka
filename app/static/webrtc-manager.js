@@ -143,7 +143,19 @@ class WebRTCManager {
                 } else if (iceState === 'disconnected') {
                     console.warn('⚠️ ICE connection disconnected');
                 } else if (iceState === 'failed') {
-                    console.error('❌ ICE connection failed - will trigger renegotiation');
+                    console.error('❌ ICE connection failed - attempting restart');
+                    // Пытаемся перезапустить ICE через renegotiation
+                    setTimeout(() => {
+                        if (this.videoCallManager.remoteUsers.has(targetUserId)) {
+                            const pc = this.videoCallManager.remoteUsers.get(targetUserId);
+                            if (pc.iceConnectionState === 'failed' && pc.signalingState === 'stable') {
+                                console.log('🔄 Attempting ICE restart via renegotiation for', targetUserId);
+                                this.createOffer(targetUserId).catch(err => {
+                                    console.error('Error during ICE restart:', err);
+                                });
+                            }
+                        }
+                    }, 2000);
                 }
             };
         
@@ -179,6 +191,34 @@ class WebRTCManager {
     
         try {
             const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
+            
+            // ЕСЛИ соединение в failed - пересоздаем его
+            if (peerConnection.connectionState === 'failed' || peerConnection.iceConnectionState === 'failed') {
+                console.log('🔄 Connection failed, recreating for:', targetUserId);
+                try {
+                    peerConnection.close();
+                } catch (e) {
+                    console.error('Error closing failed connection:', e);
+                }
+                this.videoCallManager.remoteUsers.delete(targetUserId);
+                // Удаляем удаленный поток если есть
+                if (this.videoCallManager.remoteStreams.has(targetUserId)) {
+                    const stream = this.videoCallManager.remoteStreams.get(targetUserId);
+                    stream.getTracks().forEach(track => track.stop());
+                    this.videoCallManager.remoteStreams.delete(targetUserId);
+                }
+                // Пересоздаем соединение
+                this.setupPeerConnection(targetUserId);
+                // Ждем немного и создаем оффер
+                setTimeout(() => {
+                    if (this.videoCallManager.remoteUsers.has(targetUserId)) {
+                        this.createOffer(targetUserId).catch(err => {
+                            console.error('Error creating offer after recreation:', err);
+                        });
+                    }
+                }, 500);
+                return;
+            }
             
             // Проверяем состояние signaling
             if (peerConnection.signalingState === 'have-local-offer') {
@@ -341,6 +381,20 @@ class WebRTCManager {
         if (!this.videoCallManager.localStream) return;
         
         this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
+            // ЕСЛИ соединение в состоянии failed - пересоздаем его
+            if (peerConnection.connectionState === 'failed' || peerConnection.iceConnectionState === 'failed') {
+                console.log('🔄 Connection failed, recreating for:', userId);
+                try {
+                    peerConnection.close();
+                } catch (e) {
+                    console.error('Error closing failed connection:', e);
+                }
+                this.videoCallManager.remoteUsers.delete(userId);
+                // Пересоздаем соединение с треками
+                this.setupPeerConnection(userId);
+                return;
+            }
+            
             const existingSenders = peerConnection.getSenders();
             const hasVideoSender = existingSenders.some(sender => 
                 sender.track && sender.track.kind === 'video'
@@ -353,7 +407,7 @@ class WebRTCManager {
             
             if (!hasVideoSender) {
                 const videoTrack = this.videoCallManager.localStream.getVideoTracks()[0];
-                if (videoTrack) {
+                if (videoTrack && videoTrack.enabled) {
                     peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
                     tracksAdded = true;
                     console.log('Added video track to existing connection:', userId);
@@ -362,24 +416,27 @@ class WebRTCManager {
             
             if (!hasAudioSender) {
                 const audioTrack = this.videoCallManager.localStream.getAudioTracks()[0];
-                if (audioTrack) {
+                if (audioTrack && audioTrack.enabled) {
                     peerConnection.addTrack(audioTrack, this.videoCallManager.localStream);
                     tracksAdded = true;
                     console.log('Added audio track to existing connection:', userId);
                 }
             }
             
-            // Если треки были добавлены и соединение уже установлено, запускаем renegotiation
-            if (tracksAdded && peerConnection.signalingState === 'stable') {
-                console.log('Tracks added to established connection, triggering renegotiation:', userId);
-                // onnegotiationneeded должен сработать автоматически, но на всякий случай запускаем вручную
+            // Если треки были добавлены, запускаем renegotiation
+            if (tracksAdded) {
+                console.log('Tracks added to existing connection, triggering renegotiation:', userId);
+                // Ждем немного чтобы треки успели добавиться
                 setTimeout(() => {
-                    if (peerConnection.signalingState === 'stable') {
-                        this.createOffer(userId).catch(err => {
-                            console.error('Error creating offer after adding tracks:', err);
-                        });
+                    if (this.videoCallManager.remoteUsers.has(userId)) {
+                        const pc = this.videoCallManager.remoteUsers.get(userId);
+                        if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer') {
+                            this.createOffer(userId).catch(err => {
+                                console.error('Error creating offer after adding tracks:', err);
+                            });
+                        }
                     }
-                }, 100);
+                }, 200);
             }
         });
     }
