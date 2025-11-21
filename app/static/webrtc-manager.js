@@ -67,7 +67,15 @@ class WebRTCManager {
             const checkReceiversForNullTracks = () => {
                 const receivers = peerConnection.getReceivers();
                 const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
-                if (!remoteStream) return;
+                if (!remoteStream) {
+                    console.log(`🔍 [checkReceiversForNullTracks ${targetUserId}] Нет remoteStream`);
+                    return;
+                }
+                
+                console.log(`🔍 [checkReceiversForNullTracks ${targetUserId}] Проверка:`, {
+                    receiversCount: receivers.length,
+                    streamTracksCount: remoteStream.getTracks().length
+                });
                 
                 let hasChanges = false;
                 
@@ -76,6 +84,16 @@ class WebRTCManager {
                 streamTracks.forEach(streamTrack => {
                     // Ищем соответствующий трек в receivers
                     const receiverTrack = receivers.find(r => r.track && r.track.id === streamTrack.id)?.track;
+                    
+                    console.log(`🔍 [checkReceiversForNullTracks ${targetUserId}] Проверка трека ${streamTrack.kind} (${streamTrack.id}):`, {
+                        hasReceiver: !!receiverTrack,
+                        receiverEnabled: receiverTrack?.enabled,
+                        receiverMuted: receiverTrack?.muted,
+                        receiverReadyState: receiverTrack?.readyState,
+                        streamEnabled: streamTrack.enabled,
+                        streamMuted: streamTrack.muted,
+                        streamReadyState: streamTrack.readyState
+                    });
                     
                     // Удаляем трек если:
                     // 1. Его нет в receivers вообще (receiverTrack === null)
@@ -89,17 +107,24 @@ class WebRTCManager {
                                          (!receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live'));
                     
                     if (shouldRemove) {
-                        console.log(`🗑️ Трек ${streamTrack.kind} (${streamTrack.id}) неактивен или отсутствует в receivers для ${targetUserId}, удаляем из потока`, {
+                        console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] УДАЛЯЕМ трек ${streamTrack.kind} (${streamTrack.id}) из потока`, {
                             hasReceiver: !!receiverTrack,
                             receiverEnabled: receiverTrack?.enabled,
                             receiverMuted: receiverTrack?.muted,
                             receiverReadyState: receiverTrack?.readyState,
                             streamEnabled: streamTrack.enabled,
                             streamMuted: streamTrack.muted,
-                            streamReadyState: streamTrack.readyState
+                            streamReadyState: streamTrack.readyState,
+                            reason: !receiverTrack ? 'no receiver' : 
+                                   !receiverTrack.enabled ? 'receiver disabled' :
+                                   receiverTrack.muted ? 'receiver muted' :
+                                   receiverTrack.readyState !== 'live' ? 'receiver not live' :
+                                   'stream active but receiver inactive'
                         });
                         remoteStream.removeTrack(streamTrack);
                         hasChanges = true;
+                    } else {
+                        console.log(`✅ [checkReceiversForNullTracks ${targetUserId}] Трек ${streamTrack.kind} (${streamTrack.id}) активен, оставляем`);
                     }
                 });
                 
@@ -270,15 +295,30 @@ class WebRTCManager {
                         // ВАЖНО: Проверяем, что трек все еще есть в receivers И активен
                         const receivers = peerConnection.getReceivers();
                         const receiverTrack = receivers.find(r => r.track && r.track.id === track.id)?.track;
+                        
+                        console.log(`🔍 [checkTrackState ${targetUserId}] Проверка трека ${track.kind} (${track.id}):`, {
+                            hasReceiver: !!receiverTrack,
+                            receiverEnabled: receiverTrack?.enabled,
+                            receiverMuted: receiverTrack?.muted,
+                            receiverReadyState: receiverTrack?.readyState,
+                            streamTrackEnabled: track.enabled,
+                            streamTrackMuted: track.muted,
+                            streamTrackReadyState: track.readyState
+                        });
+                        
                         if (!receiverTrack || !receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live') {
-                            console.log(`🗑️ Трек ${track.kind} (${track.id}) неактивен или отсутствует в receivers для ${targetUserId}, удаляем из потока`, {
+                            console.log(`🗑️ [checkTrackState ${targetUserId}] УДАЛЯЕМ трек ${track.kind} (${track.id}) из потока`, {
                                 hasReceiver: !!receiverTrack,
                                 enabled: receiverTrack?.enabled,
                                 muted: receiverTrack?.muted,
                                 readyState: receiverTrack?.readyState,
                                 streamTrackEnabled: track.enabled,
                                 streamTrackMuted: track.muted,
-                                streamTrackReadyState: track.readyState
+                                streamTrackReadyState: track.readyState,
+                                reason: !receiverTrack ? 'no receiver' : 
+                                       !receiverTrack.enabled ? 'receiver disabled' :
+                                       receiverTrack.muted ? 'receiver muted' :
+                                       receiverTrack.readyState !== 'live' ? 'receiver not live' : 'unknown'
                             });
                             remoteStream.removeTrack(track);
                             this.videoCallManager.uiManager.updateVideoOverlays();
@@ -290,7 +330,11 @@ class WebRTCManager {
                         // Если трек в receivers неактивен, но трек в remoteStream активен - удаляем его
                         if (track.kind === 'video' && track.enabled && !track.muted && track.readyState === 'live') {
                             if (!receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live') {
-                                console.log(`🔄 Синхронизация: трек в remoteStream активен, но в receivers неактивен для ${targetUserId}, удаляем из потока`);
+                                console.log(`🔄 [checkTrackState ${targetUserId}] Синхронизация: трек в remoteStream активен, но в receivers неактивен, удаляем из потока`, {
+                                    receiverEnabled: receiverTrack.enabled,
+                                    receiverMuted: receiverTrack.muted,
+                                    receiverReadyState: receiverTrack.readyState
+                                });
                                 remoteStream.removeTrack(track);
                                 this.videoCallManager.uiManager.updateVideoOverlays();
                                 this.videoCallManager.checkEmptyState();

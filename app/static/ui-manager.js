@@ -193,6 +193,17 @@ class UIManager {
             let receiverTrackState = null;
             if (peerConnection) {
                 const receivers = peerConnection.getReceivers();
+                console.log(`🔍 [${userId}] Проверка receivers:`, receivers.length, 'receivers');
+                receivers.forEach((receiver, index) => {
+                    const track = receiver.track;
+                    console.log(`🔍 [${userId}] Receiver ${index}:`, {
+                        kind: track?.kind,
+                        id: track?.id,
+                        enabled: track?.enabled,
+                        muted: track?.muted,
+                        readyState: track?.readyState
+                    });
+                });
                 const videoReceiver = receivers.find(r => r.track && r.track.kind === 'video');
                 if (videoReceiver && videoReceiver.track) {
                     receiverTrackState = {
@@ -201,7 +212,12 @@ class UIManager {
                         readyState: videoReceiver.track.readyState,
                         id: videoReceiver.track.id
                     };
+                    console.log(`🔍 [${userId}] receiverTrackState:`, receiverTrackState);
+                } else {
+                    console.log(`🔍 [${userId}] Нет видео receiver или трека`);
                 }
+            } else {
+                console.log(`🔍 [${userId}] Нет peer connection`);
             }
             
             // Проверяем наличие активного видео трека (enabled и live)
