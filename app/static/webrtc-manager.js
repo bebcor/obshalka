@@ -71,28 +71,32 @@ class WebRTCManager {
                 
                 let hasChanges = false;
                 
-                // Собираем все trackId из текущих receivers, которые активны (не null и enabled)
-                const currentActiveTrackIds = new Set();
-                receivers.forEach(receiver => {
-                    const track = receiver.track;
-                    if (track && track.enabled && !track.muted && track.readyState === 'live') {
-                        currentActiveTrackIds.add(track.id);
-                    }
-                });
-                
                 // ВАЖНО: Проверяем все треки в remoteStream - если трека нет в активных receivers, удаляем его
                 const streamTracks = remoteStream.getTracks();
                 streamTracks.forEach(streamTrack => {
-                    // Удаляем трек если:
-                    // 1. Его нет в receivers вообще
-                    // 2. Он есть в receivers, но неактивен (disabled, muted, или не live)
+                    // Ищем соответствующий трек в receivers
                     const receiverTrack = receivers.find(r => r.track && r.track.id === streamTrack.id)?.track;
-                    if (!receiverTrack || !receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live') {
+                    
+                    // Удаляем трек если:
+                    // 1. Его нет в receivers вообще (receiverTrack === null)
+                    // 2. Он есть в receivers, но неактивен (disabled, muted, или не live)
+                    // 3. Трек в remoteStream показывает активное состояние, но в receivers неактивен
+                    const shouldRemove = !receiverTrack || 
+                                        !receiverTrack.enabled || 
+                                        receiverTrack.muted || 
+                                        receiverTrack.readyState !== 'live' ||
+                                        (streamTrack.kind === 'video' && streamTrack.enabled && !streamTrack.muted && streamTrack.readyState === 'live' && 
+                                         (!receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live'));
+                    
+                    if (shouldRemove) {
                         console.log(`🗑️ Трек ${streamTrack.kind} (${streamTrack.id}) неактивен или отсутствует в receivers для ${targetUserId}, удаляем из потока`, {
                             hasReceiver: !!receiverTrack,
-                            enabled: receiverTrack?.enabled,
-                            muted: receiverTrack?.muted,
-                            readyState: receiverTrack?.readyState
+                            receiverEnabled: receiverTrack?.enabled,
+                            receiverMuted: receiverTrack?.muted,
+                            receiverReadyState: receiverTrack?.readyState,
+                            streamEnabled: streamTrack.enabled,
+                            streamMuted: streamTrack.muted,
+                            streamReadyState: streamTrack.readyState
                         });
                         remoteStream.removeTrack(streamTrack);
                         hasChanges = true;
@@ -263,15 +267,35 @@ class WebRTCManager {
                             return;
                         }
                         
-                        // ВАЖНО: Проверяем, что трек все еще есть в receivers
+                        // ВАЖНО: Проверяем, что трек все еще есть в receivers И активен
                         const receivers = peerConnection.getReceivers();
-                        const trackInReceivers = receivers.some(r => r.track && r.track.id === track.id);
-                        if (!trackInReceivers) {
-                            console.log(`🗑️ Трек ${track.kind} (${track.id}) отсутствует в receivers для ${targetUserId}, удаляем из потока`);
+                        const receiverTrack = receivers.find(r => r.track && r.track.id === track.id)?.track;
+                        if (!receiverTrack || !receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live') {
+                            console.log(`🗑️ Трек ${track.kind} (${track.id}) неактивен или отсутствует в receivers для ${targetUserId}, удаляем из потока`, {
+                                hasReceiver: !!receiverTrack,
+                                enabled: receiverTrack?.enabled,
+                                muted: receiverTrack?.muted,
+                                readyState: receiverTrack?.readyState,
+                                streamTrackEnabled: track.enabled,
+                                streamTrackMuted: track.muted,
+                                streamTrackReadyState: track.readyState
+                            });
                             remoteStream.removeTrack(track);
                             this.videoCallManager.uiManager.updateVideoOverlays();
                             this.videoCallManager.checkEmptyState();
                             return;
+                        }
+                        
+                        // ВАЖНО: Синхронизируем состояние трека в remoteStream с состоянием в receivers
+                        // Если трек в receivers неактивен, но трек в remoteStream активен - удаляем его
+                        if (track.kind === 'video' && track.enabled && !track.muted && track.readyState === 'live') {
+                            if (!receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live') {
+                                console.log(`🔄 Синхронизация: трек в remoteStream активен, но в receivers неактивен для ${targetUserId}, удаляем из потока`);
+                                remoteStream.removeTrack(track);
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                                this.videoCallManager.checkEmptyState();
+                                return;
+                            }
                         }
                         
                         // ВАЖНО: Если видео трек disabled ИЛИ muted, это значит камера выключена
