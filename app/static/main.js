@@ -912,7 +912,23 @@ class VideoCallManager {
         }
         
         if (data.user_id !== this.socketId) {
+            // ВАЖНО: Создаем peer connection для нового пользователя
             this.webrtcManager.setupPeerConnection(data.user_id);
+            // ВАЖНО: Если у нас уже есть локальный поток - обновляем треки в новом соединении
+            // Это нужно чтобы новый пользователь получил наши треки
+            if (this.localStream) {
+                console.log('🔄 Новый пользователь присоединился, обновляем треки в соединении...');
+                // Добавляем треки в новое соединение
+                const videoTrack = this.localStream.getVideoTracks()[0];
+                const audioTrack = this.localStream.getAudioTracks()[0];
+                if (videoTrack && videoTrack.enabled) {
+                    this.mediaController.updateVideoTracksInConnections(videoTrack);
+                }
+                if (audioTrack && audioTrack.enabled) {
+                    this.mediaController.updateAudioTracksInConnections();
+                }
+            }
+            // Создаем offer для нового пользователя
             this.webrtcManager.createOffer(data.user_id);
         }
     }

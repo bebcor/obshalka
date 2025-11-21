@@ -692,6 +692,11 @@ class MediaController {
                 try {
                     sender = peerConnection.addTrack(audioTrack, this.videoCallManager.localStream);
                     console.log(`✅ Аудио-отправитель создан для: ${userId}`);
+                    // ВАЖНО: После добавления аудио-трека нужно создать новый offer для переговоров
+                    // Это нужно чтобы удаленная сторона получила новый трек
+                    this.videoCallManager.webrtcManager.createOffer(userId).catch(err => {
+                        console.error(`❌ Ошибка создания offer после добавления аудио трека для ${userId}:`, err);
+                    });
                 } catch (error) {
                     console.error(`❌ Ошибка создания аудио-отправителя: ${error}`);
                 }
