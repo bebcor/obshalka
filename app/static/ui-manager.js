@@ -124,7 +124,10 @@ class UIManager {
         }
         
         // Remote video overlays для всех пользователей
-        this.videoCallManager.remoteStreams.forEach((stream, userId) => {
+        // ВАЖНО: Сначала проверяем все потоки и удаляем карточки без активного видео
+        const streamsToCheck = Array.from(this.videoCallManager.remoteStreams.entries());
+        
+        streamsToCheck.forEach(([userId, stream]) => {
             const videoElement = document.getElementById(`remoteVideo-${userId}`);
             const participantCard = document.getElementById(`participant-${userId}`);
             const overlay = participantCard?.querySelector('.video-overlay');
@@ -251,6 +254,7 @@ class UIManager {
                 console.log(`✅ Удаленная карточка ${userId}: ПОКАЗЫВАЕМ (есть активное видео)`);
             } else {
                 // Если нет активного видео - полностью скрываем карточку
+                // ВАЖНО: Используем все возможные способы скрытия
                 participantCard.style.setProperty('display', 'none', 'important');
                 participantCard.style.setProperty('visibility', 'hidden', 'important');
                 participantCard.style.setProperty('opacity', '0', 'important');
@@ -258,8 +262,16 @@ class UIManager {
                 participantCard.style.setProperty('height', '0', 'important');
                 participantCard.style.setProperty('overflow', 'hidden', 'important');
                 participantCard.style.setProperty('pointer-events', 'none', 'important');
+                participantCard.style.setProperty('margin', '0', 'important');
+                participantCard.style.setProperty('padding', '0', 'important');
+                participantCard.style.setProperty('position', 'absolute', 'important');
+                participantCard.style.setProperty('left', '-9999px', 'important');
+                participantCard.style.setProperty('top', '-9999px', 'important');
+                
                 if (videoElement) {
                     videoElement.style.setProperty('display', 'none', 'important');
+                    videoElement.style.setProperty('visibility', 'hidden', 'important');
+                    videoElement.style.setProperty('opacity', '0', 'important');
                     // ВАЖНО: Очищаем srcObject если нет активного видео, чтобы не показывать черный экран
                     // НЕ очищаем srcObject только если есть активное аудио, чтобы аудио продолжало работать через скрытый элемент
                     if (hasActiveAudio) {
@@ -273,9 +285,31 @@ class UIManager {
                         videoElement.srcObject = null;
                     }
                 }
-                if (overlay) overlay.style.setProperty('display', 'none', 'important');
+                if (overlay) {
+                    overlay.style.setProperty('display', 'none', 'important');
+                    overlay.style.setProperty('visibility', 'hidden', 'important');
+                }
+                
+                // ВАЖНО: Также удаляем карточку из grid, чтобы она не занимала место
                 const computedDisplay = window.getComputedStyle(participantCard).display;
-                console.log(`❌ Удаленная карточка ${userId}: СКРЫВАЕМ (нет активного видео), inline display:`, participantCard.style.display, 'computed:', computedDisplay);
+                const computedVisibility = window.getComputedStyle(participantCard).visibility;
+                console.log(`❌ Удаленная карточка ${userId}: СКРЫВАЕМ (нет активного видео), inline display:`, participantCard.style.display, 'computed display:', computedDisplay, 'computed visibility:', computedVisibility);
+                
+                // Дополнительная проверка: если computed display все еще не 'none', принудительно удаляем из DOM
+                if (computedDisplay !== 'none') {
+                    console.warn(`⚠️ Карточка ${userId} все еще видна (computed display: ${computedDisplay}), принудительно удаляем из DOM`);
+                    const grid = document.getElementById('participantsGrid');
+                    if (grid && participantCard.parentNode === grid) {
+                        participantCard.remove();
+                        // Восстанавливаем карточку в DOM, но скрытую
+                        setTimeout(() => {
+                            if (!document.getElementById(`participant-${userId}`) && grid) {
+                                grid.appendChild(participantCard);
+                                participantCard.style.setProperty('display', 'none', 'important');
+                            }
+                        }, 100);
+                    }
+                }
             }
         });
     }
