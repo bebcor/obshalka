@@ -224,8 +224,7 @@ class RoomManager {
                     user_name: this.videoCallManager.userName
                 });
                 
-                // НЕ вызываем showMediaPrompt здесь - это будет сделано в handleRoomInfo
-                // Пользователь должен дождаться подтверждения от сервера
+                // Медиа теперь включаются автоматически в handleRoomInfo после подтверждения от сервера
             },
             () => {
                 this.videoCallManager.notificationManager.show('Присоединение отменено', 'info');
@@ -233,21 +232,7 @@ class RoomManager {
         );
     }
 
-    showMediaPrompt() {
-        this.videoCallManager.notificationManager.showMediaPrompt(
-            async () => {
-                try {
-                    await this.videoCallManager.mediaController.startVideo();
-                    this.videoCallManager.notificationManager.show('Camera and microphone enabled', 'success');
-                } catch (error) {
-                    this.videoCallManager.notificationManager.show('Не удалось получить доступ к медиа-устройствам. Вы можете включить их позже.', 'warning');
-                }
-            },
-            () => {
-                this.videoCallManager.notificationManager.show('You joined without media. Click the camera/microphone buttons to enable them.', 'info');
-            }
-        );
-    }
+    // Метод showMediaPrompt удален - медиа теперь включаются автоматически в handleRoomInfo
 
     leaveRoom() {
         if (this.videoCallManager.socket && 
