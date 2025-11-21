@@ -238,21 +238,61 @@ class WebRTCManager {
                     let previousMuted = track.muted;
                     
                     track.onmute = () => {
-                        console.log(`Трек ${track.kind} заглушен для пользователя ${targetUserId}`);
-                        previousMuted = true; // Обновляем previousMuted
+                        console.log(`🔇 Track ${track.kind} muted for ${targetUserId}`);
+                        previousMuted = true;
+                        // ВАЖНО: Немедленно удаляем muted видео трек
+                        if (track.kind === 'video' && remoteStream.getTracks().includes(track)) {
+                            remoteStream.removeTrack(track);
+                            console.log(`🗑️ Removed muted video track from stream for ${targetUserId}`);
+                        }
                         this.videoCallManager.uiManager.updateVideoOverlays();
                         this.videoCallManager.checkEmptyState();
                     };
                     
                     track.onunmute = () => {
-                        console.log(`🎉 Трек ${track.kind} включен для пользователя ${targetUserId}, muted: ${track.muted}, enabled: ${track.enabled}`);
-                        previousMuted = false; // Обновляем previousMuted
+                        console.log(`🔊 Track ${track.kind} unmuted for ${targetUserId}`);
+                        previousMuted = false;
+                        // ВАЖНО: Добавляем трек обратно при unmute
+                        if (!remoteStream.getTracks().includes(track)) {
+                            remoteStream.addTrack(track);
+                            console.log(`✅ Added unmuted track back to stream for ${targetUserId}`);
+                        }
                         // ВАЖНО: Обновляем UI с небольшой задержкой, чтобы дать браузеру время обновить состояние трека
                         setTimeout(() => {
                             this.videoCallManager.uiManager.updateVideoOverlays();
                             this.videoCallManager.checkEmptyState();
                         }, 50);
                     };
+                    
+                    // ВАЖНО: Также отслеживаем изменения enabled
+                    const checkEnabled = () => {
+                        if (track.enabled !== previousEnabled) {
+                            console.log(`🔄 Track ${track.kind} enabled changed: ${previousEnabled} -> ${track.enabled} for ${targetUserId}`);
+                            previousEnabled = track.enabled;
+                            
+                            if (!track.enabled) {
+                                // Трек выключен - удаляем из потока
+                                if (remoteStream.getTracks().includes(track)) {
+                                    remoteStream.removeTrack(track);
+                                    console.log(`🗑️ Removed disabled track from stream for ${targetUserId}`);
+                                }
+                            } else {
+                                // Трек включен - добавляем в поток
+                                if (!remoteStream.getTracks().includes(track)) {
+                                    remoteStream.addTrack(track);
+                                    console.log(`✅ Added enabled track back to stream for ${targetUserId}`);
+                                }
+                            }
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.checkEmptyState();
+                        }
+                        
+                        // Продолжаем проверять
+                        if (track.readyState === 'live') {
+                            setTimeout(checkEnabled, 100);
+                        }
+                    };
+                    checkEnabled();
                     
                     // ВАЖНО: Если трек приходит как muted, но enabled - ждем unmute события
                     // Это может произойти при инициализации трека
@@ -525,6 +565,10 @@ class WebRTCManager {
         try {
             const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
             
+            // ВАЖНО: Проверяем состояние соединения перед созданием offer
+            const currentState = peerConnection.signalingState;
+            console.log(`📊 Signaling state before offer for ${targetUserId}:`, currentState);
+            
             // ЕСЛИ соединение в failed - пересоздаем его
             if (peerConnection.connectionState === 'failed' || peerConnection.iceConnectionState === 'failed') {
                 console.log('🔄 Connection failed, recreating for:', targetUserId);
@@ -562,12 +606,37 @@ class WebRTCManager {
                 return;
             }
             
-            // Проверяем состояние signaling
-            // ВАЖНО: Если уже есть локальный offer, но мы добавляем новый трек - нужно дождаться stable
-            // или создать новый offer после того как текущий будет обработан
-            if (peerConnection.signalingState === 'have-local-offer') {
-                console.log('⚠️ Already have local offer, но продолжаем для добавления нового трека...');
-                // НЕ возвращаемся, продолжаем создание offer - это нужно для добавления новых треков
+            // ВАЖНО: Если уже есть локальный offer, ждем его обработки
+            if (currentState === 'have-local-offer') {
+                console.log(`⏳ Already have local offer for ${targetUserId}, waiting...`);
+                // Ждем немного и проверяем снова
+                setTimeout(() => {
+                    if (this.videoCallManager.remoteUsers.has(targetUserId)) {
+                        const newState = this.videoCallManager.remoteUsers.get(targetUserId).signalingState;
+                        if (newState === 'stable') {
+                            console.log(`🔄 Signaling stable, creating new offer for ${targetUserId}`);
+                            this.createOffer(targetUserId).catch(console.error);
+                        }
+                    }
+                }, 1000);
+                return;
+            }
+            
+            // ВАЖНО: Убедимся что все треки добавлены перед созданием offer
+            if (this.videoCallManager.localStream) {
+                const existingSenders = peerConnection.getSenders();
+                const videoTrack = this.videoCallManager.localStream.getVideoTracks()[0];
+                const audioTrack = this.videoCallManager.localStream.getAudioTracks()[0];
+                
+                if (videoTrack && !existingSenders.some(s => s.track?.kind === 'video')) {
+                    console.log(`🎯 Adding missing video track to ${targetUserId} before offer`);
+                    peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
+                }
+                
+                if (audioTrack && !existingSenders.some(s => s.track?.kind === 'audio')) {
+                    console.log(`🎯 Adding missing audio track to ${targetUserId} before offer`);
+                    peerConnection.addTrack(audioTrack, this.videoCallManager.localStream);
+                }
             }
         
             // Используем стандартные опции, но с правильными настройками для медиа
@@ -576,20 +645,22 @@ class WebRTCManager {
                 offerToReceiveVideo: true
             };
             
+            console.log(`📤 Creating offer for ${targetUserId}...`);
             const offer = await peerConnection.createOffer(offerOptions);
         
             // Убеждаемся, что все transceivers правильно настроены
-            peerConnection.getTransceivers().forEach((transceiver) => {
+            peerConnection.getTransceivers().forEach((transceiver, index) => {
                 if (transceiver.sender.track) {
                     // Если есть отправляемый трек, должно быть sendrecv или sendonly
                     if (transceiver.direction === 'inactive' || transceiver.direction === 'recvonly') {
                         transceiver.direction = 'sendrecv';
-                        console.log('Fixed transceiver direction for', transceiver.sender.track.kind);
+                        console.log(`🔄 Fixed transceiver ${index} direction to sendrecv`);
                     }
                 }
             });
         
             await peerConnection.setLocalDescription(offer);
+            console.log(`✅ Local description set for ${targetUserId}`);
         
             console.log('📤 Sending offer to:', targetUserId);
             console.log('SDP offer direction check:');
@@ -605,6 +676,7 @@ class WebRTCManager {
                 target_user_id: targetUserId,
                 offer: offer
             });
+            console.log(`📤 Offer sent to ${targetUserId}`);
         
         } catch (error) {
             console.error('Error creating offer:', error);
