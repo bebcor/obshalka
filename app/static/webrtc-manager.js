@@ -120,28 +120,11 @@ class WebRTCManager {
                         this.videoCallManager.checkEmptyState();
                     };
                     
-                    // ВАЖНО: Добавляем обработчик для изменения enabled состояния
-                    // Это нужно для отслеживания когда трек выключается через enabled = false
+                    // ВАЖНО: Отслеживаем изменения enabled и muted состояния трека
+                    // Это нужно для отслеживания когда трек выключается через enabled = false или muted = true
                     let previousEnabled = track.enabled;
-                    const checkEnabled = () => {
-                        if (track.enabled !== previousEnabled) {
-                            console.log(`Трек ${track.kind} enabled изменился для пользователя ${targetUserId}: ${previousEnabled} -> ${track.enabled}`);
-                            previousEnabled = track.enabled;
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                            this.videoCallManager.checkEmptyState();
-                        }
-                    };
+                    let previousMuted = track.muted;
                     
-                    // Проверяем изменение enabled каждые 100мс
-                    const enabledCheckInterval = setInterval(() => {
-                        if (!remoteStream.getTracks().includes(track)) {
-                            clearInterval(enabledCheckInterval);
-                            return;
-                        }
-                        checkEnabled();
-                    }, 100);
-                    
-                    // Периодически проверяем состояние трека (на случай если события не сработали)
                     const checkTrackState = () => {
                         if (track.readyState === 'ended') {
                             remoteStream.removeTrack(track);
@@ -149,12 +132,29 @@ class WebRTCManager {
                             this.videoCallManager.checkEmptyState();
                             return;
                         }
-                        // Проверяем состояние каждые 500мс
+                        
+                        // Проверяем изменения enabled
+                        if (track.enabled !== previousEnabled) {
+                            console.log(`Трек ${track.kind} enabled изменился для пользователя ${targetUserId}: ${previousEnabled} -> ${track.enabled}`);
+                            previousEnabled = track.enabled;
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.checkEmptyState();
+                        }
+                        
+                        // Проверяем изменения muted
+                        if (track.muted !== previousMuted) {
+                            console.log(`Трек ${track.kind} muted изменился для пользователя ${targetUserId}: ${previousMuted} -> ${track.muted}`);
+                            previousMuted = track.muted;
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.checkEmptyState();
+                        }
+                        
+                        // Проверяем состояние каждые 200мс для более быстрой реакции
                         setTimeout(() => {
                             if (remoteStream.getTracks().includes(track)) {
                                 checkTrackState();
                             }
-                        }, 500);
+                        }, 200);
                     };
                     checkTrackState();
                     
