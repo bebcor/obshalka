@@ -75,7 +75,8 @@ class ChatManager {
             return;
         }
         
-        if (!this.videoCallManager.roomId) {
+        // ПРОВЕРЯЕМ что пользователь действительно присоединился к комнате
+        if (!this.videoCallManager.roomId || !this.videoCallManager.isInCall) {
             this.videoCallManager.notificationManager.show('Вы не в комнате', 'warning');
             return;
         }

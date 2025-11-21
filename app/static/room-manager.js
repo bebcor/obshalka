@@ -179,16 +179,14 @@ class RoomManager {
             (userName) => {
                 this.videoCallManager.userName = userName;
                 
+                // НЕ устанавливаем isInCall здесь - это будет сделано в handleRoomInfo после подтверждения сервера
                 this.videoCallManager.socket.emit('join_room', {
                     room_id: this.videoCallManager.roomId,
                     user_name: this.videoCallManager.userName
                 });
                 
-                this.videoCallManager.isInCall = true;
-                this.videoCallManager.uiManager.updateUI();
-                this.videoCallManager.notificationManager.show(`Joined room ${this.videoCallManager.roomId} as ${this.videoCallManager.userName}`, 'success');
-                
-                this.showMediaPrompt();
+                // НЕ вызываем showMediaPrompt здесь - это будет сделано в handleRoomInfo
+                // Пользователь должен дождаться подтверждения от сервера
             },
             () => {
                 this.videoCallManager.notificationManager.show('Join cancelled', 'info');

@@ -785,6 +785,7 @@ class VideoCallManager {
 
     handleRoomInfo(data) {
         console.log('Room info received:', data);
+        // УСТАНАВЛИВАЕМ isInCall ТОЛЬКО ПОСЛЕ ПОДТВЕРЖДЕНИЯ ОТ СЕРВЕРА
         this.isInCall = true;
         
         document.getElementById('roomIdDisplay').textContent = this.roomId;
@@ -806,6 +807,12 @@ class VideoCallManager {
         });
         
         this.uiManager.updateUI();
+        
+        // ПОКАЗЫВАЕМ уведомление о присоединении
+        this.notificationManager.show(`Присоединились к комнате ${this.roomId} как ${this.userName}`, 'success');
+        
+        // ПОКАЗЫВАЕМ медиа-промпт ПОСЛЕ присоединения к комнате
+        this.roomManager.showMediaPrompt();
     }
 
     handleUserJoined(data) {
