@@ -66,7 +66,7 @@ class SocketHandler {
                 console.error('Server error:', data.message);
                 // Безопасный вывод сообщения об ошибке (notificationManager.show использует textContent)
                 const errorMessage = data.message || 'Unknown error';
-                this.videoCallManager.notificationManager.show('Error: ' + errorMessage, 'error');
+                this.videoCallManager.notificationManager.show('Ошибка: ' + errorMessage, 'error');
             });
             
         } catch (error) {

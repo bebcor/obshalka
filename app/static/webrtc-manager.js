@@ -114,13 +114,13 @@ class WebRTCManager {
                 console.log('Connection state with', targetUserId, ':', state);
             
                 if (state === 'connected') {
-                    this.videoCallManager.notificationManager.show('Call connected', 'success');
+                    this.videoCallManager.notificationManager.show('Звонок подключен', 'success');
                     console.log('✅ WebRTC connection established!');
                 } else if (state === 'disconnected') {
-                    this.videoCallManager.notificationManager.show('Call disconnected', 'warning');
+                    this.videoCallManager.notificationManager.show('Звонок отключен', 'warning');
                 } else if (state === 'failed') {
                     console.error('❌ Connection failed - attempting ICE restart...');
-                    this.videoCallManager.notificationManager.show('Connection issues detected', 'warning');
+                    this.videoCallManager.notificationManager.show('Обнаружены проблемы с соединением', 'warning');
                 
                     // Пытаемся перезапустить ICE через 3 секунды
                     setTimeout(() => {
@@ -179,7 +179,7 @@ class WebRTCManager {
         
         } catch (error) {
             console.error('❌ Error setting up peer connection:', error);
-            this.videoCallManager.notificationManager.show('Failed to setup connection: ' + error.message, 'error');
+            this.videoCallManager.notificationManager.show('Не удалось установить соединение: ' + error.message, 'error');
         }
     }
 

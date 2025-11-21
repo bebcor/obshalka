@@ -85,8 +85,11 @@ class ChatManager {
         this.videoCallManager.socket.emit('chat_message', {
             room_id: this.videoCallManager.roomId,
             message: message,
-            user_name: this.videoCallManager.userName || 'Anonymous'
+            user_name: this.videoCallManager.userName || 'Анонимный'
         });
+        
+        // Показываем уведомление о отправке сообщения
+        this.videoCallManager.notificationManager.show('Сообщение отправлено', 'success');
         
         chatInput.value = '';
     }

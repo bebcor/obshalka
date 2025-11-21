@@ -189,7 +189,7 @@ class RoomManager {
                 isConnected: this.videoCallManager.isConnected,
                 socketConnected: this.videoCallManager.socket?.connected
             });
-            this.videoCallManager.notificationManager.show('Not connected to server. Please try again.', 'error');
+            this.videoCallManager.notificationManager.show('Не подключено к серверу. Попробуйте еще раз.', 'error');
             // Пробуем подождать и повторить
             setTimeout(() => {
                 if (this.videoCallManager.isConnected) {
@@ -200,7 +200,7 @@ class RoomManager {
         }
         
         if (!this.videoCallManager.roomId) {
-            this.videoCallManager.notificationManager.show('No room ID specified', 'error');
+            this.videoCallManager.notificationManager.show('ID комнаты не указан', 'error');
             return;
         }
         
@@ -224,7 +224,7 @@ class RoomManager {
                 // Пользователь должен дождаться подтверждения от сервера
             },
             () => {
-                this.videoCallManager.notificationManager.show('Join cancelled', 'info');
+                this.videoCallManager.notificationManager.show('Присоединение отменено', 'info');
             }
         );
     }
@@ -236,7 +236,7 @@ class RoomManager {
                     await this.videoCallManager.mediaController.startVideo();
                     this.videoCallManager.notificationManager.show('Camera and microphone enabled', 'success');
                 } catch (error) {
-                    this.videoCallManager.notificationManager.show('Could not access media devices. You can enable them later.', 'warning');
+                    this.videoCallManager.notificationManager.show('Не удалось получить доступ к медиа-устройствам. Вы можете включить их позже.', 'warning');
                 }
             },
             () => {

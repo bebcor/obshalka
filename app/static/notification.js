@@ -173,12 +173,12 @@ class NotificationManager {
         modal.innerHTML = `
             <div class="modal-overlay">
                 <div class="modal-content">
-                    <h3>Join Video Call</h3>
-                    <p>Enter your name to join the room</p>
-                    <input type="text" id="userNameInput" placeholder="Your name" maxlength="20" value="User${Math.floor(Math.random() * 1000)}">
+                    <h3>Присоединиться к видеозвонку</h3>
+                    <p>Введите ваше имя для присоединения к комнате</p>
+                    <input type="text" id="userNameInput" placeholder="Ваше имя" maxlength="20" value="Пользователь${Math.floor(Math.random() * 1000)}">
                     <div class="modal-buttons">
-                        <button id="cancelJoin" class="btn btn-secondary">Cancel</button>
-                        <button id="confirmJoin" class="btn btn-primary">Join Room</button>
+                        <button id="cancelJoin" class="btn btn-secondary">Отмена</button>
+                        <button id="confirmJoin" class="btn btn-primary">Присоединиться</button>
                     </div>
                 </div>
             </div>
@@ -233,18 +233,18 @@ class NotificationManager {
         mediaPrompt.innerHTML = `
             <div class="modal-overlay">
                 <div class="modal-content">
-                    <h3>Enable Camera & Microphone?</h3>
-                    <p>You can enable your camera and microphone now or later during the call</p>
+                    <h3>Включить камеру и микрофон?</h3>
+                    <p>Вы можете включить камеру и микрофон сейчас или позже во время звонка</p>
                     <div class="media-options">
                         <button id="enableMedia" class="btn btn-primary">
                             <span>🎤📹</span>
-                            Enable Both
+                            Включить оба
                         </button>
                         <button id="joinWithoutMedia" class="btn btn-secondary">
-                            Join Without Media
+                            Присоединиться без медиа
                         </button>
                     </div>
-                    <p class="note">You can always enable camera and microphone using the controls below</p>
+                    <p class="note">Вы всегда можете включить камеру и микрофон используя кнопки управления ниже</p>
                 </div>
             </div>
         `;

@@ -136,11 +136,11 @@ class MediaController {
         } catch (error) {
             console.error('Error accessing media devices:', error);
             if (error.name === 'NotAllowedError') {
-                this.videoCallManager.notificationManager.show('Camera/microphone access was denied. You can enable them later.', 'warning');
+                this.videoCallManager.notificationManager.show('Доступ к камере/микрофону запрещен. Вы можете включить их позже.', 'warning');
             } else if (error.name === 'NotFoundError') {
-                this.videoCallManager.notificationManager.show('No camera or microphone found. You can still join the call.', 'warning');
+                this.videoCallManager.notificationManager.show('Камера или микрофон не найдены. Вы все еще можете присоединиться к звонку.', 'warning');
             } else {
-                this.videoCallManager.notificationManager.show('Could not access camera/microphone: ' + error.message, 'error');
+                this.videoCallManager.notificationManager.show('Не удалось получить доступ к камере/микрофону: ' + error.message, 'error');
             }
             throw error;
         }
@@ -197,7 +197,7 @@ class MediaController {
             try {
                 await this.startVideo();
             } catch (error) {
-                this.videoCallManager.notificationManager.show('Cannot enable camera without media access', 'error');
+                this.videoCallManager.notificationManager.show('Не удалось включить камеру без доступа к медиа', 'error');
                 return;
             }
         }
@@ -676,7 +676,7 @@ class MediaController {
             }
         
             container.classList.add('fullscreen-mode');
-            this.videoCallManager.notificationManager.show('Fullscreen mode enabled', 'info');
+            this.videoCallManager.notificationManager.show('Полноэкранный режим включен', 'info');
         } else {
             // Выход из полноэкранного режима
             if (document.exitFullscreen) {
@@ -688,7 +688,7 @@ class MediaController {
             }
         
             container.classList.remove('fullscreen-mode');
-            this.videoCallManager.notificationManager.show('Fullscreen mode disabled', 'info');
+            this.videoCallManager.notificationManager.show('Полноэкранный режим выключен', 'info');
         }
     }
 }

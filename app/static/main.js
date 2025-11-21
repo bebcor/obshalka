@@ -101,7 +101,7 @@ class VideoCallManager {
                 console.log('Disconnected from server');
                 this.cleanupCall();
                 this.uiManager.updateUI();
-                this.notificationManager.show('Connection lost', 'error');
+                this.notificationManager.show('Соединение потеряно', 'error');
             });
             
             this.socket.on('connection_established', (data) => {
@@ -138,7 +138,7 @@ class VideoCallManager {
             
             this.socket.on('error', (data) => {
                 console.error('Server error:', data.message);
-                this.notificationManager.show('Error: ' + data.message, 'error');
+                this.notificationManager.show('Ошибка: ' + data.message, 'error');
             });
             
         } catch (error) {
@@ -811,7 +811,7 @@ class VideoCallManager {
         console.log('User joined:', data);
         document.getElementById('participantsCount').textContent = data.participants_count;
         
-        this.notificationManager.show(`${data.user_name || 'User'} joined the room`, 'info');
+        this.notificationManager.show(`${data.user_name || 'Пользователь'} присоединился к комнате`, 'info');
         
         // Обновляем список пользователей (не добавляем себя)
         if (data.user_id !== this.socketId) {
@@ -828,7 +828,7 @@ class VideoCallManager {
         console.log('User left:', data);
         document.getElementById('participantsCount').textContent = data.participants_count;
         
-        this.notificationManager.show(`${data.user_name || 'User'} left the room`, 'info');
+        this.notificationManager.show(`${data.user_name || 'Пользователь'} покинул комнату`, 'info');
         
         // Удаляем из списка пользователей
         this.usersManager.removeParticipant(data.user_id);
@@ -874,7 +874,18 @@ class VideoCallManager {
 
     handleChatMessage(data) {
         const isOwn = data.user_id === this.socketId;
-        this.chatManager.addMessage(data.user_name, data.message, isOwn, data.timestamp);
+        
+        // Показываем уведомление только если это не наше сообщение и чат закрыт
+        if (!isOwn && !this.chatManager.isOpen) {
+            this.notificationManager.show(`Новое сообщение от ${data.user_name || 'Пользователя'}`, 'info');
+        }
+        
+        this.chatManager.addMessage(
+            data.user_name || 'Анонимный',
+            data.message,
+            isOwn,
+            data.timestamp
+        );
     }
 
     cleanupCall() {
