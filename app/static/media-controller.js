@@ -206,6 +206,27 @@ class MediaController {
             // ЕСЛИ выключаем камеру - удаляем видео-трек из соединений
             if (!enabled) {
                 await this.updateVideoTracksInConnections(null);
+                // КРИТИЧНО: Сразу скрываем все удаленные карточки для всех участников
+                // Проходим по всем удаленным участникам и скрываем их карточки
+                this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
+                    const videoElement = document.getElementById(`remoteVideo-${userId}`);
+                    const participantCard = document.getElementById(`participant-${userId}`);
+                    if (videoElement && participantCard) {
+                        // Очищаем srcObject и скрываем карточку
+                        videoElement.pause();
+                        videoElement.srcObject = null;
+                        try {
+                            videoElement.load();
+                        } catch (e) {}
+                        participantCard.style.setProperty('display', 'none', 'important');
+                        participantCard.style.setProperty('visibility', 'hidden', 'important');
+                        participantCard.style.setProperty('opacity', '0', 'important');
+                        participantCard.style.setProperty('width', '0', 'important');
+                        participantCard.style.setProperty('height', '0', 'important');
+                        participantCard.style.setProperty('overflow', 'hidden', 'important');
+                        participantCard.style.setProperty('pointer-events', 'none', 'important');
+                    }
+                });
                 // Принудительно обновляем UI после небольшой задержки, чтобы изменения применились
                 setTimeout(() => {
                     this.videoCallManager.uiManager.updateVideoOverlays();
