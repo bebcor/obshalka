@@ -22,35 +22,28 @@ class VideoCallManager {
         this.previousStream = null; // Для восстановления после демонстрации экрана
         this.hasVideoTrack = false;
         
-        // Конфигурация ICE серверов (ТОЧНАЯ КОПИЯ ОРИГИНАЛА)
+        // Конфигурация ICE серверов (УПРОЩЕННАЯ - только рабочие серверы)
         this.configuration = {
             iceServers: [
-                // Ваш собственный STUN сервер
+                // Ваш STUN сервер
                 {
                     urls: 'stun:109.73.201.242:3478'
                 },
-                // Ваш собственный TURN сервер (UDP)
+                // Ваш TURN сервер (UDP)
                 {
                     urls: 'turn:109.73.201.242:3478',
                     username: 'webrtc',
                     credential: 'webrtcpassword'
                 },
-                // Ваш собственный TURN сервер (TCP)
+                // Ваш TURN сервер (TCP)
                 {
                     urls: 'turn:109.73.201.242:3478?transport=tcp',
                     username: 'webrtc',
                     credential: 'webrtcpassword'
-                },
-                // Резервные публичные серверы (на случай проблем с вашим)
-                {
-                    urls: 'stun:stun.l.google.com:19302'
-                },
-                {
-                    urls: 'stun:global.stun.twilio.com:3478'
                 }
             ],
             iceTransportPolicy: 'all',
-            iceCandidatePoolSize: 10
+            iceCandidatePoolSize: 5
         };
         
         // Инициализируем модули
