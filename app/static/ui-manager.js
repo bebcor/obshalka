@@ -266,15 +266,33 @@ class UIManager {
                 console.log(`🔍 [${userId}] Видео треков в remoteStream:`, activeVideoTracks.length);
             }
             
-            // ВАЖНО: Получаем актуальные треки из потока
+            // ВАЖНО: Получаем актуальные треки из потока после очистки
             // Проверяем наличие АКТИВНОГО видео (enabled, live, не muted)
-            const hasActiveVideo = activeVideoTracks.length > 0 && 
-                                  activeVideoTracks.some(track => 
-                                      track && 
-                                      track.readyState === 'live' && 
-                                      track.enabled && 
-                                      !track.muted
-                                  );
+            // ВАЖНО: Проверяем также в receivers - если там нет активного видео трека, значит видео выключено
+            let hasActiveVideo = false;
+            if (peerConnection) {
+                const receivers = peerConnection.getReceivers();
+                // Проверяем есть ли активный видео трек в receivers
+                hasActiveVideo = receivers.some(receiver => {
+                    const track = receiver.track;
+                    return track && 
+                           track.kind === 'video' && 
+                           track.readyState === 'live' && 
+                           track.enabled && 
+                           !track.muted;
+                });
+            }
+            
+            // Также проверяем в потоке на всякий случай
+            if (!hasActiveVideo) {
+                hasActiveVideo = activeVideoTracks.length > 0 && 
+                                activeVideoTracks.some(track => 
+                                    track && 
+                                    track.readyState === 'live' && 
+                                    track.enabled && 
+                                    !track.muted
+                                );
+            }
             
             // ВАЖНО: Проверяем наличие активного аудио
             const hasActiveAudio = activeAudioTracks.length > 0 && 
@@ -321,15 +339,19 @@ class UIManager {
                 console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео), display:`, window.getComputedStyle(participantCard).display);
             } else {
                 // Нет активного видео - скрываем карточку
-                // ВАЖНО: Удаляем все неактивные видео треки из потока
-                const inactiveVideoTracks = activeVideoTracks.filter(track => 
-                    !track || track.readyState !== 'live' || !track.enabled || track.muted
-                );
-                inactiveVideoTracks.forEach(track => {
-                    console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем неактивный видео трек из потока:`, track.id);
+                // ВАЖНО: Удаляем ВСЕ видео треки из потока (они неактивны)
+                const allVideoTracks = stream.getVideoTracks();
+                allVideoTracks.forEach(track => {
+                    console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек из потока (нет активного видео):`, {
+                        id: track.id,
+                        enabled: track.enabled,
+                        muted: track.muted,
+                        readyState: track.readyState
+                    });
                     stream.removeTrack(track);
                 });
                 
+                // ВАЖНО: Скрываем карточку полностью
                 participantCard.style.setProperty('display', 'none', 'important');
                 participantCard.style.setProperty('visibility', 'hidden', 'important');
                 participantCard.style.setProperty('opacity', '0', 'important');
@@ -340,10 +362,12 @@ class UIManager {
                 
                 if (videoElement) {
                     videoElement.style.setProperty('display', 'none', 'important');
-                    // ВАЖНО: Всегда очищаем srcObject когда нет активного видео (независимо от аудио)
-                    // Это предотвращает показ черного экрана
-                    console.log(`🔄 [updateVideoOverlays ${userId}] Очищаем srcObject (нет активного видео)`);
-                    videoElement.srcObject = null;
+                    // ВАЖНО: ВСЕГДА очищаем srcObject когда нет активного видео
+                    // Это критично для предотвращения показа черного экрана
+                    if (videoElement.srcObject) {
+                        console.log(`🔄 [updateVideoOverlays ${userId}] Очищаем srcObject (нет активного видео)`);
+                        videoElement.srcObject = null;
+                    }
                     videoElement.pause();
                 }
                 if (overlay) overlay.style.display = 'none';
