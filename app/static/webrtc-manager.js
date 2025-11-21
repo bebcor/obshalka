@@ -470,21 +470,29 @@ class WebRTCManager {
                 }
             
             // ВАЖНО: НЕ управляем видимостью карточки здесь - это делает updateVideoOverlays()
-            // Просто устанавливаем srcObject если есть активное видео
+            // Просто устанавливаем srcObject если есть видео треки в потоке
+            // Треки могут быть временно muted, но они все равно должны быть в srcObject
             const videoTracks = remoteStream.getVideoTracks();
-            const hasActiveVideo = videoTracks.length > 0 && 
-                                  videoTracks.some(t => t && t.readyState === 'live' && t.enabled && !t.muted);
+            const hasVideoTracks = videoTracks.length > 0 && 
+                                  videoTracks.some(t => t && t.readyState === 'live');
             
             if (videoElement) {
-                if (hasActiveVideo) {
-                    // Если есть активное видео - устанавливаем srcObject
+                if (hasVideoTracks) {
+                    // Если есть видео треки (даже если временно muted) - устанавливаем srcObject
                     if (videoElement.srcObject !== remoteStream) {
+                        console.log(`🔄 [ontrack ${targetUserId}] Устанавливаем srcObject, video tracks:`, videoTracks.map(t => `${t.id}:enabled=${t.enabled}:muted=${t.muted}`));
                         videoElement.srcObject = remoteStream;
+                        // Пробуем воспроизвести видео
+                        videoElement.play().catch(err => {
+                            console.warn(`⚠️ [ontrack ${targetUserId}] Ошибка play:`, err);
+                        });
                     }
                 } else {
-                    // Если нет активного видео - НЕ устанавливаем srcObject
+                    // Если нет видео треков - НЕ устанавливаем srcObject
                     // Но НЕ скрываем карточку здесь - это делает updateVideoOverlays()
-                    videoElement.srcObject = null;
+                    if (videoElement.srcObject === remoteStream) {
+                        videoElement.srcObject = null;
+                    }
                 }
             }
         

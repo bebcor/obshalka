@@ -269,9 +269,18 @@ class UIManager {
             
             if (hasActiveVideo) {
                 // Есть активное видео - показываем карточку
+                // ВАЖНО: Используем setProperty с important чтобы перезаписать скрытие при создании
+                participantCard.style.setProperty('display', 'block', 'important');
+                participantCard.style.removeProperty('visibility');
+                participantCard.style.removeProperty('opacity');
+                participantCard.style.removeProperty('width');
+                participantCard.style.removeProperty('height');
+                participantCard.style.removeProperty('overflow');
+                participantCard.style.removeProperty('pointer-events');
+                
                 if (overlay) overlay.style.display = 'none';
                 if (videoElement) {
-                    videoElement.style.display = 'block';
+                    videoElement.style.setProperty('display', 'block', 'important');
                     // ВАЖНО: Всегда обновляем srcObject при показе
                     if (videoElement.srcObject !== stream) {
                         console.log(`🔄 [updateVideoOverlays ${userId}] Обновляем srcObject для videoElement, stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}`));
@@ -288,13 +297,12 @@ class UIManager {
                         }, 100);
                     });
                 }
-                participantCard.style.display = 'block';
                 console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео), display:`, window.getComputedStyle(participantCard).display);
             } else {
                 // Нет активного видео - скрываем карточку
-                participantCard.style.display = 'none';
+                participantCard.style.setProperty('display', 'none', 'important');
                 if (videoElement) {
-                    videoElement.style.display = 'none';
+                    videoElement.style.setProperty('display', 'none', 'important');
                     // ВАЖНО: Очищаем srcObject только если нет аудио
                     if (!hasActiveAudio) {
                         console.log(`🔄 [updateVideoOverlays ${userId}] Очищаем srcObject (нет активного видео и аудио)`);
