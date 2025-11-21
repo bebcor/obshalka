@@ -244,7 +244,8 @@ class UIManager {
                                       !track.muted
                                   );
             
-            console.log(`🔍 [${userId}] Проверка: video=${hasActiveVideo}, audio=${hasActiveAudio}, tracks=${activeVideoTracks.length}v/${activeAudioTracks.length}a`);
+            console.log(`🔍 [updateVideoOverlays ${userId}] Проверка: video=${hasActiveVideo}, audio=${hasActiveAudio}, tracks=${activeVideoTracks.length}v/${activeAudioTracks.length}a`);
+            console.log(`🔍 [updateVideoOverlays ${userId}] Stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
             
             if (hasActiveVideo) {
                 // Есть активное видео - показываем карточку
@@ -253,12 +254,13 @@ class UIManager {
                     videoElement.style.display = 'block';
                     // ВАЖНО: Всегда обновляем srcObject при показе
                     if (videoElement.srcObject !== stream) {
+                        console.log(`🔄 [updateVideoOverlays ${userId}] Обновляем srcObject для videoElement`);
                         videoElement.srcObject = stream;
                     }
-                    videoElement.play().catch(console.warn);
+                    videoElement.play().catch(err => console.warn(`⚠️ [updateVideoOverlays ${userId}] Ошибка play:`, err));
                 }
                 participantCard.style.display = 'block';
-                console.log(`✅ Удаленная карточка ${userId}: ПОКАЗЫВАЕМ (есть активное видео)`);
+                console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео)`);
             } else {
                 // Нет активного видео - скрываем карточку
                 participantCard.style.display = 'none';
@@ -266,12 +268,13 @@ class UIManager {
                     videoElement.style.display = 'none';
                     // ВАЖНО: Очищаем srcObject только если нет аудио
                     if (!hasActiveAudio) {
+                        console.log(`🔄 [updateVideoOverlays ${userId}] Очищаем srcObject (нет активного видео и аудио)`);
                         videoElement.srcObject = null;
                         videoElement.pause();
                     }
                 }
                 if (overlay) overlay.style.display = 'none';
-                console.log(`❌ Удаленная карточка ${userId}: СКРЫВАЕМ (нет активного видео)`);
+                console.log(`❌ [updateVideoOverlays ${userId}] Удаленная карточка: СКРЫВАЕМ (нет активного видео)`);
             }
         });
     }

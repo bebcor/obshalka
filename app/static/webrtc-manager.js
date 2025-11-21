@@ -95,16 +95,15 @@ class WebRTCManager {
                         streamReadyState: streamTrack.readyState
                     });
                     
-                    // Удаляем трек если:
-                    // 1. Его нет в receivers вообще (receiverTrack === null)
-                    // 2. Он есть в receivers, но неактивен (disabled, muted, или не live)
-                    // 3. Трек в remoteStream показывает активное состояние, но в receivers неактивен
-                    const shouldRemove = !receiverTrack || 
+                    // ВАЖНО: Для видео треков удаляем ТОЛЬКО если:
+                    // 1. Трек есть в receivers, но неактивен (disabled, muted, или не live)
+                    // 2. Трек в remoteStream показывает активное состояние, но в receivers неактивен
+                    // НЕ удаляем если receiverTrack === null - это может быть временное состояние при инициализации
+                    const shouldRemove = streamTrack.kind === 'video' && receiverTrack && (
                                         !receiverTrack.enabled || 
                                         receiverTrack.muted || 
-                                        receiverTrack.readyState !== 'live' ||
-                                        (streamTrack.kind === 'video' && streamTrack.enabled && !streamTrack.muted && streamTrack.readyState === 'live' && 
-                                         (!receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live'));
+                                        receiverTrack.readyState !== 'live'
+                                    );
                     
                     if (shouldRemove) {
                         console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] УДАЛЯЕМ трек ${streamTrack.kind} (${streamTrack.id}) из потока`, {
@@ -128,20 +127,26 @@ class WebRTCManager {
                     }
                 });
                 
-                // Также проверяем, что receivers с null track не имеют соответствующих треков в потоке
+                // ВАЖНО: Также проверяем, что receivers с null track не имеют соответствующих треков в потоке
+                // Это критично для обработки replaceTrack(null)
                 receivers.forEach((receiver, index) => {
                     const currentTrack = receiver.track;
                     const previousTrackId = previousReceiverTracks.get(index);
                     
-                    // Если трек был, но стал null - удаляем его из потока
+                    // ВАЖНО: Если трек БЫЛ (previousTrackId существует), но стал null - это означает replaceTrack(null) был вызван
+                    // Немедленно удаляем соответствующий видео трек из потока
                     if (previousTrackId && !currentTrack) {
-                        console.log(`🗑️ Receiver ${index} трек заменен на null для ${targetUserId}, ищем и удаляем из потока`);
-                        const tracksToRemove = remoteStream.getTracks().filter(t => t.id === previousTrackId);
-                        tracksToRemove.forEach(track => {
-                            console.log(`🗑️ Удаляем трек ${track.kind} (${track.id}) из потока`);
-                            remoteStream.removeTrack(track);
-                            hasChanges = true;
-                        });
+                        console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] Receiver ${index} трек ${previousTrackId} заменен на null (replaceTrack(null)), удаляем из потока`);
+                        const tracksToRemove = remoteStream.getTracks().filter(t => t.id === previousTrackId && t.kind === 'video');
+                        if (tracksToRemove.length > 0) {
+                            tracksToRemove.forEach(track => {
+                                console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] Удаляем видео трек ${track.id} из потока (replaceTrack(null))`);
+                                remoteStream.removeTrack(track);
+                                hasChanges = true;
+                            });
+                        } else {
+                            console.log(`⚠️ [checkReceiversForNullTracks ${targetUserId}] Трек ${previousTrackId} был заменен на null, но его нет в remoteStream`);
+                        }
                     }
                     
                     // Обновляем предыдущее состояние (сохраняем trackId, а не сам трек)
@@ -167,10 +172,12 @@ class WebRTCManager {
             
             // Обработчик получения удаленных треков
             peerConnection.ontrack = (event) => {
-                console.log('Remote track received from:', targetUserId, 
+                console.log('🎥 [ontrack] Remote track received from:', targetUserId, 
                             'Track kind:', event.track.kind, 
+                            'Track id:', event.track.id,
                             'Track readyState:', event.track.readyState,
                             'Track enabled:', event.track.enabled,
+                            'Track muted:', event.track.muted,
                             'Streams count:', event.streams.length);
             
                 // Создаем или получаем удаленный поток для этого пользователя
@@ -213,7 +220,8 @@ class WebRTCManager {
                         // НО: добавляем обработчики чтобы отследить когда он станет активным
                     } else {
                         remoteStream.addTrack(track);
-                        console.log('✅ Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
+                        console.log('✅ [ontrack] Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
+                        console.log('✅ [ontrack] RemoteStream now has', remoteStream.getTracks().length, 'tracks:', remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
                     }
                     
                     // ВАЖНО: Всегда добавляем обработчики ДАЖЕ для неактивных треков
