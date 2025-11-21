@@ -15,7 +15,7 @@
     <div class="welcome-screen" id="welcomeScreen">
         <div class="welcome-content">
             <div class="brand-logo-large">
-                <div class="logo-icon-large">📹</div>
+                <div class="logo-icon-large"><img src="{{ url_for('static', filename='images/camera.png') }}" alt="Камера"></div>
                 <h1 class="brand-name-large">общалка</h1>
                 <p class="brand-tagline-large">видео-конференции</p>
                 <p class="welcome-description">Создайте комнату или присоединитесь к существующей встрече</p>
@@ -33,7 +33,7 @@
             <div class="join-room-form" id="joinRoomForm" style="display: none;">
                 <input type="text" id="welcomeRoomInput" placeholder="Введите ID комнаты" maxlength="50">
                 <button id="welcomeJoinConfirm" class="btn btn-primary">
-                    <span class="icon">✓</span>
+                    <span class="icon"><img src="{{ url_for('static', filename='images/checkmark.png') }}" alt="Подключиться"></span>
                     <span class="btn-text">Подключиться</span>
                 </button>
                 <button id="welcomeJoinCancel" class="btn btn-secondary">
@@ -59,7 +59,7 @@
     <div class="container" id="mainContainer" style="display: none;">
         <header class="header">
             <div class="logo">
-                <div class="logo-icon">📹</div>
+                <div class="logo-icon"><img src="{{ url_for('static', filename='images/camera.png') }}" alt="Камера"></div>
                 <span class="logo-text">Общалка</span>
             </div>
             <div class="connection-info">
@@ -77,12 +77,12 @@
                     <div class="participant-info">
                         <span class="participant-name">Вы</span>
                         <div class="participant-status">
-                            <span class="status-audio">🎤</span>
-                            <span class="status-video">📹</span>
+                            <span class="status-audio"><img src="{{ url_for('static', filename='images/microphone.png') }}" alt="Микрофон"></span>
+                            <span class="status-video"><img src="{{ url_for('static', filename='images/camera.png') }}" alt="Камера"></span>
                         </div>
                     </div>
                     <div class="video-overlay" id="localVideoOverlay">
-                        <div class="overlay-icon">📹</div>
+                        <div class="overlay-icon"><img src="{{ url_for('static', filename='images/camera.png') }}" alt="Камера"></div>
                         <p>Камера выключена</p>
                     </div>
                 </div>
@@ -100,43 +100,43 @@
                     <span class="info-text">Комната: <span id="roomIdDisplay">-</span></span>
                 </div>
                 <div class="room-info-item">
-                    <span class="icon">👥</span>
+                    <span class="icon"><img src="{{ url_for('static', filename='images/people.png') }}" alt="Участники"></span>
                     <span class="info-text">Участники: <span id="participantsCount">0</span></span>
                 </div>
                 <button id="copyLink" class="btn btn-secondary copy-btn">
-                    <span class="icon">📋</span>
+                    <span class="icon"><img src="{{ url_for('static', filename='images/link.png') }}" alt="Копировать"></span>
                 </button>
             </div>
 
             <div class="media-controls">
                 <div class="control-group">
                     <button id="showUsers" class="btn-control" title="Участники встречи">
-                        <span class="icon">👥</span>
+                        <span class="icon"><img src="{{ url_for('static', filename='images/people.png') }}" alt="Участники"></span>
                     </button>
                     
                     <button id="showChat" class="btn-control" title="Чат">
-                        <span class="icon">💬</span>
+                        <span class="icon"><img src="{{ url_for('static', filename='images/chat.png') }}" alt="Чат"></span>
                     </button>
                     
                     <button id="toggleAudio" class="btn-control active" title="Вкл/Выкл микрофон">
-                        <span class="icon">🎤</span>
+                        <span class="icon"><img src="{{ url_for('static', filename='images/microphone.png') }}" alt="Микрофон"></span>
                     </button>
                     
                     <button id="toggleVideo" class="btn-control active" title="Вкл/Выкл камеру">
-                        <span class="icon">📹</span>
+                        <span class="icon"><img src="{{ url_for('static', filename='images/camera.png') }}" alt="Камера"></span>
                     </button>
                     
                     <button id="shareScreen" class="btn-control" title="Демонстрация экрана">
-                        <span class="icon">🖥️</span>
+                        <span class="icon"><img src="{{ url_for('static', filename='images/computer.png') }}" alt="Экран"></span>
                     </button>
                 </div>
                 
                 <button id="endCall" class="btn-end-call" title="Завершить звонок" style="display: none;">
-                    <span class="icon">📞</span>
+                    <span class="icon"><img src="{{ url_for('static', filename='images/telephone-call.png') }}" alt="Завершить"></span>
                 </button>
 
                 <button id="toggleFullscreen" class="btn-control" title="Полноэкранный режим">
-                    <span class="icon">⛶</span>
+                    <span class="icon"><img src="{{ url_for('static', filename='images/dimensions.png') }}" alt="Полноэкранный"></span>
                 </button>
             </div>
         </div>

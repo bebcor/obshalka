@@ -153,18 +153,18 @@
 <body>
     <div class="landing-container">
         <div class="landing-content">
-            <div class="landing-logo">📹 Общалка</div>
+            <div class="landing-logo"><img src="{{ url_for('static', filename='images/camera.png') }}" alt="Камера" style="width: 48px; height: 48px; vertical-align: middle; margin-right: 8px;"> Общалка</div>
             <h1 class="landing-title">Безопасные видеовстречи</h1>
             <p class="landing-subtitle">Создайте комнату или присоединитесь к существующей встрече</p>
             
             <div class="landing-actions">
                 <button id="createRoomBtn" class="landing-btn landing-btn-primary">
-                    <span>➕</span>
+                    <span><img src="{{ url_for('static', filename='images/plus.png') }}" alt="Создать" style="width: 20px; height: 20px; vertical-align: middle;"></span>
                     Создать встречу
                 </button>
                 
                 <button id="joinRoomBtn" class="landing-btn landing-btn-secondary">
-                    <span>🔗</span>
+                    <span><img src="{{ url_for('static', filename='images/link_chain.png') }}" alt="Подключиться" style="width: 20px; height: 20px; vertical-align: middle;"></span>
                     Подключиться к встрече
                 </button>
             </div>

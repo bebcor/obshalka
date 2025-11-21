@@ -268,7 +268,7 @@ class NotificationManager {
                     <p>Вы можете включить камеру и микрофон сейчас или позже во время звонка</p>
                     <div class="media-options">
                         <button id="enableMedia" class="btn btn-primary">
-                            <span>🎤📹</span>
+                            <span><img src="/static/images/microphone.png" alt="Микрофон" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 4px;"><img src="/static/images/camera.png" alt="Камера" style="width: 20px; height: 20px; vertical-align: middle;"></span>
                             Включить оба
                         </button>
                         <button id="joinWithoutMedia" class="btn btn-secondary">

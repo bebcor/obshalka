@@ -46,7 +46,7 @@ class ParticipantsManager {
             const joinTime = formatTime(participant.joined_at);
             return `
                 <div class="participant-item">
-                    <div class="participant-item-icon">👤</div>
+                    <div class="participant-item-icon"><img src="/static/images/user.png" alt="Пользователь" style="width: 24px; height: 24px;"></div>
                     <div class="participant-item-info">
                         <div class="participant-item-name">${escapeHtml(participant.name || 'Anonymous')}</div>
                         <div class="participant-item-time">Присоединился: ${joinTime}</div>

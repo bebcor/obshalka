@@ -229,12 +229,12 @@ class UIManager {
             <div class="participant-info">
                 <span class="participant-name">${this.escapeHtml(userName)}</span>
                 <div class="participant-status">
-                    <span class="status-audio" title="Микрофон">🎤</span>
-                    <span class="status-video" title="Камера">📹</span>
+                    <span class="status-audio" title="Микрофон"><img src="/static/images/microphone.png" alt="Микрофон"></span>
+                    <span class="status-video" title="Камера"><img src="/static/images/camera.png" alt="Камера"></span>
                 </div>
             </div>
             <div class="video-overlay">
-                <div class="overlay-icon">👤</div>
+                <div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div>
                 <p>Ожидание видео...</p>
             </div>
         `;
@@ -303,7 +303,7 @@ class UIManager {
     
         const activateBtn = document.createElement('button');
         activateBtn.className = 'audio-activation-btn';
-        activateBtn.innerHTML = '🔇 Нажми для звука';
+        activateBtn.innerHTML = '<img src="/static/images/sound_off.png" alt="Звук" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;"> Нажми для звука';
         activateBtn.style.cssText = `
             position: absolute;
             top: 10px;

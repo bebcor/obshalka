@@ -506,7 +506,7 @@ class VideoCallManager {
         }
 
         const settingsBtn = document.createElement('button');
-        settingsBtn.innerHTML = '⚙️ Настройки';
+        settingsBtn.innerHTML = '<img src="/static/images/gear.png" alt="Настройки" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Настройки';
         settingsBtn.id = 'settingsBtn';
         settingsBtn.style.cssText = `
             position: fixed;
@@ -645,13 +645,13 @@ class VideoCallManager {
         modal.innerHTML = `
             <div class="modal-overlay">
                 <div class="modal-content">
-                    <h3>⚙️ Настройки</h3>
+                    <h3><img src="/static/images/gear.png" alt="Настройки" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Настройки</h3>
                     <div class="settings-options">
                         <button id="selectMicrophoneSettings" class="btn btn-settings">
-                            🎤 Выбор микрофона
+                            <img src="/static/images/microphone.png" alt="Микрофон" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;"> Выбор микрофона
                         </button>
                         <button id="selectCameraSettings" class="btn btn-settings">
-                            📷 Выбор камеры
+                            <img src="/static/images/photo_camera.png" alt="Камера" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;"> Выбор камеры
                         </button>
                     </div>
                     <div class="modal-buttons">
@@ -693,7 +693,7 @@ class VideoCallManager {
         modal.innerHTML = `
             <div class="modal-overlay">
                 <div class="modal-content">
-                    <h3>🎤 Выберите микрофон</h3>
+                    <h3><img src="/static/images/microphone.png" alt="Микрофон" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Выберите микрофон</h3>
                     <div class="microphone-list">
                         ${microphones.map((mic, index) => `
                             <div class="microphone-item" data-device-id="${mic.deviceId}">
@@ -759,7 +759,7 @@ class VideoCallManager {
         modal.innerHTML = `
             <div class="modal-overlay">
                 <div class="modal-content">
-                    <h3>📷 Выберите камеру</h3>
+                    <h3><img src="/static/images/photo_camera.png" alt="Камера" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Выберите камеру</h3>
                     <div class="camera-list">
                         ${cameras.map((camera, index) => `
                             <div class="camera-item" data-device-id="${camera.deviceId}">

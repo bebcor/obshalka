@@ -66,7 +66,7 @@ class MediaDevicesManager {
         modal.innerHTML = `
             <div class="modal-overlay">
                 <div class="modal-content">
-                    <h3>🎤 Выберите микрофон</h3>
+                    <h3><img src="/static/images/microphone.png" alt="Микрофон" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Выберите микрофон</h3>
                     <div class="microphone-list">
                         ${this.availableMicrophones.map((mic, index) => `
                             <div class="microphone-item" data-device-id="${mic.deviceId}">
@@ -120,7 +120,7 @@ class MediaDevicesManager {
         modal.innerHTML = `
             <div class="modal-overlay">
                 <div class="modal-content">
-                    <h3>📷 Выберите камеру</h3>
+                    <h3><img src="/static/images/photo_camera.png" alt="Камера" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Выберите камеру</h3>
                     <div class="camera-list">
                         ${this.availableCameras.map((camera, index) => `
                             <div class="camera-item" data-device-id="${camera.deviceId}">
