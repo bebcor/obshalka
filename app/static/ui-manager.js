@@ -149,13 +149,25 @@ class UIManager {
                     }
                 });
                 
+                // ВАЖНО: Также добавляем треки из receivers, которых нет в stream
+                receivers.forEach(receiver => {
+                    const track = receiver.track;
+                    if (track && track.enabled && !track.muted && track.readyState === 'live') {
+                        const trackInStream = stream.getTracks().find(t => t.id === track.id);
+                        if (!trackInStream) {
+                            console.log(`✅ [updateVideoOverlays] Добавляем трек ${track.kind} (${track.id}) из receivers в remoteStream для ${userId}`);
+                            stream.addTrack(track);
+                        }
+                    }
+                });
+                
                 // Удаляем треки из stream, которых нет в активных receivers
                 const streamTracks = stream.getTracks();
                 streamTracks.forEach(track => {
                     const receiverTrack = receivers.find(r => r.track && r.track.id === track.id)?.track;
                     // Удаляем трек если его нет в активных receivers или он неактивен
                     if (!activeReceiverTrackIds.has(track.id) || !receiverTrack || !receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live') {
-                        console.log(`🗑️ Трек ${track.kind} (${track.id}) неактивен или отсутствует в активных receivers для ${userId}, удаляем из потока`, {
+                        console.log(`🗑️ [updateVideoOverlays] Трек ${track.kind} (${track.id}) неактивен или отсутствует в активных receivers для ${userId}, удаляем из потока`, {
                             hasReceiver: !!receiverTrack,
                             enabled: receiverTrack?.enabled,
                             muted: receiverTrack?.muted,
@@ -164,6 +176,8 @@ class UIManager {
                         stream.removeTrack(track);
                     }
                 });
+            } else {
+                console.log(`⚠️ [updateVideoOverlays] Нет peer connection для ${userId}, но есть remoteStream`);
             }
             
             const videoTracks = stream.getVideoTracks();
