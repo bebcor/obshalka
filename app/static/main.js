@@ -22,28 +22,22 @@ class VideoCallManager {
         this.previousStream = null; // Для восстановления после демонстрации экрана
         this.hasVideoTrack = false;
         
-        // Конфигурация ICE серверов - ИСПОЛЬЗУЕМ ДОМЕННОЕ ИМЯ вместо IP
+        // Конфигурация ICE серверов (ТОЧНАЯ КОПИЯ ОРИГИНАЛА)
         this.configuration = {
             iceServers: [
-                // Ваш собственный STUN сервер (доменное имя)
+                // Ваш собственный STUN сервер
                 {
-                    urls: 'stun:obshalka.online:3478'
+                    urls: 'stun:109.73.201.242:3478'
                 },
-                // Ваш собственный TURN сервер (UDP) - доменное имя
+                // Ваш собственный TURN сервер (UDP)
                 {
-                    urls: 'turn:obshalka.online:3478',
+                    urls: 'turn:109.73.201.242:3478',
                     username: 'webrtc',
                     credential: 'webrtcpassword'
                 },
-                // Ваш собственный TURN сервер (TCP) - доменное имя
+                // Ваш собственный TURN сервер (TCP)
                 {
-                    urls: 'turn:obshalka.online:3478?transport=tcp',
-                    username: 'webrtc',
-                    credential: 'webrtcpassword'
-                },
-                // Ваш собственный TURN сервер (TLS) - доменное имя
-                {
-                    urls: 'turns:obshalka.online:5349',
+                    urls: 'turn:109.73.201.242:3478?transport=tcp',
                     username: 'webrtc',
                     credential: 'webrtcpassword'
                 },
