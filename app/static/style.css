@@ -205,6 +205,8 @@ body {
 .local-participant {
     border: 2px solid var(--primary);
     order: -1;
+    /* Скрываем локальную карточку по умолчанию - она появится только при активном видео */
+    display: none;
 }
 
 .participant-info {
