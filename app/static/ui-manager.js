@@ -238,13 +238,24 @@ class UIManager {
                 }
             });
             
-            // ВАЖНО: ПРОСТАЯ ПРОВЕРКА - есть ли активный видео трек в receivers
-            // Это единственный надежный источник истины - если в receivers нет активного видео, значит камера выключена
-            let hasActiveVideo = false;
-            if (peerConnection) {
+            // ВАЖНО: Проверяем состояние треков в потоке ПОСЛЕ удаления неактивных треков
+            // Если в потоке нет активных видео треков, значит камера выключена - скрываем карточку
+            const videoTracksAfterCleanup = stream.getVideoTracks();
+            const hasActiveVideoInStream = videoTracksAfterCleanup.length > 0 && 
+                                         videoTracksAfterCleanup.some(track => 
+                                             track && 
+                                             track.readyState === 'live' && 
+                                             track.enabled && 
+                                             !track.muted
+                                         );
+            
+            // КРИТИЧНО: Проверяем receivers ТОЛЬКО если в потоке есть активные треки
+            // Если в потоке нет активных треков - скрываем карточку НЕЗАВИСИМО от receivers
+            let hasActiveVideoInReceivers = false;
+            if (hasActiveVideoInStream && peerConnection) {
                 const receivers = peerConnection.getReceivers();
                 // Ищем активный видео трек в receivers
-                hasActiveVideo = receivers.some(receiver => {
+                hasActiveVideoInReceivers = receivers.some(receiver => {
                     const track = receiver.track;
                     return track && 
                            track.kind === 'video' && 
@@ -253,17 +264,24 @@ class UIManager {
                            !track.muted;
                 });
                 
-                console.log(`🔍 [${userId}] Проверка receivers:`, receivers.length, 'receivers, hasActiveVideo:', hasActiveVideo);
+                console.log(`🔍 [${userId}] Проверка receivers:`, receivers.length, 'receivers, hasActiveVideoInReceivers:', hasActiveVideoInReceivers);
                 receivers.forEach((receiver, index) => {
                     const track = receiver.track;
                     if (track && track.kind === 'video') {
                         console.log(`  Receiver ${index}: video track - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
                     }
                 });
-            } else {
-                // Если нет peer connection, значит нет активного видео
-                hasActiveVideo = false;
-                console.log(`⚠️ [${userId}] Нет peer connection - скрываем карточку`);
+            }
+            
+            // Видео активно ТОЛЬКО если оно активно И в потоке И в receivers
+            const hasActiveVideo = hasActiveVideoInStream && hasActiveVideoInReceivers;
+            
+            if (!hasActiveVideo) {
+                if (!hasActiveVideoInStream) {
+                    console.log(`❌ [${userId}] НЕТ активных видео треков в потоке - скрываем карточку`);
+                } else if (!hasActiveVideoInReceivers) {
+                    console.log(`❌ [${userId}] НЕТ активного видео в receivers - скрываем карточку`);
+                }
             }
             
             // Получаем актуальные треки ПОСЛЕ очистки
@@ -302,7 +320,8 @@ class UIManager {
                 
                 if (!hasActiveTracksInStream) {
                     console.log(`⚠️ [updateVideoOverlays ${userId}] hasActiveVideo=true, но в потоке нет активных треков - скрываем карточку`);
-                    // Переходим к логике скрытия
+                    // Переходим к логике скрытия ниже (не делаем return)
+                    hasActiveVideo = false; // Переопределяем чтобы попасть в блок скрытия
                 } else {
                     // ВАЖНО: Используем setProperty с important чтобы перезаписать скрытие при создании
                     participantCard.style.setProperty('display', 'block', 'important');

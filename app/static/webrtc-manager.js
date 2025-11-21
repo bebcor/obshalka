@@ -424,6 +424,20 @@ class WebRTCManager {
                                     receiverReadyState: receiverTrack.readyState
                                 });
                                 remoteStream.removeTrack(track);
+                                
+                                // КРИТИЧНО: Очищаем srcObject немедленно
+                                const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                                if (videoElement && videoElement.srcObject === remoteStream) {
+                                    console.log(`🔄 Очищаем srcObject немедленно (синхронизация с receivers)`);
+                                    videoElement.pause();
+                                    videoElement.srcObject = null;
+                                    try {
+                                        videoElement.load();
+                                    } catch (e) {
+                                        // Игнорируем ошибки
+                                    }
+                                }
+                                
                                 this.videoCallManager.uiManager.updateVideoOverlays();
                                 this.videoCallManager.checkEmptyState();
                                 return;
@@ -436,6 +450,20 @@ class WebRTCManager {
                             if (!track.enabled || track.muted) {
                                 console.log(`🗑️ Видео трек для ${targetUserId} неактивен (enabled: ${track.enabled}, muted: ${track.muted}), удаляем из потока`);
                                 remoteStream.removeTrack(track);
+                                
+                                // КРИТИЧНО: Очищаем srcObject немедленно
+                                const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                                if (videoElement && videoElement.srcObject === remoteStream) {
+                                    console.log(`🔄 Очищаем srcObject немедленно (видео трек неактивен)`);
+                                    videoElement.pause();
+                                    videoElement.srcObject = null;
+                                    try {
+                                        videoElement.load();
+                                    } catch (e) {
+                                        // Игнорируем ошибки
+                                    }
+                                }
+                                
                                 this.videoCallManager.uiManager.updateVideoOverlays();
                                 this.videoCallManager.checkEmptyState();
                                 return;
@@ -450,6 +478,20 @@ class WebRTCManager {
                             if (track.kind === 'video' && !track.enabled) {
                                 console.log(`🗑️ Видео трек для ${targetUserId} disabled, удаляем из потока`);
                                 remoteStream.removeTrack(track);
+                                
+                                // КРИТИЧНО: Очищаем srcObject немедленно
+                                const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                                if (videoElement && videoElement.srcObject === remoteStream) {
+                                    console.log(`🔄 Очищаем srcObject немедленно (видео трек disabled)`);
+                                    videoElement.pause();
+                                    videoElement.srcObject = null;
+                                    try {
+                                        videoElement.load();
+                                    } catch (e) {
+                                        // Игнорируем ошибки
+                                    }
+                                }
+                                
                                 this.videoCallManager.uiManager.updateVideoOverlays();
                                 this.videoCallManager.checkEmptyState();
                                 return;
@@ -466,6 +508,20 @@ class WebRTCManager {
                             if (track.kind === 'video' && track.muted) {
                                 console.log(`🗑️ Видео трек для ${targetUserId} стал muted, удаляем из потока`);
                                 remoteStream.removeTrack(track);
+                                
+                                // КРИТИЧНО: Очищаем srcObject немедленно
+                                const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                                if (videoElement && videoElement.srcObject === remoteStream) {
+                                    console.log(`🔄 Очищаем srcObject немедленно (видео трек muted)`);
+                                    videoElement.pause();
+                                    videoElement.srcObject = null;
+                                    try {
+                                        videoElement.load();
+                                    } catch (e) {
+                                        // Игнорируем ошибки
+                                    }
+                                }
+                                
                                 this.videoCallManager.uiManager.updateVideoOverlays();
                                 this.videoCallManager.checkEmptyState();
                                 return;
