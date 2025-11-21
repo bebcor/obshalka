@@ -70,26 +70,31 @@ class UIManager {
     updateVideoOverlays() {
         const localVideo = document.getElementById('localVideo');
         const localOverlay = document.getElementById('localVideoOverlay');
+        const localParticipantCard = document.getElementById('localParticipantCard');
         
         // Local video overlay
-        if (localVideo && localOverlay) {
+        // ВАЖНО: карточка показывается ТОЛЬКО если есть активное видео (камера или демонстрация экрана)
+        // Звук может идти независимо от карточки
+        if (localVideo && localOverlay && localParticipantCard) {
             const videoTrack = this.videoCallManager.localStream?.getVideoTracks()[0];
-            const audioTrack = this.videoCallManager.localStream?.getAudioTracks()[0];
             
-            const hasActiveVideo = videoTrack && videoTrack.enabled && videoTrack.readyState === 'live';
-            const hasActiveAudio = audioTrack && audioTrack.enabled && audioTrack.readyState === 'live';
+            // Проверяем также демонстрацию экрана
+            const isSharingScreen = this.videoCallManager.isSharingScreen || false;
+            
+            // Карточка показывается ТОЛЬКО если есть активное видео
+            const hasActiveVideo = (videoTrack && videoTrack.enabled && videoTrack.readyState === 'live' && !videoTrack.muted) || isSharingScreen;
             
             if (hasActiveVideo) {
+                // Если есть активное видео - показываем карточку с видео
                 localOverlay.style.display = 'none';
                 localVideo.style.display = 'block';
+                localParticipantCard.style.display = 'block';
             } else {
+                // Если нет активного видео - полностью скрываем карточку
+                // Звук продолжит работать через скрытый элемент или другим способом
+                localParticipantCard.style.display = 'none';
                 localVideo.style.display = 'none';
-                // Показываем overlay только если есть активное аудио
-                if (hasActiveAudio) {
-                    localOverlay.style.display = 'flex';
-                } else {
-                    localOverlay.style.display = 'flex'; // Показываем overlay даже без аудио для локального участника
-                }
+                localOverlay.style.display = 'none';
             }
         }
         
@@ -146,26 +151,15 @@ class UIManager {
                                       !track.muted
                                   );
             
-            // Детальное логирование для отладки
-            if ((activeVideoTracks.length > 0 || activeAudioTracks.length > 0) && !hasActiveVideo && !hasActiveAudio) {
-                console.log(`⚠️ Есть треки, но все неактивны для ${userId}:`, {
-                    videoTracks: activeVideoTracks.length,
-                    audioTracks: activeAudioTracks.length,
-                    videoTracksInfo: activeVideoTracks.map(t => ({
-                        enabled: t?.enabled,
-                        readyState: t?.readyState,
-                        muted: t?.muted
-                    })),
-                    audioTracksInfo: activeAudioTracks.map(t => ({
-                        enabled: t?.enabled,
-                        readyState: t?.readyState,
-                        muted: t?.muted
-                    }))
-                });
-            }
+            // Логирование только для отладки (можно закомментировать в продакшене)
+            // if ((activeVideoTracks.length > 0 || activeAudioTracks.length > 0) && !hasActiveVideo && !hasActiveAudio) {
+            //     console.log(`⚠️ Есть треки, но все неактивны для ${userId}`);
+            // }
             
-            // Если есть активное видео - показываем видео, скрываем overlay
+            // ВАЖНО: карточка показывается ТОЛЬКО если есть активное видео
+            // Звук может идти независимо от карточки (через скрытый элемент)
             if (hasActiveVideo) {
+                // Если есть активное видео - показываем карточку с видео
                 if (overlay) overlay.style.display = 'none';
                 if (videoElement) {
                     videoElement.style.display = 'block';
@@ -175,35 +169,25 @@ class UIManager {
                     }
                 }
                 participantCard.style.display = 'block';
-                } else {
-                    // Если нет активного видео - скрываем видео элемент
-                    if (videoElement) {
-                        videoElement.style.display = 'none';
-                        // НЕ очищаем srcObject если есть аудио, чтобы аудио продолжало работать
-                        // Очищаем только если нет активного аудио
-                        if (!hasActiveAudio) {
-                            videoElement.srcObject = null;
-                        }
-                    }
-                    
-                    // Если есть активное аудио - показываем overlay с иконкой пользователя
-                    if (hasActiveAudio) {
-                        if (overlay) overlay.style.display = 'flex';
-                        participantCard.style.display = 'block';
-                        // Убеждаемся что srcObject установлен для воспроизведения аудио
-                        if (videoElement && !videoElement.srcObject) {
-                            videoElement.srcObject = stream;
-                        }
+            } else {
+                // Если нет активного видео - полностью скрываем карточку
+                participantCard.style.display = 'none';
+                if (videoElement) {
+                    videoElement.style.display = 'none';
+                    // НЕ очищаем srcObject если есть аудио, чтобы аудио продолжало работать через скрытый элемент
+                    // Очищаем только если нет активного аудио
+                    if (!hasActiveAudio) {
+                        videoElement.srcObject = null;
                     } else {
-                        // Если нет ни видео, ни аудио - полностью скрываем карточку
-                        console.log(`❌ Скрываем карточку для ${userId} - нет активных треков (видео: ${activeVideoTracks.length}, аудио: ${activeAudioTracks.length})`);
-                        participantCard.style.display = 'none';
-                        // Очищаем srcObject когда карточка скрыта
-                        if (videoElement) {
-                            videoElement.srcObject = null;
+                        // Если есть аудио, но нет видео - оставляем srcObject для воспроизведения звука
+                        // но элемент остается скрытым
+                        if (!videoElement.srcObject) {
+                            videoElement.srcObject = stream;
                         }
                     }
                 }
+                if (overlay) overlay.style.display = 'none';
+            }
         });
     }
 
@@ -489,4 +473,5 @@ class UIManager {
         console.log('Grid layout обновлен (управляется CSS)');
     }
 }
+
 
