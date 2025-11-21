@@ -810,7 +810,7 @@ class VideoCallManager {
         });
     }
 
-    handleRoomInfo(data) {
+    async handleRoomInfo(data) {
         console.log('Room info received:', data);
         // УСТАНАВЛИВАЕМ isInCall ТОЛЬКО ПОСЛЕ ПОДТВЕРЖДЕНИЯ ОТ СЕРВЕРА
         this.isInCall = true;
@@ -857,8 +857,13 @@ class VideoCallManager {
         // ПОКАЗЫВАЕМ уведомление о присоединении
         this.notificationManager.show(`Присоединились к комнате ${this.roomId} как ${this.userName}`, 'success');
         
-        // ПОКАЗЫВАЕМ медиа-промпт ПОСЛЕ присоединения к комнате
-        this.roomManager.showMediaPrompt();
+        // АВТОМАТИЧЕСКИ включаем камеру и микрофон без модального окна
+        try {
+            await this.mediaController.startVideo();
+        } catch (error) {
+            console.error('Ошибка при включении медиа:', error);
+            this.notificationManager.show('Не удалось получить доступ к медиа-устройствам. Вы можете включить их позже.', 'warning');
+        }
     }
 
     handleUserJoined(data) {
