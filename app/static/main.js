@@ -910,7 +910,9 @@ class VideoCallManager {
     }
 
     handleUserJoined(data) {
-        console.log('User joined:', data);
+        console.log('👤 User joined:', data);
+        console.log('👤 Current socketId:', this.socketId);
+        console.log('👤 Joined user_id:', data.user_id);
         document.getElementById('participantsCount').textContent = data.participants_count;
         
         this.notificationManager.show(`${data.user_name || 'Пользователь'} присоединился к комнате`, 'info');
@@ -929,22 +931,43 @@ class VideoCallManager {
         }
         
         if (data.user_id !== this.socketId) {
+            console.log('🔄 Создаем peer connection для нового пользователя:', data.user_id);
             // ВАЖНО: Создаем peer connection для нового пользователя
             this.webrtcManager.setupPeerConnection(data.user_id);
+            
             // ВАЖНО: Если у нас уже есть локальный поток - добавляем треки в новое соединение
             // Это нужно чтобы новый пользователь получил наши треки
             if (this.localStream) {
                 console.log('🔄 Новый пользователь присоединился, добавляем треки в соединение...');
                 // ВАЖНО: Используем addTracksToPeerConnection для правильного добавления треков
                 this.webrtcManager.addTracksToPeerConnection(data.user_id);
+            } else {
+                console.log('⚠️ Локальный поток еще не создан, треки будут добавлены позже');
             }
+            
             // ВАЖНО: Создаем offer для нового пользователя СРАЗУ после создания соединения
             // Это нужно чтобы установить соединение и начать обмен медиа
+            // НО: если новый пользователь уже отправил нам offer, мы получим его и создадим answer
+            // Поэтому создаем offer только если соединение стабильно
             setTimeout(() => {
-                this.webrtcManager.createOffer(data.user_id).catch(err => {
-                    console.error(`Ошибка создания offer для нового пользователя ${data.user_id}:`, err);
-                });
-            }, 100); // Небольшая задержка чтобы треки успели добавиться
+                const peerConnection = this.remoteUsers.get(data.user_id);
+                if (peerConnection) {
+                    const signalingState = peerConnection.signalingState;
+                    console.log(`🔄 Signaling state для ${data.user_id}:`, signalingState);
+                    // Создаем offer только если соединение в стабильном состоянии
+                    // Если уже есть локальный offer, значит мы уже отправили offer
+                    if (signalingState === 'stable' || signalingState === 'have-local-offer') {
+                        console.log(`📤 Создаем offer для нового пользователя ${data.user_id}`);
+                        this.webrtcManager.createOffer(data.user_id).catch(err => {
+                            console.error(`❌ Ошибка создания offer для нового пользователя ${data.user_id}:`, err);
+                        });
+                    } else {
+                        console.log(`⏳ Ждем обработки существующего offer/answer для ${data.user_id}, signalingState: ${signalingState}`);
+                    }
+                } else {
+                    console.error(`❌ Peer connection не найден для ${data.user_id}`);
+                }
+            }, 200); // Увеличиваем задержку чтобы треки успели добавиться
         }
     }
 

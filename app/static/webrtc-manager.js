@@ -613,6 +613,8 @@ class WebRTCManager {
     async handleWebRTCOffer(data) {
         try {
             console.log('📥 Received offer from:', data.sender_id);
+            console.log('📥 Current signaling state:', this.videoCallManager.remoteUsers.has(data.sender_id) ? 
+                this.videoCallManager.remoteUsers.get(data.sender_id).signalingState : 'no connection');
         
             // Если соединение с этим пользователем еще не создано, создаем его
             if (!this.videoCallManager.remoteUsers.has(data.sender_id)) {
@@ -622,6 +624,30 @@ class WebRTCManager {
             
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
             
+            // ВАЖНО: Проверяем текущее состояние signaling
+            const currentSignalingState = peerConnection.signalingState;
+            console.log('📥 Current signaling state before setting remote description:', currentSignalingState);
+            
+            // Если уже есть локальный offer, значит мы уже отправили offer этому пользователю
+            // В этом случае нужно обработать race condition
+            if (currentSignalingState === 'have-local-offer') {
+                console.log('⚠️ Уже есть локальный offer для', data.sender_id, ', обрабатываем race condition...');
+                // Устанавливаем remote description - это может вызвать renegotiation
+                await peerConnection.setRemoteDescription(data.offer);
+                // Создаем новый answer
+                const answer = await peerConnection.createAnswer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true
+                });
+                await peerConnection.setLocalDescription(answer);
+                this.videoCallManager.socket.emit('webrtc_answer', {
+                    target_user_id: data.sender_id,
+                    answer: answer
+                });
+                console.log('✅ Отправлен answer после race condition для', data.sender_id);
+                return;
+            }
+            
             // ВАЖНО: Убеждаемся, что локальные треки добавлены ПЕРЕД установкой remote description
             // Это нужно чтобы answer содержал информацию о наших треках
             if (this.videoCallManager.localStream) {
@@ -630,11 +656,15 @@ class WebRTCManager {
                 const hasVideoSender = existingSenders.some(s => s.track && s.track.kind === 'video');
                 const hasAudioSender = existingSenders.some(s => s.track && s.track.kind === 'audio');
                 
+                console.log('🔄 Existing senders:', { hasVideoSender, hasAudioSender });
+                
                 if (!hasVideoSender) {
                     const videoTrack = this.videoCallManager.localStream.getVideoTracks()[0];
                     if (videoTrack && videoTrack.enabled) {
                         peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
                         console.log('✅ Added video track when handling offer');
+                    } else {
+                        console.log('⚠️ Video track не доступен или disabled');
                     }
                 }
                 
@@ -643,8 +673,12 @@ class WebRTCManager {
                     if (audioTrack && audioTrack.enabled) {
                         peerConnection.addTrack(audioTrack, this.videoCallManager.localStream);
                         console.log('✅ Added audio track when handling offer');
+                    } else {
+                        console.log('⚠️ Audio track не доступен или disabled');
                     }
                 }
+            } else {
+                console.log('⚠️ Локальный поток не доступен при обработке offer');
             }
             
             // Устанавливаем полученное предложение (offer) как удаленное описание
