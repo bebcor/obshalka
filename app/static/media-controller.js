@@ -213,7 +213,10 @@ class MediaController {
                 }, 100);
             } else {
                 // ЕСЛИ включаем камеру - добавляем видео-трек в соединения
+                console.log('🎥 Включаем камеру, обновляем треки в соединениях...');
                 await this.updateVideoTracksInConnections(videoTracks[0]);
+                // ВАЖНО: После обновления треков нужно обновить UI
+                this.videoCallManager.uiManager.updateVideoOverlays();
             }
             
             this.videoCallManager.uiManager.updateControlButtons();
@@ -630,6 +633,7 @@ class MediaController {
         
         // Ждем немного перед созданием offer, чтобы треки успели добавиться
         if (offerPromises.length > 0) {
+            // ВАЖНО: Создаем offer сразу, но с небольшой задержкой чтобы трек успел добавиться
             setTimeout(async () => {
                 try {
                     await Promise.all(offerPromises);
@@ -637,7 +641,29 @@ class MediaController {
                 } catch (error) {
                     console.error('❌ Ошибка создания offer:', error);
                 }
-            }, 100);
+            }, 200);
+        } else if (updatePromises.length > 0) {
+            // Если только replaceTrack - тоже нужно создать offer для переговоров
+            console.log('🔄 После replaceTrack создаем offer для переговоров...');
+            setTimeout(async () => {
+                const renegotiationPromises = [];
+                this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
+                    // Создаем offer только если signaling state stable
+                    if (peerConnection.signalingState === 'stable') {
+                        renegotiationPromises.push(
+                            this.videoCallManager.webrtcManager.createOffer(userId).catch(err => {
+                                console.error(`❌ Ошибка создания offer для переговоров для ${userId}:`, err);
+                            })
+                        );
+                    }
+                });
+                try {
+                    await Promise.all(renegotiationPromises);
+                    console.log('✅ Все offer созданы для переговоров');
+                } catch (error) {
+                    console.error('❌ Ошибка создания offer для переговоров:', error);
+                }
+            }, 200);
         }
     }
 

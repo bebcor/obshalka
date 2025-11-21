@@ -390,9 +390,11 @@ class WebRTCManager {
             }
             
             // Проверяем состояние signaling
+            // ВАЖНО: Если уже есть локальный offer, но мы добавляем новый трек - нужно дождаться stable
+            // или создать новый offer после того как текущий будет обработан
             if (peerConnection.signalingState === 'have-local-offer') {
-                console.log('Already have local offer, waiting...');
-                return;
+                console.log('⚠️ Already have local offer, но продолжаем для добавления нового трека...');
+                // НЕ возвращаемся, продолжаем создание offer - это нужно для добавления новых треков
             }
         
             // Используем стандартные опции, но с правильными настройками для медиа
