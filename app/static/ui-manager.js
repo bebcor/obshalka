@@ -96,14 +96,26 @@ class UIManager {
             
             if (hasActiveVideo) {
                 // Если есть активное видео - показываем карточку с видео
-                localOverlay.style.display = 'none';
-                localVideo.style.display = 'block';
-                localParticipantCard.style.display = 'block';
+                localOverlay.style.setProperty('display', 'none', 'important');
+                localVideo.style.setProperty('display', 'block', 'important');
+                localParticipantCard.style.setProperty('display', 'block', 'important');
+                localParticipantCard.style.removeProperty('visibility');
+                localParticipantCard.style.removeProperty('opacity');
+                localParticipantCard.style.removeProperty('width');
+                localParticipantCard.style.removeProperty('height');
+                localParticipantCard.style.removeProperty('overflow');
+                localParticipantCard.style.removeProperty('pointer-events');
                 console.log('✅ Локальная карточка: ПОКАЗЫВАЕМ (есть активное видео)');
             } else {
                 // Если нет активного видео - полностью скрываем карточку
                 // Звук продолжит работать через скрытый элемент или другим способом
                 localParticipantCard.style.setProperty('display', 'none', 'important');
+                localParticipantCard.style.setProperty('visibility', 'hidden', 'important');
+                localParticipantCard.style.setProperty('opacity', '0', 'important');
+                localParticipantCard.style.setProperty('width', '0', 'important');
+                localParticipantCard.style.setProperty('height', '0', 'important');
+                localParticipantCard.style.setProperty('overflow', 'hidden', 'important');
+                localParticipantCard.style.setProperty('pointer-events', 'none', 'important');
                 localVideo.style.setProperty('display', 'none', 'important');
                 localOverlay.style.setProperty('display', 'none', 'important');
                 const computedDisplay = window.getComputedStyle(localParticipantCard).display;
@@ -146,13 +158,25 @@ class UIManager {
             // Проверяем наличие активного видео трека (enabled и live)
             // ВАЖНО: проверяем что трек не только есть, но и активен
             // Также проверяем что трек не null (когда replaceTrack(null) был вызван)
+            // ВАЖНО: Проверяем каждый трек индивидуально и логируем его состояние
             const hasActiveVideo = activeVideoTracks.length > 0 && 
-                                  activeVideoTracks.some(track => 
-                                      track &&
-                                      track.readyState === 'live' && 
-                                      track.enabled &&
-                                      !track.muted
-                                  );
+                                  activeVideoTracks.some(track => {
+                                      if (!track) return false;
+                                      const isActive = track.readyState === 'live' && 
+                                                      track.enabled &&
+                                                      !track.muted;
+                                      // Логируем каждый трек для отладки
+                                      if (activeVideoTracks.length > 0) {
+                                          console.log(`🔍 Проверка видео трека для ${userId}:`, {
+                                              trackId: track.id,
+                                              readyState: track.readyState,
+                                              enabled: track.enabled,
+                                              muted: track.muted,
+                                              isActive: isActive
+                                          });
+                                      }
+                                      return isActive;
+                                  });
             
             // Проверяем наличие активного аудио трека
             // ВАЖНО: проверяем все аудио треки, а не только первый

@@ -189,14 +189,8 @@ body {
     width: 0 !important;
     height: 0 !important;
     overflow: hidden !important;
-    box-shadow: var(--shadow-md);
-    aspect-ratio: 16/9;
-    min-height: 200px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    transition: all 0.3s ease;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
 .participant-card:hover {
