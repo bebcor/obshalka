@@ -68,7 +68,14 @@ class UIManager {
     }
 
     updateVideoOverlays() {
-        const localVideo = document.getElementById('localVideo');
+        // ЗАЩИТА ОТ РЕКУРСИИ: если уже выполняется обновление, пропускаем
+        if (this._updatingVideoOverlays) {
+            return;
+        }
+        this._updatingVideoOverlays = true;
+        
+        try {
+            const localVideo = document.getElementById('localVideo');
         const localOverlay = document.getElementById('localVideoOverlay');
         const localParticipantCard = document.getElementById('localParticipantCard');
         
@@ -185,7 +192,12 @@ class UIManager {
                                 muted: track.muted,
                                 readyState: track.readyState
                             });
-                            stream.addTrack(track);
+                            // ВАЖНО: Используем оригинальный addTrack чтобы избежать рекурсии
+                            if (stream._originalAddTrack) {
+                                stream._originalAddTrack(track);
+                            } else {
+                                MediaStream.prototype.addTrack.call(stream, track);
+                            }
                             console.log(`✅ [updateVideoOverlays] RemoteStream теперь имеет ${stream.getTracks().length} треков:`, stream.getTracks().map(t => `${t.kind}:${t.id}`));
                         }
                     }
@@ -368,6 +380,10 @@ class UIManager {
             
             console.log(`❌ [updateVideoOverlays ${userId}] Карточка скрыта, srcObject очищен`);
         });
+        } finally {
+            // Сбрасываем флаг после завершения обновления
+            this._updatingVideoOverlays = false;
+        }
     }
 
     updateControlButtons() {
@@ -532,16 +548,30 @@ class UIManager {
                     console.log(`Трек ${track.kind} завершился для пользователя ${userId}`);
                     // Удаляем трек из потока если он завершился
                     if (stream.getTracks().includes(track)) {
-                        stream.removeTrack(track);
+                        if (stream._originalRemoveTrack) {
+                            stream._originalRemoveTrack(track);
+                        } else {
+                            MediaStream.prototype.removeTrack.call(stream, track);
+                        }
                     }
-                    this.updateVideoOverlays();
-                    this.videoCallManager.checkEmptyState();
+                    // ВАЖНО: Обновляем UI через setTimeout чтобы избежать рекурсии
+                    setTimeout(() => {
+                        if (!this._updatingVideoOverlays) {
+                            this.updateVideoOverlays();
+                        }
+                        this.videoCallManager.checkEmptyState();
+                    }, 50);
                 };
                 
                 track.onmute = () => {
                     console.log(`Трек ${track.kind} заглушен для пользователя ${userId}`);
-                    this.updateVideoOverlays();
-                    this.videoCallManager.checkEmptyState();
+                    // ВАЖНО: Обновляем UI через setTimeout чтобы избежать рекурсии
+                    setTimeout(() => {
+                        if (!this._updatingVideoOverlays) {
+                            this.updateVideoOverlays();
+                        }
+                        this.videoCallManager.checkEmptyState();
+                    }, 50);
                 };
                 
                 track.onunmute = () => {
@@ -554,7 +584,9 @@ class UIManager {
             stream.getTracks().forEach(setupTrackHandlers);
             
             // Отслеживаем добавление новых треков в поток
-            const originalAddTrack = stream.addTrack.bind(stream);
+            // ВАЖНО: Сохраняем оригинальный метод ПЕРЕД переопределением
+            const originalAddTrack = MediaStream.prototype.addTrack.bind(stream);
+            stream._originalAddTrack = originalAddTrack; // Сохраняем для использования в updateVideoOverlays
             stream.addTrack = (track) => {
                 const result = originalAddTrack(track);
                 setupTrackHandlers(track);
@@ -570,18 +602,20 @@ class UIManager {
                             const isNowActive = currentTrack.enabled && !currentTrack.muted && currentTrack.readyState === 'live';
                             console.log(`🔄 Перепроверка видео трека для ${userId}: enabled: ${currentTrack.enabled}, muted: ${currentTrack.muted}, readyState: ${currentTrack.readyState}, isNowActive: ${isNowActive}`);
                             if (isNowActive) {
-                                // Трек стал активным - обновляем UI
-                                this.updateVideoOverlays();
+                                // Трек стал активным - обновляем UI через setTimeout чтобы избежать рекурсии
+                                setTimeout(() => {
+                                    if (!this._updatingVideoOverlays) {
+                                        this.updateVideoOverlays();
+                                    }
+                                }, 50);
                             }
                         }
                     }, 500);
                 }
                 
-                // Обновляем UI с небольшой задержкой, чтобы трек успел инициализироваться
-                // Вызываем сразу и с задержкой для надежности
-                this.updateVideoOverlays();
+                // ВАЖНО: НЕ вызываем updateVideoOverlays здесь - это вызывает рекурсию!
+                // Обновление UI произойдет автоматически через другие механизмы
                 setTimeout(() => {
-                    this.updateVideoOverlays();
                     this.videoCallManager.checkEmptyState();
                 }, 100);
                 return result;
@@ -596,12 +630,17 @@ class UIManager {
             }, 100);
             
             // Отслеживаем удаление треков из потока
-            const originalRemoveTrack = stream.removeTrack.bind(stream);
+            // ВАЖНО: Сохраняем оригинальный метод ПЕРЕД переопределением
+            const originalRemoveTrack = MediaStream.prototype.removeTrack.bind(stream);
+            stream._originalRemoveTrack = originalRemoveTrack; // Сохраняем для использования в обработчиках
             stream.removeTrack = (track) => {
                 const result = originalRemoveTrack(track);
                 console.log(`Трек ${track.kind} удален из потока для пользователя ${userId}`);
-                this.updateVideoOverlays();
-                this.videoCallManager.checkEmptyState();
+                // ВАЖНО: НЕ вызываем updateVideoOverlays здесь - это вызывает рекурсию!
+                // Обновление UI произойдет автоматически через другие механизмы
+                setTimeout(() => {
+                    this.videoCallManager.checkEmptyState();
+                }, 100);
                 return result;
             };
             
