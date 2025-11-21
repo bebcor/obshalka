@@ -204,17 +204,18 @@ class WebRTCManager {
                 
                 if (!remoteStream.getTracks().some(t => t.id === track.id)) {
                     remoteStream.addTrack(track);
-                    console.log('Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
+                    console.log('✅ Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
                     
-                    // ВАЖНО: Если видео трек неактивен при добавлении (disabled или muted), 
-                    // сразу удаляем его из потока - это значит камера выключена
-                    if (track.kind === 'video' && (!track.enabled || track.muted)) {
-                        console.log(`⚠️ Видео трек добавлен как неактивный для ${targetUserId}, enabled: ${track.enabled}, muted: ${track.muted}, удаляем из потока`);
-                        // Удаляем неактивный трек сразу
+                    // ВАЖНО: НЕ удаляем трек сразу если он muted - это может быть временное состояние при инициализации
+                    // Вместо этого добавляем трек и позволяем updateVideoOverlays решить, показывать ли карточку
+                    // Только если трек disabled (не enabled), это означает что камера точно выключена
+                    if (track.kind === 'video' && !track.enabled) {
+                        console.log(`⚠️ Видео трек добавлен как disabled для ${targetUserId}, enabled: ${track.enabled}, удаляем из потока`);
+                        // Удаляем disabled трек сразу - это означает что камера выключена
                         remoteStream.removeTrack(track);
                         this.videoCallManager.uiManager.updateVideoOverlays();
                         this.videoCallManager.checkEmptyState();
-                        // НЕ добавляем обработчики для неактивного трека
+                        // НЕ добавляем обработчики для disabled трека
                         return;
                     }
                     

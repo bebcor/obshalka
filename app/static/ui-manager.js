@@ -224,8 +224,51 @@ class UIManager {
                 console.log(`🔍 [${userId}] Активных видео треков в receivers:`, activeReceiverVideoTracks.size);
                 console.log(`🔍 [${userId}] Видео треков в remoteStream:`, activeVideoTracks.length);
                 
-                // Удаляем все видео треки из remoteStream, которых нет в активных receivers
-                // ВАЖНО: Также проверяем, что трек в remoteStream соответствует треку в receivers
+                // ВАЖНО: НЕ удаляем треки из remoteStream здесь - это делается в checkReceiversForNullTracks
+                // Здесь только проверяем, есть ли активные треки для отображения карточки
+                // Треки добавляются в remoteStream в ontrack и удаляются в checkReceiversForNullTracks
+                
+                // Проверяем наличие активных видео треков в remoteStream
+                // Трек активен если он enabled, live и не muted
+                const hasActiveVideoInStream = activeVideoTracks.some(track => {
+                    const receiver = receivers.find(r => r.track && r.track.id === track.id);
+                    const receiverTrack = receiver?.track;
+                    
+                    // Трек активен если:
+                    // 1. Есть receiver для этого трека
+                    // 2. Трек в receiver активен (enabled, не muted, live)
+                    // 3. Трек в remoteStream активен (enabled, не muted, live)
+                    const receiverTrackActive = receiverTrack && 
+                                               receiverTrack.enabled && 
+                                               !receiverTrack.muted && 
+                                               receiverTrack.readyState === 'live';
+                    
+                    const streamTrackActive = track.enabled && !track.muted && track.readyState === 'live';
+                    
+                    return receiverTrackActive && streamTrackActive;
+                });
+                
+                // Если нет активных видео треков в remoteStream, но есть в receivers - значит треки еще не добавлены
+                // В этом случае не скрываем карточку, а ждем пока треки добавятся
+                if (!hasActiveVideoInStream && activeVideoTracks.length === 0) {
+                    // Проверяем, есть ли активные видео треки в receivers, которые еще не добавлены в remoteStream
+                    const activeReceiverVideoTracks = receivers.filter(r => {
+                        const track = r.track;
+                        return track && 
+                               track.kind === 'video' && 
+                               track.enabled && 
+                               !track.muted && 
+                               track.readyState === 'live';
+                    });
+                    
+                    if (activeReceiverVideoTracks.length > 0) {
+                        console.log(`⏳ Есть активные видео треки в receivers для ${userId}, но они еще не добавлены в remoteStream, ждем...`);
+                        // Не скрываем карточку, треки добавятся в ontrack
+                        return; // Пропускаем дальнейшую обработку
+                    }
+                }
+                
+                // Удаляем треки из remoteStream только если они неактивны в receivers
                 activeVideoTracks.forEach(track => {
                     const receiver = receivers.find(r => r.track && r.track.id === track.id);
                     const receiverTrack = receiver?.track;
@@ -237,38 +280,15 @@ class UIManager {
                                                receiverTrack.readyState === 'live';
                     
                     // ВАЖНО: Также проверяем, что трек в remoteStream активен
-                    // Если трек в remoteStream неактивен (disabled или muted), удаляем его
-                    const streamTrackActive = track.enabled && !track.muted && track.readyState === 'live';
+                    // Если трек в remoteStream disabled (не enabled), удаляем его
+                    // НО: если трек muted, это может быть временное состояние, не удаляем его
+                    const streamTrackActive = track.enabled && track.readyState === 'live';
                     
-                    // ВАЖНО: Дополнительная проверка - если трек в receivers показывает активное состояние,
-                    // но на самом деле камера выключена (трек заменен на null через replaceTrack(null)),
-                    // то трек в receivers может оставаться активным, но не передавать видео
-                    // Проверяем это через проверку, что трек действительно передает данные
-                    // Если трек в receivers активен, но videoElement показывает черный экран или не воспроизводится,
-                    // значит трек неактивен
-                    const videoElement = document.getElementById(`remoteVideo-${userId}`);
-                    let videoElementActive = true; // По умолчанию считаем активным, если элемент существует
-                    if (videoElement && videoElement.srcObject === stream) {
-                        // Проверяем, что видео элемент воспроизводится и не показывает черный экран
-                        // readyState >= 2 означает HAVE_CURRENT_DATA или выше
-                        videoElementActive = !videoElement.paused && videoElement.readyState >= 2;
-                    } else if (videoElement && !videoElement.srcObject) {
-                        // Если srcObject не установлен, значит видео неактивно
-                        videoElementActive = false;
-                    }
-                    
-                    // ВАЖНО: Если трек в receivers активен, но трек в remoteStream неактивен,
-                    // это означает, что трек был заменен на null, но receiver еще не обновился
-                    // В этом случае удаляем трек из remoteStream
-                    const trackMismatch = receiverTrackActive && !streamTrackActive;
-                    
-                    // Удаляем трек если:
+                    // Удаляем трек только если:
                     // 1. Нет receiver для этого трека
-                    // 2. Трек в receiver неактивен
-                    // 3. Трек в remoteStream неактивен
-                    // 4. Видео элемент неактивен (не воспроизводится или показывает черный экран)
-                    // 5. Несоответствие между receiver и stream (трек заменен на null)
-                    if (!receiverTrack || !receiverTrackActive || !streamTrackActive || !videoElementActive || trackMismatch) {
+                    // 2. Трек в receiver неактивен (disabled или muted)
+                    // 3. Трек в remoteStream disabled (не enabled)
+                    if (!receiverTrack || !receiverTrackActive || !streamTrackActive) {
                         console.log(`🗑️ [${userId}] УДАЛЯЕМ видео трек ${track.id} из remoteStream`, {
                             hasReceiver: !!receiverTrack,
                             receiverEnabled: receiverTrack?.enabled,
