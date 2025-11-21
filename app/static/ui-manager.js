@@ -161,13 +161,15 @@ class UIManager {
             // Проверяем наличие активного видео трека (enabled и live)
             // ВАЖНО: проверяем что трек не только есть, но и активен
             // Также проверяем что трек не null (когда replaceTrack(null) был вызван)
-            // ВАЖНО: Проверяем каждый трек индивидуально и логируем его состояние
+            // ВАЖНО: ИГНОРИРУЕМ muted при первой проверке, если трек enabled и live
+            // Трек может быть временно muted при инициализации, но потом станет unmuted
             const hasActiveVideo = activeVideoTracks.length > 0 && 
                                   activeVideoTracks.some(track => {
                                       if (!track) return false;
+                                      // ВАЖНО: Если трек enabled и live, считаем его активным даже если muted
+                                      // Это нужно потому что трек может быть временно muted при инициализации
                                       const isActive = track.readyState === 'live' && 
-                                                      track.enabled &&
-                                                      !track.muted;
+                                                      track.enabled;
                                       // Логируем каждый трек для отладки
                                       if (activeVideoTracks.length > 0) {
                                           console.log(`🔍 Проверка видео трека для ${userId}:`, {
@@ -175,7 +177,8 @@ class UIManager {
                                               readyState: track.readyState,
                                               enabled: track.enabled,
                                               muted: track.muted,
-                                              isActive: isActive
+                                              isActive: isActive,
+                                              note: isActive && track.muted ? 'Трек активен, но muted (может быть временно)' : ''
                                           });
                                       }
                                       return isActive;

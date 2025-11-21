@@ -136,7 +136,7 @@ class WebRTCManager {
                     };
                     
                     track.onunmute = () => {
-                        console.log(`Трек ${track.kind} включен для пользователя ${targetUserId}, muted: ${track.muted}, enabled: ${track.enabled}`);
+                        console.log(`🎉 Трек ${track.kind} включен для пользователя ${targetUserId}, muted: ${track.muted}, enabled: ${track.enabled}`);
                         previousMuted = false; // Обновляем previousMuted
                         // ВАЖНО: Обновляем UI с небольшой задержкой, чтобы дать браузеру время обновить состояние трека
                         setTimeout(() => {
@@ -144,6 +144,31 @@ class WebRTCManager {
                             this.videoCallManager.checkEmptyState();
                         }, 50);
                     };
+                    
+                    // ВАЖНО: Если трек приходит как muted, но enabled - ждем unmute события
+                    // Это может произойти при инициализации трека
+                    if (track.kind === 'video' && track.muted && track.enabled && track.readyState === 'live') {
+                        console.log(`⏳ Видео трек для ${targetUserId} пришел как muted, но enabled - ждем unmute события...`);
+                        // Устанавливаем обработчик unmute, который покажет карточку
+                        const unmuteHandler = () => {
+                            console.log(`✅ Видео трек для ${targetUserId} стал unmuted!`);
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.checkEmptyState();
+                            track.removeEventListener('unmute', unmuteHandler);
+                        };
+                        track.addEventListener('unmute', unmuteHandler);
+                        // Также проверяем через 1 секунду на случай если событие не сработало
+                        setTimeout(() => {
+                            if (track.muted === false) {
+                                console.log(`✅ Видео трек для ${targetUserId} стал unmuted через таймаут!`);
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                                this.videoCallManager.checkEmptyState();
+                            } else {
+                                console.log(`⚠️ Видео трек для ${targetUserId} все еще muted после таймаута`);
+                            }
+                            track.removeEventListener('unmute', unmuteHandler);
+                        }, 1000);
+                    }
                     
                     const checkTrackState = () => {
                         if (track.readyState === 'ended') {
