@@ -579,15 +579,20 @@ class MediaController {
 
     async updateVideoTracksInConnections(newVideoTrack = null) {
         console.log('🔄 Обновляем видеотреки в соединениях...');
+        console.log(`🔍 Количество соединений: ${this.videoCallManager.remoteUsers.size}`);
         
         const videoTrack = newVideoTrack || (this.videoCallManager.localStream ? this.videoCallManager.localStream.getVideoTracks()[0] : null);
+        console.log(`🔍 Видео трек для обновления: ${videoTrack ? `есть (enabled: ${videoTrack.enabled})` : 'нет'}`);
         
         const updatePromises = [];
+        const offerPromises = [];
         
         this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
             const videoSender = peerConnection.getSenders().find(s => 
                 s.track && s.track.kind === 'video'
             );
+            
+            console.log(`🔍 Пользователь ${userId}: videoSender=${videoSender ? 'есть' : 'нет'}, videoTrack=${videoTrack ? 'есть' : 'нет'}`);
             
             if (videoSender) {
                 console.log(`🔄 Обновляем видео-трек для пользователя: ${userId}`);
@@ -595,12 +600,18 @@ class MediaController {
             } else if (videoTrack) {
                 // ЕСЛИ отправителя нет, но есть трек - добавляем
                 console.log(`🎯 Добавляем видео-трек для пользователя: ${userId}`);
-                peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
-                // ВАЖНО: После добавления трека нужно создать новый offer для переговоров
-                // Это нужно чтобы удаленная сторона получила новый трек
-                this.videoCallManager.webrtcManager.createOffer(userId).catch(err => {
-                    console.error(`❌ Ошибка создания offer после добавления видео трека для ${userId}:`, err);
-                });
+                try {
+                    peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
+                    // ВАЖНО: После добавления трека нужно создать новый offer для переговоров
+                    // Это нужно чтобы удаленная сторона получила новый трек
+                    offerPromises.push(
+                        this.videoCallManager.webrtcManager.createOffer(userId).catch(err => {
+                            console.error(`❌ Ошибка создания offer после добавления видео трека для ${userId}:`, err);
+                        })
+                    );
+                } catch (error) {
+                    console.error(`❌ Ошибка добавления видео трека для ${userId}:`, error);
+                }
             } else {
                 // ЕСЛИ трека нет - удаляем видео-отправитель если есть
                 console.log(`🗑️ Удаляем видео-трек для пользователя: ${userId}`);
@@ -612,9 +623,21 @@ class MediaController {
         
         try {
             await Promise.all(updatePromises);
-            console.log('✅ Все видеотреки обновлены');
+            console.log('✅ Все видеотреки обновлены (replaceTrack)');
         } catch (error) {
             console.error('❌ Ошибка обновления видеотреков:', error);
+        }
+        
+        // Ждем немного перед созданием offer, чтобы треки успели добавиться
+        if (offerPromises.length > 0) {
+            setTimeout(async () => {
+                try {
+                    await Promise.all(offerPromises);
+                    console.log('✅ Все offer созданы после добавления треков');
+                } catch (error) {
+                    console.error('❌ Ошибка создания offer:', error);
+                }
+            }, 100);
         }
     }
 
