@@ -213,6 +213,11 @@ class MediaController {
             // ЕСЛИ выключаем камеру - удаляем видео-трек из соединений
             if (!enabled) {
                 await this.updateVideoTracksInConnections(null);
+                // Принудительно обновляем UI после небольшой задержки, чтобы изменения применились
+                setTimeout(() => {
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
+                }, 100);
             } else {
                 // ЕСЛИ включаем камеру - добавляем видео-трек в соединения
                 await this.updateVideoTracksInConnections(videoTracks[0]);
@@ -220,6 +225,7 @@ class MediaController {
             
             this.videoCallManager.uiManager.updateControlButtons();
             this.videoCallManager.uiManager.updateVideoOverlays();
+            this.videoCallManager.checkEmptyState();
             this.videoCallManager.notificationManager.show(enabled ? 'Камера включена' : 'Камера выключена', 'info');
         }
     }

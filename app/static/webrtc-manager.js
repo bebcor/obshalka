@@ -66,6 +66,7 @@ class WebRTCManager {
                 console.log('Remote track received from:', targetUserId, 
                             'Track kind:', event.track.kind, 
                             'Track readyState:', event.track.readyState,
+                            'Track enabled:', event.track.enabled,
                             'Streams count:', event.streams.length);
             
                 // Создаем или получаем удаленный поток для этого пользователя
@@ -79,32 +80,76 @@ class WebRTCManager {
                 const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
                 const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
                 
-                event.streams[0].getTracks().forEach(track => {
-                    if (!remoteStream.getTracks().some(t => t.id === track.id)) {
-                        remoteStream.addTrack(track);
-                        console.log('Added track to remote stream:', track.kind, track.id);
-                        
-                        // Если это аудио трек, убеждаемся что он воспроизводится
-                        if (track.kind === 'audio' && videoElement) {
-                            console.log('Audio track added, ensuring playback');
-                            videoElement.muted = false;
-                            videoElement.volume = 1.0;
-                            // Обновляем srcObject чтобы аудио начало воспроизводиться
-                            if (videoElement.srcObject !== remoteStream) {
-                                videoElement.srcObject = remoteStream;
-                            }
-                            videoElement.play().catch(err => {
-                                console.error('Error playing audio:', err);
-                            });
+                const track = event.track;
+                
+                // Если трек уже есть в потоке, обновляем его
+                const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
+                if (existingTrack && existingTrack !== track) {
+                    remoteStream.removeTrack(existingTrack);
+                }
+                
+                if (!remoteStream.getTracks().some(t => t.id === track.id)) {
+                    remoteStream.addTrack(track);
+                    console.log('Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled);
+                    
+                    // Добавляем обработчики для отслеживания изменений трека
+                    track.onended = () => {
+                        console.log(`Трек ${track.kind} завершился для пользователя ${targetUserId}`);
+                        remoteStream.removeTrack(track);
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                        this.videoCallManager.checkEmptyState();
+                    };
+                    
+                    track.onmute = () => {
+                        console.log(`Трек ${track.kind} заглушен для пользователя ${targetUserId}`);
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                        this.videoCallManager.checkEmptyState();
+                    };
+                    
+                    track.onunmute = () => {
+                        console.log(`Трек ${track.kind} включен для пользователя ${targetUserId}`);
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                        this.videoCallManager.checkEmptyState();
+                    };
+                    
+                    // Периодически проверяем состояние трека (на случай если события не сработали)
+                    const checkTrackState = () => {
+                        if (track.readyState === 'ended') {
+                            remoteStream.removeTrack(track);
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.checkEmptyState();
+                            return;
                         }
+                        // Проверяем состояние каждые 500мс
+                        setTimeout(() => {
+                            if (remoteStream.getTracks().includes(track)) {
+                                checkTrackState();
+                            }
+                        }, 500);
+                    };
+                    checkTrackState();
+                    
+                    // Если это аудио трек, убеждаемся что он воспроизводится
+                    if (track.kind === 'audio' && videoElement) {
+                        console.log('Audio track added, ensuring playback');
+                        videoElement.muted = false;
+                        videoElement.volume = 1.0;
+                        // Обновляем srcObject чтобы аудио начало воспроизводиться
+                        if (videoElement.srcObject !== remoteStream) {
+                            videoElement.srcObject = remoteStream;
+                        }
+                        videoElement.play().catch(err => {
+                            console.error('Error playing audio:', err);
+                        });
                     }
-                });
+                }
             
                 // Обновляем srcObject видео элемента на случай если поток изменился
                 if (videoElement && videoElement.srcObject !== remoteStream) {
                     videoElement.srcObject = remoteStream;
                 }
             
+                // Обновляем UI сразу после добавления трека
                 this.videoCallManager.uiManager.updateVideoOverlays();
             };
         
