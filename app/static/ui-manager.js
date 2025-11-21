@@ -225,29 +225,53 @@ class UIManager {
                 console.log(`🔍 [${userId}] Видео треков в remoteStream:`, activeVideoTracks.length);
                 
                 // Удаляем все видео треки из remoteStream, которых нет в активных receivers
+                // ВАЖНО: Также проверяем, что трек в remoteStream соответствует треку в receivers
                 activeVideoTracks.forEach(track => {
-                    const receiverTrack = receivers.find(r => r.track && r.track.id === track.id)?.track;
+                    const receiver = receivers.find(r => r.track && r.track.id === track.id);
+                    const receiverTrack = receiver?.track;
+                    
+                    // ВАЖНО: Проверяем не только состояние трека в receivers, но и наличие sender на удаленной стороне
+                    // Если sender.track === null, значит камера выключена через replaceTrack(null)
+                    const sender = peerConnection.getSenders().find(s => {
+                        // Ищем sender, который отправляет трек к этому receiver
+                        // Но это локальные senders, нам нужны удаленные senders
+                        // На самом деле, мы не можем проверить удаленные senders напрямую
+                        // Но мы можем проверить, что трек в receivers активен
+                        return s.track && s.track.kind === 'video';
+                    });
+                    
+                    // ВАЖНО: Если трека нет в receivers, или он неактивен - удаляем из remoteStream
                     const receiverTrackActive = receiverTrack && 
                                                receiverTrack.enabled && 
                                                !receiverTrack.muted && 
                                                receiverTrack.readyState === 'live';
                     
-                    if (!receiverTrackActive) {
+                    // ВАЖНО: Также проверяем, что трек в remoteStream активен
+                    // Если трек в remoteStream неактивен (disabled или muted), удаляем его
+                    const streamTrackActive = track.enabled && !track.muted && track.readyState === 'live';
+                    
+                    // Удаляем трек если:
+                    // 1. Нет receiver для этого трека
+                    // 2. Трек в receiver неактивен
+                    // 3. Трек в remoteStream неактивен
+                    if (!receiverTrack || !receiverTrackActive || !streamTrackActive) {
                         console.log(`🗑️ [${userId}] УДАЛЯЕМ видео трек ${track.id} из remoteStream`, {
                             hasReceiver: !!receiverTrack,
                             receiverEnabled: receiverTrack?.enabled,
                             receiverMuted: receiverTrack?.muted,
                             receiverReadyState: receiverTrack?.readyState,
                             receiverTrackActive: receiverTrackActive,
-                            streamTrack: { enabled: track.enabled, muted: track.muted, readyState: track.readyState },
+                            streamEnabled: track.enabled,
+                            streamMuted: track.muted,
+                            streamReadyState: track.readyState,
+                            streamTrackActive: streamTrackActive,
                             reason: !receiverTrack ? 'no receiver' : 
-                                   !receiverTrack.enabled ? 'receiver disabled' :
-                                   receiverTrack.muted ? 'receiver muted' :
-                                   receiverTrack.readyState !== 'live' ? 'receiver not live' : 'unknown'
+                                   !receiverTrackActive ? 'receiver inactive' :
+                                   !streamTrackActive ? 'stream track inactive' : 'unknown'
                         });
                         stream.removeTrack(track);
                     } else {
-                        console.log(`✅ [${userId}] Видео трек ${track.id} активен в receivers, оставляем в remoteStream`);
+                        console.log(`✅ [${userId}] Видео трек ${track.id} активен в receivers и remoteStream, оставляем`);
                     }
                 });
             } else {

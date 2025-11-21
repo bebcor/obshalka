@@ -867,6 +867,8 @@ class VideoCallManager {
         
         // СОЗДАЕМ peer connections для всех участников
         // НО если локального потока еще нет - создадим соединения позже, когда поток появится
+        // ВАЖНО: Сначала создаем peer connections для существующих участников
+        // Но НЕ отправляем offers сразу - это сделает тот, кто присоединился позже
         data.participants.forEach(participant => {
             if (participant.socket_id !== this.socketId) {
                 // Создаем соединение даже без локального потока - треки добавим позже
@@ -882,6 +884,21 @@ class VideoCallManager {
         // АВТОМАТИЧЕСКИ включаем камеру и микрофон без модального окна
         try {
             await this.mediaController.startVideo();
+            // ВАЖНО: После запуска медиа добавляем треки в существующие peer connections
+            // и отправляем offers для всех существующих участников
+            if (this.localStream) {
+                console.log('🔄 Медиа запущены, обновляем треки в существующих соединениях...');
+                data.participants.forEach(participant => {
+                    if (participant.socket_id !== this.socketId) {
+                        // Добавляем треки в существующее соединение
+                        this.webrtcManager.addTracksToPeerConnection(participant.socket_id);
+                        // Отправляем offer для установления соединения
+                        this.webrtcManager.createOffer(participant.socket_id).catch(err => {
+                            console.error(`Ошибка создания offer для ${participant.socket_id}:`, err);
+                        });
+                    }
+                });
+            }
             // Убеждаемся, что локальная карточка правильно обновлена после запуска медиа
             this.uiManager.updateVideoOverlays();
         } catch (error) {
@@ -914,39 +931,20 @@ class VideoCallManager {
         if (data.user_id !== this.socketId) {
             // ВАЖНО: Создаем peer connection для нового пользователя
             this.webrtcManager.setupPeerConnection(data.user_id);
-            // ВАЖНО: Если у нас уже есть локальный поток - обновляем треки в новом соединении
+            // ВАЖНО: Если у нас уже есть локальный поток - добавляем треки в новое соединение
             // Это нужно чтобы новый пользователь получил наши треки
             if (this.localStream) {
-                console.log('🔄 Новый пользователь присоединился, обновляем треки в соединении...');
-                // Добавляем треки в новое соединение
-                const videoTrack = this.localStream.getVideoTracks()[0];
-                const audioTrack = this.localStream.getAudioTracks()[0];
-                if (videoTrack && videoTrack.enabled) {
-                    // ВАЖНО: Обновляем треки для конкретного пользователя
-                    const peerConnection = this.remoteUsers.get(data.user_id);
-                    if (peerConnection) {
-                        const videoSender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-                        if (videoSender) {
-                            videoSender.replaceTrack(videoTrack);
-                        } else {
-                            peerConnection.addTrack(videoTrack, this.localStream);
-                        }
-                    }
-                }
-                if (audioTrack && audioTrack.enabled) {
-                    const peerConnection = this.remoteUsers.get(data.user_id);
-                    if (peerConnection) {
-                        const audioSender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
-                        if (audioSender) {
-                            audioSender.replaceTrack(audioTrack);
-                        } else {
-                            peerConnection.addTrack(audioTrack, this.localStream);
-                        }
-                    }
-                }
+                console.log('🔄 Новый пользователь присоединился, добавляем треки в соединение...');
+                // ВАЖНО: Используем addTracksToPeerConnection для правильного добавления треков
+                this.webrtcManager.addTracksToPeerConnection(data.user_id);
             }
-            // Создаем offer для нового пользователя
-            this.webrtcManager.createOffer(data.user_id);
+            // ВАЖНО: Создаем offer для нового пользователя СРАЗУ после создания соединения
+            // Это нужно чтобы установить соединение и начать обмен медиа
+            setTimeout(() => {
+                this.webrtcManager.createOffer(data.user_id).catch(err => {
+                    console.error(`Ошибка создания offer для нового пользователя ${data.user_id}:`, err);
+                });
+            }, 100); // Небольшая задержка чтобы треки успели добавиться
         }
     }
 
