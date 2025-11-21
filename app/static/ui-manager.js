@@ -289,6 +289,8 @@ class UIManager {
                     } else {
                         // Если нет ни видео, ни аудио - очищаем srcObject чтобы не показывать черный экран
                         videoElement.srcObject = null;
+                        // ВАЖНО: Также останавливаем воспроизведение чтобы освободить ресурсы
+                        videoElement.pause();
                     }
                 }
                 if (overlay) {
