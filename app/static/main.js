@@ -882,9 +882,13 @@ class VideoCallManager {
         // АВТОМАТИЧЕСКИ включаем камеру и микрофон без модального окна
         try {
             await this.mediaController.startVideo();
+            // Убеждаемся, что локальная карточка правильно обновлена после запуска медиа
+            this.uiManager.updateVideoOverlays();
         } catch (error) {
             console.error('Ошибка при включении медиа:', error);
             this.notificationManager.show('Не удалось получить доступ к медиа-устройствам. Вы можете включить их позже.', 'warning');
+            // Убеждаемся, что локальная карточка скрыта, если медиа не запущены
+            this.uiManager.updateVideoOverlays();
         }
     }
 

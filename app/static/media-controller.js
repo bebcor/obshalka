@@ -91,18 +91,15 @@ class MediaController {
                     }
                     
                     const localVideo = document.getElementById('localVideo');
-                    const localParticipantCard = document.getElementById('localParticipantCard');
                     
                     if (localVideo) {
                         localVideo.srcObject = this.videoCallManager.localStream;
-                        localVideo.style.display = 'block';
+                        // НЕ устанавливаем display здесь - это сделает updateVideoOverlays()
+                        // который проверит, есть ли активное видео
                     }
                     
-                    // ПОКАЗЫВАЕМ карточку локального участника
-                    if (localParticipantCard) {
-                        localParticipantCard.style.display = 'block';
-                    }
-                    
+                    // НЕ принудительно показываем карточку - это сделает updateVideoOverlays()
+                    // Карточка появится только если есть активное видео
                     this.videoCallManager.hasVideoTrack = true; // ЕСТЬ ВИДЕОТРЕК
                     
                 } catch (cameraError) {
@@ -391,17 +388,8 @@ class MediaController {
                 this.videoCallManager.localStream = audioStream;
             }
 
-            // СКРЫВАЕМ ВИДЕО-ПЛАШКУ ПРИ ТОЛЬКО АУДИО
-            const localOverlay = document.getElementById('localVideoOverlay');
-            if (localOverlay) {
-                localOverlay.style.display = 'none';
-            }
-
-            // ПОКАЗЫВАЕМ карточку локального участника (даже если только аудио)
-            const localParticipantCard = document.getElementById('localParticipantCard');
-            if (localParticipantCard) {
-                localParticipantCard.style.display = 'block';
-            }
+            // НЕ принудительно показываем карточку - это сделает updateVideoOverlays()
+            // Карточка появится только если есть активное видео (не только аудио)
 
             // СКРЫВАЕМ видео элемент если нет видео-треков
             const localVideo = document.getElementById('localVideo');
