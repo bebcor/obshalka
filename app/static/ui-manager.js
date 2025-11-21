@@ -118,6 +118,17 @@ class UIManager {
                 localParticipantCard.style.setProperty('pointer-events', 'none', 'important');
                 localVideo.style.setProperty('display', 'none', 'important');
                 localOverlay.style.setProperty('display', 'none', 'important');
+                // ВАЖНО: Очищаем srcObject для локального видео когда нет активного видео
+                // Это предотвращает показ черного экрана
+                if (localVideo && localVideo.srcObject) {
+                    const currentStream = localVideo.srcObject;
+                    const hasVideoTracks = currentStream.getVideoTracks().some(t => t.enabled && !t.muted && t.readyState === 'live');
+                    if (!hasVideoTracks) {
+                        console.log('🔄 Очищаем srcObject для локального видео (нет активного видео)');
+                        localVideo.srcObject = null;
+                        localVideo.pause();
+                    }
+                }
                 const computedDisplay = window.getComputedStyle(localParticipantCard).display;
                 console.log('❌ Локальная карточка: СКРЫВАЕМ (нет активного видео), inline display:', localParticipantCard.style.display, 'computed:', computedDisplay);
             }
@@ -189,14 +200,24 @@ class UIManager {
             const videoTracks = stream.getVideoTracks();
             const audioTracks = stream.getAudioTracks();
             
-            // Удаляем только ended треки (disabled треки могут снова включиться)
+            // ВАЖНО: Удаляем неактивные видео треки (ended, disabled, или muted)
+            // Это предотвращает показ черных экранов
             videoTracks.forEach(track => {
-                if (track.readyState === 'ended') {
-                    console.log(`🗑️ Удаляем ended видео трек для ${userId}`);
+                const isInactive = track.readyState === 'ended' || 
+                                  !track.enabled || 
+                                  track.muted;
+                if (isInactive) {
+                    console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем неактивный видео трек:`, {
+                        id: track.id,
+                        readyState: track.readyState,
+                        enabled: track.enabled,
+                        muted: track.muted
+                    });
                     stream.removeTrack(track);
                 }
             });
             
+            // Для аудио удаляем только ended треки (disabled/muted аудио может снова включиться)
             audioTracks.forEach(track => {
                 if (track.readyState === 'ended') {
                     console.log(`🗑️ Удаляем ended аудио трек для ${userId}`);
@@ -300,15 +321,30 @@ class UIManager {
                 console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео), display:`, window.getComputedStyle(participantCard).display);
             } else {
                 // Нет активного видео - скрываем карточку
+                // ВАЖНО: Удаляем все неактивные видео треки из потока
+                const inactiveVideoTracks = activeVideoTracks.filter(track => 
+                    !track || track.readyState !== 'live' || !track.enabled || track.muted
+                );
+                inactiveVideoTracks.forEach(track => {
+                    console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем неактивный видео трек из потока:`, track.id);
+                    stream.removeTrack(track);
+                });
+                
                 participantCard.style.setProperty('display', 'none', 'important');
+                participantCard.style.setProperty('visibility', 'hidden', 'important');
+                participantCard.style.setProperty('opacity', '0', 'important');
+                participantCard.style.setProperty('width', '0', 'important');
+                participantCard.style.setProperty('height', '0', 'important');
+                participantCard.style.setProperty('overflow', 'hidden', 'important');
+                participantCard.style.setProperty('pointer-events', 'none', 'important');
+                
                 if (videoElement) {
                     videoElement.style.setProperty('display', 'none', 'important');
-                    // ВАЖНО: Очищаем srcObject только если нет аудио
-                    if (!hasActiveAudio) {
-                        console.log(`🔄 [updateVideoOverlays ${userId}] Очищаем srcObject (нет активного видео и аудио)`);
-                        videoElement.srcObject = null;
-                        videoElement.pause();
-                    }
+                    // ВАЖНО: Всегда очищаем srcObject когда нет активного видео (независимо от аудио)
+                    // Это предотвращает показ черного экрана
+                    console.log(`🔄 [updateVideoOverlays ${userId}] Очищаем srcObject (нет активного видео)`);
+                    videoElement.srcObject = null;
+                    videoElement.pause();
                 }
                 if (overlay) overlay.style.display = 'none';
                 console.log(`❌ [updateVideoOverlays ${userId}] Удаленная карточка: СКРЫВАЕМ (нет активного видео)`);

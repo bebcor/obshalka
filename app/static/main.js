@@ -253,12 +253,19 @@ class VideoCallManager {
             if (remoteStream) {
                 const videoTracks = remoteStream.getVideoTracks();
                 const audioTracks = remoteStream.getAudioTracks();
+                // ВАЖНО: Проверяем что видео трек активен (enabled, не muted, live)
                 const hasActiveVideo = videoTracks.length > 0 && 
-                                      videoTracks[0].readyState === 'live' && 
-                                      videoTracks[0].enabled;
+                                      videoTracks.some(track => 
+                                          track.readyState === 'live' && 
+                                          track.enabled && 
+                                          !track.muted
+                                      );
                 const hasActiveAudio = audioTracks.length > 0 && 
-                                      audioTracks[0].readyState === 'live' && 
-                                      audioTracks[0].enabled;
+                                      audioTracks.some(track => 
+                                          track.readyState === 'live' && 
+                                          track.enabled && 
+                                          !track.muted
+                                      );
                 // Участник считается видимым только если есть активные треки
                 return isVisible && (hasActiveVideo || hasActiveAudio);
             }
