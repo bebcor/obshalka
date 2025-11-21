@@ -471,19 +471,22 @@ class UIManager {
                 const result = originalAddTrack(track);
                 setupTrackHandlers(track);
                 
-                // ВАЖНО: Если видео трек неактивен при добавлении, сразу скрываем карточку и очищаем srcObject
+                // ВАЖНО: Если видео трек неактивен при добавлении, ждем и перепроверяем
+                // Трек может быть временно muted при инициализации
                 if (track.kind === 'video' && (track.muted || !track.enabled)) {
                     console.log(`⚠️ Видео трек добавлен как неактивный для ${userId}, muted: ${track.muted}, enabled: ${track.enabled}`);
-                    const card = document.getElementById(`participant-${userId}`);
-                    const videoEl = document.getElementById(`remoteVideo-${userId}`);
-                    if (card) {
-                        card.style.setProperty('display', 'none', 'important');
-                    }
-                    if (videoEl) {
-                        videoEl.style.setProperty('display', 'none', 'important');
-                        // Очищаем srcObject чтобы не показывать черный экран
-                        videoEl.srcObject = null;
-                    }
+                    // Ждем 500мс и перепроверяем состояние трека
+                    setTimeout(() => {
+                        const currentTrack = stream.getVideoTracks().find(t => t.id === track.id);
+                        if (currentTrack) {
+                            const isNowActive = currentTrack.enabled && !currentTrack.muted && currentTrack.readyState === 'live';
+                            console.log(`🔄 Перепроверка видео трека для ${userId}: enabled: ${currentTrack.enabled}, muted: ${currentTrack.muted}, readyState: ${currentTrack.readyState}, isNowActive: ${isNowActive}`);
+                            if (isNowActive) {
+                                // Трек стал активным - обновляем UI
+                                this.updateVideoOverlays();
+                            }
+                        }
+                    }, 500);
                 }
                 
                 // Обновляем UI с небольшой задержкой, чтобы трек успел инициализироваться

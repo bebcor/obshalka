@@ -92,21 +92,22 @@ class WebRTCManager {
                     remoteStream.addTrack(track);
                     console.log('Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
                     
-                    // ВАЖНО: Если видео трек неактивен при добавлении (disabled или muted), сразу скрываем карточку
+                    // ВАЖНО: Если видео трек неактивен при добавлении (disabled или muted), 
+                    // ждем немного и перепроверяем - трек может быть временно muted при инициализации
                     if (track.kind === 'video' && (!track.enabled || track.muted)) {
                         console.log(`⚠️ Видео трек добавлен как неактивный для ${targetUserId}, enabled: ${track.enabled}, muted: ${track.muted}`);
-                        const participantCard = document.getElementById(`participant-${targetUserId}`);
-                        if (participantCard) {
-                            participantCard.style.setProperty('display', 'none', 'important');
-                            const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                            if (videoElement) {
-                                videoElement.style.setProperty('display', 'none', 'important');
-                                // Очищаем srcObject если трек неактивен
-                                if (!track.enabled || track.muted) {
-                                    videoElement.srcObject = null;
+                        // Ждем 500мс и перепроверяем состояние трека
+                        setTimeout(() => {
+                            const currentTrack = remoteStream.getVideoTracks().find(t => t.id === track.id);
+                            if (currentTrack) {
+                                const isNowActive = currentTrack.enabled && !currentTrack.muted && currentTrack.readyState === 'live';
+                                console.log(`🔄 Перепроверка видео трека для ${targetUserId}: enabled: ${currentTrack.enabled}, muted: ${currentTrack.muted}, readyState: ${currentTrack.readyState}, isNowActive: ${isNowActive}`);
+                                if (isNowActive) {
+                                    // Трек стал активным - обновляем UI
+                                    this.videoCallManager.uiManager.updateVideoOverlays();
                                 }
                             }
-                        }
+                        }, 500);
                     }
                     
                     // Всегда обновляем UI после добавления трека
