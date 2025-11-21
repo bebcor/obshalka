@@ -127,11 +127,14 @@ class UIManager {
             
             // Проверяем наличие активного видео трека (enabled и live)
             // ВАЖНО: проверяем что трек не только есть, но и активен
+            // Также проверяем что трек не null (когда replaceTrack(null) был вызван)
             const hasActiveVideo = activeVideoTracks.length > 0 && 
-                                  activeVideoTracks[0] &&
-                                  activeVideoTracks[0].readyState === 'live' && 
-                                  activeVideoTracks[0].enabled &&
-                                  !activeVideoTracks[0].muted;
+                                  activeVideoTracks.some(track => 
+                                      track &&
+                                      track.readyState === 'live' && 
+                                      track.enabled &&
+                                      !track.muted
+                                  );
             
             // Проверяем наличие активного аудио трека
             // ВАЖНО: проверяем все аудио треки, а не только первый
@@ -143,16 +146,21 @@ class UIManager {
                                       !track.muted
                                   );
             
-            // Логируем для отладки когда есть аудио но нет видео
-            if (activeVideoTracks.length === 0 && activeAudioTracks.length > 0) {
-                console.log(`🔍 Проверка для ${userId} (только аудио):`, {
+            // Детальное логирование для отладки
+            if ((activeVideoTracks.length > 0 || activeAudioTracks.length > 0) && !hasActiveVideo && !hasActiveAudio) {
+                console.log(`⚠️ Есть треки, но все неактивны для ${userId}:`, {
                     videoTracks: activeVideoTracks.length,
                     audioTracks: activeAudioTracks.length,
-                    hasActiveVideo,
-                    hasActiveAudio,
-                    audioEnabled: activeAudioTracks[0]?.enabled,
-                    audioReadyState: activeAudioTracks[0]?.readyState,
-                    audioMuted: activeAudioTracks[0]?.muted
+                    videoTracksInfo: activeVideoTracks.map(t => ({
+                        enabled: t?.enabled,
+                        readyState: t?.readyState,
+                        muted: t?.muted
+                    })),
+                    audioTracksInfo: activeAudioTracks.map(t => ({
+                        enabled: t?.enabled,
+                        readyState: t?.readyState,
+                        muted: t?.muted
+                    }))
                 });
             }
             
