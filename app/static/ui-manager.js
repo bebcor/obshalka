@@ -150,13 +150,19 @@ class UIManager {
                 });
                 
                 // ВАЖНО: Также добавляем треки из receivers, которых нет в stream
+                // Это критично - если ontrack не сработал, треки все равно должны попасть в stream
                 receivers.forEach(receiver => {
                     const track = receiver.track;
                     if (track && track.enabled && !track.muted && track.readyState === 'live') {
                         const trackInStream = stream.getTracks().find(t => t.id === track.id);
                         if (!trackInStream) {
-                            console.log(`✅ [updateVideoOverlays] Добавляем трек ${track.kind} (${track.id}) из receivers в remoteStream для ${userId}`);
+                            console.log(`✅ [updateVideoOverlays] Добавляем трек ${track.kind} (${track.id}) из receivers в remoteStream для ${userId}`, {
+                                enabled: track.enabled,
+                                muted: track.muted,
+                                readyState: track.readyState
+                            });
                             stream.addTrack(track);
+                            console.log(`✅ [updateVideoOverlays] RemoteStream теперь имеет ${stream.getTracks().length} треков:`, stream.getTracks().map(t => `${t.kind}:${t.id}`));
                         }
                     }
                 });
@@ -268,13 +274,22 @@ class UIManager {
                     videoElement.style.display = 'block';
                     // ВАЖНО: Всегда обновляем srcObject при показе
                     if (videoElement.srcObject !== stream) {
-                        console.log(`🔄 [updateVideoOverlays ${userId}] Обновляем srcObject для videoElement`);
+                        console.log(`🔄 [updateVideoOverlays ${userId}] Обновляем srcObject для videoElement, stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}`));
                         videoElement.srcObject = stream;
                     }
-                    videoElement.play().catch(err => console.warn(`⚠️ [updateVideoOverlays ${userId}] Ошибка play:`, err));
+                    // ВАЖНО: Убеждаемся что видео воспроизводится
+                    videoElement.play().then(() => {
+                        console.log(`✅ [updateVideoOverlays ${userId}] Видео успешно воспроизводится`);
+                    }).catch(err => {
+                        console.warn(`⚠️ [updateVideoOverlays ${userId}] Ошибка play:`, err);
+                        // Пробуем еще раз через небольшую задержку
+                        setTimeout(() => {
+                            videoElement.play().catch(e => console.warn(`⚠️ [updateVideoOverlays ${userId}] Повторная ошибка play:`, e));
+                        }, 100);
+                    });
                 }
                 participantCard.style.display = 'block';
-                console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео)`);
+                console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео), display:`, window.getComputedStyle(participantCard).display);
             } else {
                 // Нет активного видео - скрываем карточку
                 participantCard.style.display = 'none';

@@ -892,10 +892,17 @@ class VideoCallManager {
                     if (participant.socket_id !== this.socketId) {
                         // Добавляем треки в существующее соединение
                         this.webrtcManager.addTracksToPeerConnection(participant.socket_id);
-                        // Отправляем offer для установления соединения
-                        this.webrtcManager.createOffer(participant.socket_id).catch(err => {
-                            console.error(`Ошибка создания offer для ${participant.socket_id}:`, err);
-                        });
+                        // ВАЖНО: Ждем немного перед созданием offer, чтобы треки успели добавиться
+                        setTimeout(() => {
+                            if (this.remoteUsers.has(participant.socket_id)) {
+                                const peerConnection = this.remoteUsers.get(participant.socket_id);
+                                if (peerConnection.signalingState === 'stable') {
+                                    this.webrtcManager.createOffer(participant.socket_id).catch(err => {
+                                        console.error(`Ошибка создания offer для ${participant.socket_id}:`, err);
+                                    });
+                                }
+                            }
+                        }, 300);
                     }
                 });
             }
@@ -1017,10 +1024,12 @@ class VideoCallManager {
     }
 
     handleWebRTCOffer(data) {
+        console.log('📥 [main] handleWebRTCOffer вызван для:', data.sender_id);
         this.webrtcManager.handleWebRTCOffer(data);
     }
 
     handleWebRTCAnswer(data) {
+        console.log('📥 [main] handleWebRTCAnswer вызван для:', data.sender_id);
         this.webrtcManager.handleWebRTCAnswer(data);
     }
 

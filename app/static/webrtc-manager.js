@@ -21,20 +21,26 @@ class WebRTCManager {
             // Создаем новый peer connection
             const peerConnection = new RTCPeerConnection(configuration);
         
-            // ДОБАВЛЯЕМ ТОЛЬКО АКТИВНЫЕ ТРЕКИ из текущего локального потока (ТОЧНАЯ КОПИЯ ОРИГИНАЛА)
+            // ДОБАВЛЯЕМ ТОЛЬКО АКТИВНЫЕ ТРЕКИ из текущего локального потока
             if (this.videoCallManager.localStream) {
                 this.videoCallManager.localStream.getTracks().forEach(track => {
-                    // ДОБАВЛЯЕМ только если трек включен ИЛИ это аудио (аудио всегда добавляем)
-                    // В оригинале проверялось !this.isSharingScreen для видео
+                    // ВАЖНО: Добавляем все треки, которые есть в потоке
+                    // Для видео добавляем если трек enabled (независимо от isSharingScreen)
+                    // Для аудио всегда добавляем
                     const isSharingScreen = this.videoCallManager.isSharingScreen || false;
-                    if (track.kind === 'audio' || (track.kind === 'video' && track.enabled && !isSharingScreen)) {
-                        console.log(`Adding ${track.kind} track to connection for ${targetUserId}`);
+                    const shouldAdd = track.kind === 'audio' || 
+                                     (track.kind === 'video' && track.enabled);
+                    
+                    if (shouldAdd) {
+                        console.log(`Adding ${track.kind} track to connection for ${targetUserId}, enabled: ${track.enabled}`);
                         try {
                             peerConnection.addTrack(track, this.videoCallManager.localStream);
                             console.log(`✅ ${track.kind} track added successfully`);
                         } catch (error) {
                             console.error(`❌ Error adding ${track.kind} track:`, error);
                         }
+                    } else {
+                        console.log(`⚠️ Skipping ${track.kind} track (enabled: ${track.enabled})`);
                     }
                 });
             } else {
@@ -212,22 +218,16 @@ class WebRTCManager {
                 }
                 
                 if (!remoteStream.getTracks().some(t => t.id === track.id)) {
-                    // ВАЖНО: Добавляем трек в remoteStream ТОЛЬКО если он активен (enabled и не muted)
-                    // Это предотвращает показ черных экранов
-                    const isTrackActive = track.enabled && !track.muted && track.readyState === 'live';
+                    // ВАЖНО: Добавляем трек в remoteStream ВСЕГДА, даже если он временно muted или disabled
+                    // Обработчики будут отслеживать изменения состояния и обновлять UI
+                    remoteStream.addTrack(track);
+                    console.log('✅ [ontrack] Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
+                    console.log('✅ [ontrack] RemoteStream now has', remoteStream.getTracks().length, 'tracks:', remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
                     
-                    if (track.kind === 'video' && !isTrackActive) {
-                        console.log(`⚠️ Видео трек неактивен при получении для ${targetUserId}, enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}, НЕ добавляем в поток, но добавляем обработчики`);
-                        // НЕ добавляем неактивный трек в поток
-                        // НО: добавляем обработчики чтобы отследить когда он станет активным
-                    } else {
-                        remoteStream.addTrack(track);
-                        console.log('✅ [ontrack] Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
-                        console.log('✅ [ontrack] RemoteStream now has', remoteStream.getTracks().length, 'tracks:', remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
+                    // ВАЖНО: Если трек muted или disabled при получении, это нормально - он может стать активным позже
+                    if (track.kind === 'video' && (track.muted || !track.enabled)) {
+                        console.log(`⏳ Видео трек для ${targetUserId} пришел как ${track.muted ? 'muted' : 'disabled'}, но добавлен в поток - ждем активации`);
                     }
-                    
-                    // ВАЖНО: Всегда добавляем обработчики ДАЖЕ для неактивных треков
-                    // Это нужно чтобы отследить когда трек станет активным
                     
                     // ВАЖНО: Обновляем UI после добавления трека (или попытки добавления)
                     setTimeout(() => {
@@ -646,14 +646,26 @@ class WebRTCManager {
                 const videoTrack = this.videoCallManager.localStream.getVideoTracks()[0];
                 const audioTrack = this.videoCallManager.localStream.getAudioTracks()[0];
                 
-                if (videoTrack && !existingSenders.some(s => s.track?.kind === 'video')) {
+                // ВАЖНО: Добавляем видео трек если он есть, enabled и еще не добавлен
+                if (videoTrack && videoTrack.enabled && !existingSenders.some(s => s.track?.kind === 'video')) {
                     console.log(`🎯 Adding missing video track to ${targetUserId} before offer`);
-                    peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
+                    try {
+                        peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
+                        console.log(`✅ Video track added before offer for ${targetUserId}`);
+                    } catch (error) {
+                        console.error(`❌ Error adding video track before offer:`, error);
+                    }
                 }
                 
-                if (audioTrack && !existingSenders.some(s => s.track?.kind === 'audio')) {
+                // ВАЖНО: Добавляем аудио трек если он есть, enabled и еще не добавлен
+                if (audioTrack && audioTrack.enabled && !existingSenders.some(s => s.track?.kind === 'audio')) {
                     console.log(`🎯 Adding missing audio track to ${targetUserId} before offer`);
-                    peerConnection.addTrack(audioTrack, this.videoCallManager.localStream);
+                    try {
+                        peerConnection.addTrack(audioTrack, this.videoCallManager.localStream);
+                        console.log(`✅ Audio track added before offer for ${targetUserId}`);
+                    } catch (error) {
+                        console.error(`❌ Error adding audio track before offer:`, error);
+                    }
                 }
             }
         
@@ -703,8 +715,8 @@ class WebRTCManager {
 
     async handleWebRTCOffer(data) {
         try {
-            console.log('📥 Received offer from:', data.sender_id);
-            console.log('📥 Current signaling state:', this.videoCallManager.remoteUsers.has(data.sender_id) ? 
+            console.log('📥 [handleWebRTCOffer] Received offer from:', data.sender_id);
+            console.log('📥 [handleWebRTCOffer] Current signaling state:', this.videoCallManager.remoteUsers.has(data.sender_id) ? 
                 this.videoCallManager.remoteUsers.get(data.sender_id).signalingState : 'no connection');
         
             // Если соединение с этим пользователем еще не создано, создаем его
@@ -791,8 +803,20 @@ class WebRTCManager {
             
             // Устанавливаем созданный ответ как локальное описание
             await peerConnection.setLocalDescription(answer);
+            console.log('✅ [handleWebRTCOffer] Local description set, signalingState:', peerConnection.signalingState);
+            
+            // ВАЖНО: После установки local description треки должны прийти через ontrack
+            // Но иногда они уже есть в receivers, поэтому проверяем их тоже
+            setTimeout(() => {
+                const receivers = peerConnection.getReceivers();
+                console.log(`🔍 [handleWebRTCOffer] Проверка receivers после установки local description для ${data.sender_id}:`, receivers.length);
+                receivers.forEach((receiver, index) => {
+                    const track = receiver.track;
+                    console.log(`  [handleWebRTCOffer] Receiver ${index}: kind=${receiver.track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
+                });
+            }, 100);
         
-            console.log('Sending answer to:', data.sender_id);
+            console.log('📤 [handleWebRTCOffer] Sending answer to:', data.sender_id);
             console.log('Answer transceivers:');
             peerConnection.getTransceivers().forEach((transceiver, index) => {
                 console.log(`Transceiver ${index}:`, {
@@ -852,18 +876,16 @@ class WebRTCManager {
                     }
                     const remoteStream = this.videoCallManager.remoteStreams.get(data.sender_id);
                     
-                    // ВАЖНО: Добавляем трек в поток ТОЛЬКО если он активен и еще не добавлен
+                    // ВАЖНО: Добавляем трек в поток ВСЕГДА если он live и еще не добавлен
+                    // Даже если трек временно muted или disabled, он может стать активным позже
                     if (track && track.readyState === 'live' && !remoteStream.getTracks().some(t => t.id === track.id)) {
-                        const isTrackActive = track.enabled && !track.muted;
-                        if (isTrackActive) {
-                            console.log(`✅ [handleWebRTCAnswer] Трек ${track.kind} (${track.id}) уже активен для ${data.sender_id}, но еще не обработан, добавляем в поток...`);
-                            remoteStream.addTrack(track);
-                            console.log(`✅ [handleWebRTCAnswer] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
-                            // Обновляем UI
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                        } else {
-                            console.log(`⚠️ [handleWebRTCAnswer] Трек ${track.kind} (${track.id}) для ${data.sender_id} неактивен (enabled=${track.enabled}, muted=${track.muted}), не добавляем в поток`);
-                        }
+                        console.log(`✅ [handleWebRTCAnswer] Трек ${track.kind} (${track.id}) для ${data.sender_id}, добавляем в поток (enabled=${track.enabled}, muted=${track.muted})...`);
+                        remoteStream.addTrack(track);
+                        console.log(`✅ [handleWebRTCAnswer] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
+                        // Обновляем UI
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                    } else if (track && track.readyState !== 'live') {
+                        console.log(`⚠️ [handleWebRTCAnswer] Трек ${track.kind} (${track.id}) для ${data.sender_id} не live (readyState=${track.readyState}), не добавляем в поток`);
                     }
                 });
             }, 100);
