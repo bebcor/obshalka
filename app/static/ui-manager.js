@@ -99,12 +99,15 @@ class UIManager {
                 localOverlay.style.display = 'none';
                 localVideo.style.display = 'block';
                 localParticipantCard.style.display = 'block';
+                console.log('✅ Локальная карточка: ПОКАЗЫВАЕМ (есть активное видео)');
             } else {
                 // Если нет активного видео - полностью скрываем карточку
                 // Звук продолжит работать через скрытый элемент или другим способом
-                localParticipantCard.style.display = 'none';
-                localVideo.style.display = 'none';
-                localOverlay.style.display = 'none';
+                localParticipantCard.style.setProperty('display', 'none', 'important');
+                localVideo.style.setProperty('display', 'none', 'important');
+                localOverlay.style.setProperty('display', 'none', 'important');
+                const computedDisplay = window.getComputedStyle(localParticipantCard).display;
+                console.log('❌ Локальная карточка: СКРЫВАЕМ (нет активного видео), inline display:', localParticipantCard.style.display, 'computed:', computedDisplay);
             }
         }
         
@@ -192,11 +195,12 @@ class UIManager {
                     }
                 }
                 participantCard.style.display = 'block';
+                console.log(`✅ Удаленная карточка ${userId}: ПОКАЗЫВАЕМ (есть активное видео)`);
             } else {
                 // Если нет активного видео - полностью скрываем карточку
-                participantCard.style.display = 'none';
+                participantCard.style.setProperty('display', 'none', 'important');
                 if (videoElement) {
-                    videoElement.style.display = 'none';
+                    videoElement.style.setProperty('display', 'none', 'important');
                     // НЕ очищаем srcObject если есть аудио, чтобы аудио продолжало работать через скрытый элемент
                     // Очищаем только если нет активного аудио
                     if (!hasActiveAudio) {
@@ -209,7 +213,9 @@ class UIManager {
                         }
                     }
                 }
-                if (overlay) overlay.style.display = 'none';
+                if (overlay) overlay.style.setProperty('display', 'none', 'important');
+                const computedDisplay = window.getComputedStyle(participantCard).display;
+                console.log(`❌ Удаленная карточка ${userId}: СКРЫВАЕМ (нет активного видео), inline display:`, participantCard.style.display, 'computed:', computedDisplay);
             }
         });
     }
