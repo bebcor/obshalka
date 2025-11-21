@@ -464,7 +464,10 @@ class WebRTCManager {
                             videoElement.srcObject = remoteStream;
                         }
                         videoElement.play().catch(err => {
-                            console.error('Error playing audio:', err);
+                            // Игнорируем ошибки связанные с aborted - это нормально при очистке srcObject
+                            if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
+                                console.warn('⚠️ [ontrack] Ошибка воспроизведения аудио:', err);
+                            }
                         });
                     }
                 }
