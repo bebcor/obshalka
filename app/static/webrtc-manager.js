@@ -207,16 +207,25 @@ class WebRTCManager {
                     stream.getTracks().forEach(track => track.stop());
                     this.videoCallManager.remoteStreams.delete(targetUserId);
                 }
-                // Пересоздаем соединение
-                this.setupPeerConnection(targetUserId);
-                // Ждем немного и создаем оффер
-                setTimeout(() => {
-                    if (this.videoCallManager.remoteUsers.has(targetUserId)) {
-                        this.createOffer(targetUserId).catch(err => {
-                            console.error('Error creating offer after recreation:', err);
-                        });
-                    }
-                }, 500);
+                // Удаляем UI элемент участника
+                const participantCard = document.getElementById(`participant-${targetUserId}`);
+                if (participantCard) {
+                    participantCard.remove();
+                }
+                // Пересоздаем соединение ТОЛЬКО если есть локальный поток
+                if (this.videoCallManager.localStream) {
+                    this.setupPeerConnection(targetUserId);
+                    // Ждем немного и создаем оффер
+                    setTimeout(() => {
+                        if (this.videoCallManager.remoteUsers.has(targetUserId)) {
+                            this.createOffer(targetUserId).catch(err => {
+                                console.error('Error creating offer after recreation:', err);
+                            });
+                        }
+                    }, 500);
+                } else {
+                    console.log('⚠️ No local stream, will recreate connection when stream is available');
+                }
                 return;
             }
             
