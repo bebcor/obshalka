@@ -230,16 +230,6 @@ class UIManager {
                     const receiver = receivers.find(r => r.track && r.track.id === track.id);
                     const receiverTrack = receiver?.track;
                     
-                    // ВАЖНО: Проверяем не только состояние трека в receivers, но и наличие sender на удаленной стороне
-                    // Если sender.track === null, значит камера выключена через replaceTrack(null)
-                    const sender = peerConnection.getSenders().find(s => {
-                        // Ищем sender, который отправляет трек к этому receiver
-                        // Но это локальные senders, нам нужны удаленные senders
-                        // На самом деле, мы не можем проверить удаленные senders напрямую
-                        // Но мы можем проверить, что трек в receivers активен
-                        return s.track && s.track.kind === 'video';
-                    });
-                    
                     // ВАЖНО: Если трека нет в receivers, или он неактивен - удаляем из remoteStream
                     const receiverTrackActive = receiverTrack && 
                                                receiverTrack.enabled && 
@@ -250,11 +240,35 @@ class UIManager {
                     // Если трек в remoteStream неактивен (disabled или muted), удаляем его
                     const streamTrackActive = track.enabled && !track.muted && track.readyState === 'live';
                     
+                    // ВАЖНО: Дополнительная проверка - если трек в receivers показывает активное состояние,
+                    // но на самом деле камера выключена (трек заменен на null через replaceTrack(null)),
+                    // то трек в receivers может оставаться активным, но не передавать видео
+                    // Проверяем это через проверку, что трек действительно передает данные
+                    // Если трек в receivers активен, но videoElement показывает черный экран или не воспроизводится,
+                    // значит трек неактивен
+                    const videoElement = document.getElementById(`remoteVideo-${userId}`);
+                    let videoElementActive = true; // По умолчанию считаем активным, если элемент существует
+                    if (videoElement && videoElement.srcObject === stream) {
+                        // Проверяем, что видео элемент воспроизводится и не показывает черный экран
+                        // readyState >= 2 означает HAVE_CURRENT_DATA или выше
+                        videoElementActive = !videoElement.paused && videoElement.readyState >= 2;
+                    } else if (videoElement && !videoElement.srcObject) {
+                        // Если srcObject не установлен, значит видео неактивно
+                        videoElementActive = false;
+                    }
+                    
+                    // ВАЖНО: Если трек в receivers активен, но трек в remoteStream неактивен,
+                    // это означает, что трек был заменен на null, но receiver еще не обновился
+                    // В этом случае удаляем трек из remoteStream
+                    const trackMismatch = receiverTrackActive && !streamTrackActive;
+                    
                     // Удаляем трек если:
                     // 1. Нет receiver для этого трека
                     // 2. Трек в receiver неактивен
                     // 3. Трек в remoteStream неактивен
-                    if (!receiverTrack || !receiverTrackActive || !streamTrackActive) {
+                    // 4. Видео элемент неактивен (не воспроизводится или показывает черный экран)
+                    // 5. Несоответствие между receiver и stream (трек заменен на null)
+                    if (!receiverTrack || !receiverTrackActive || !streamTrackActive || !videoElementActive || trackMismatch) {
                         console.log(`🗑️ [${userId}] УДАЛЯЕМ видео трек ${track.id} из remoteStream`, {
                             hasReceiver: !!receiverTrack,
                             receiverEnabled: receiverTrack?.enabled,
@@ -265,13 +279,19 @@ class UIManager {
                             streamMuted: track.muted,
                             streamReadyState: track.readyState,
                             streamTrackActive: streamTrackActive,
+                            videoElementActive: videoElementActive,
+                            videoElementPaused: videoElement?.paused,
+                            videoElementReadyState: videoElement?.readyState,
+                            trackMismatch: trackMismatch,
                             reason: !receiverTrack ? 'no receiver' : 
                                    !receiverTrackActive ? 'receiver inactive' :
-                                   !streamTrackActive ? 'stream track inactive' : 'unknown'
+                                   !streamTrackActive ? 'stream track inactive' :
+                                   !videoElementActive ? 'video element inactive' :
+                                   trackMismatch ? 'track mismatch (replaced with null)' : 'unknown'
                         });
                         stream.removeTrack(track);
                     } else {
-                        console.log(`✅ [${userId}] Видео трек ${track.id} активен в receivers и remoteStream, оставляем`);
+                        console.log(`✅ [${userId}] Видео трек ${track.id} активен в receivers, remoteStream и videoElement, оставляем`);
                     }
                 });
             } else {
