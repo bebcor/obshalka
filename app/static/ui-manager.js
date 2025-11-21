@@ -189,39 +189,65 @@ class UIManager {
             const activeAudioTracks = stream.getAudioTracks();
             
             // ВАЖНО: Проверяем состояние трека в receivers перед проверкой hasActiveVideo
-            // Если трек в receivers неактивен, трек в remoteStream тоже неактивен
+            // Если трек в receivers неактивен (muted ИЛИ disabled), трек в remoteStream тоже неактивен
             // ВАЖНО: Проверяем ВСЕ receivers и удаляем треки из remoteStream, которых нет в активных receivers
             if (peerConnection) {
                 const receivers = peerConnection.getReceivers();
                 console.log(`🔍 [${userId}] Проверка receivers:`, receivers.length, 'receivers');
                 
                 // Собираем все активные видео треки из receivers
+                // ВАЖНО: Трек активен ТОЛЬКО если он enabled, НЕ muted, И live
                 const activeReceiverVideoTracks = new Map();
                 receivers.forEach((receiver, index) => {
                     const track = receiver.track;
+                    const isActive = track && 
+                                   track.kind === 'video' && 
+                                   track.enabled && 
+                                   !track.muted && 
+                                   track.readyState === 'live';
+                    
                     console.log(`🔍 [${userId}] Receiver ${index}:`, {
                         kind: track?.kind,
                         id: track?.id,
                         enabled: track?.enabled,
                         muted: track?.muted,
-                        readyState: track?.readyState
+                        readyState: track?.readyState,
+                        isActive: isActive
                     });
                     
                     // Если это видео трек и он активен - сохраняем его
-                    if (track && track.kind === 'video' && track.enabled && !track.muted && track.readyState === 'live') {
+                    if (isActive) {
                         activeReceiverVideoTracks.set(track.id, track);
                     }
                 });
                 
                 console.log(`🔍 [${userId}] Активных видео треков в receivers:`, activeReceiverVideoTracks.size);
+                console.log(`🔍 [${userId}] Видео треков в remoteStream:`, activeVideoTracks.length);
                 
                 // Удаляем все видео треки из remoteStream, которых нет в активных receivers
                 activeVideoTracks.forEach(track => {
-                    if (!activeReceiverVideoTracks.has(track.id)) {
-                        console.log(`🗑️ [${userId}] УДАЛЯЕМ видео трек ${track.id} из remoteStream - его нет в активных receivers`, {
-                            streamTrack: { enabled: track.enabled, muted: track.muted, readyState: track.readyState }
+                    const receiverTrack = receivers.find(r => r.track && r.track.id === track.id)?.track;
+                    const receiverTrackActive = receiverTrack && 
+                                               receiverTrack.enabled && 
+                                               !receiverTrack.muted && 
+                                               receiverTrack.readyState === 'live';
+                    
+                    if (!receiverTrackActive) {
+                        console.log(`🗑️ [${userId}] УДАЛЯЕМ видео трек ${track.id} из remoteStream`, {
+                            hasReceiver: !!receiverTrack,
+                            receiverEnabled: receiverTrack?.enabled,
+                            receiverMuted: receiverTrack?.muted,
+                            receiverReadyState: receiverTrack?.readyState,
+                            receiverTrackActive: receiverTrackActive,
+                            streamTrack: { enabled: track.enabled, muted: track.muted, readyState: track.readyState },
+                            reason: !receiverTrack ? 'no receiver' : 
+                                   !receiverTrack.enabled ? 'receiver disabled' :
+                                   receiverTrack.muted ? 'receiver muted' :
+                                   receiverTrack.readyState !== 'live' ? 'receiver not live' : 'unknown'
                         });
                         stream.removeTrack(track);
+                    } else {
+                        console.log(`✅ [${userId}] Видео трек ${track.id} активен в receivers, оставляем в remoteStream`);
                     }
                 });
             } else {
