@@ -322,6 +322,9 @@ class UIManager {
             </div>
         `;
         
+        // Скрываем карточку по умолчанию - она появится только если есть активное видео
+        participantCard.style.display = 'none';
+        
         participantsGrid.appendChild(participantCard);
         
         const videoElement = document.getElementById(`remoteVideo-${userId}`);
@@ -360,10 +363,18 @@ class UIManager {
             stream.addTrack = (track) => {
                 const result = originalAddTrack(track);
                 setupTrackHandlers(track);
-                this.updateVideoOverlays();
-                this.videoCallManager.checkEmptyState();
+                // Обновляем UI с небольшой задержкой, чтобы трек успел инициализироваться
+                setTimeout(() => {
+                    this.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
+                }, 50);
                 return result;
             };
+            
+            // Сразу проверяем состояние треков после создания карточки
+            setTimeout(() => {
+                this.updateVideoOverlays();
+            }, 100);
             
             // Отслеживаем удаление треков из потока
             const originalRemoveTrack = stream.removeTrack.bind(stream);
