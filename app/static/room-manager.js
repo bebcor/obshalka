@@ -255,12 +255,9 @@ class RoomManager {
         }
         
         this.videoCallManager.cleanupCall();
-        this.videoCallManager.notificationManager.show('Вы вышли из комнаты', 'info');
         
-        // Возвращаемся на стартовое окно
-        this.videoCallManager.roomId = null;
-        window.history.pushState({}, '', '/');
-        this.videoCallManager.uiManager.showWelcomeScreen();
+        // Возвращаемся на базовую приветственную страницу (landing)
+        window.location.href = '/';
     }
 }
 

@@ -752,28 +752,28 @@ input[type="text"]::placeholder {
     overflow: hidden;
 }
 
-/* Исправляем видимость кнопки "Создать встречу" */
+/* Исправляем видимость кнопки "Создать встречу" - белая с черным текстом */
 .btn-welcome.btn-primary {
-    background: var(--primary) !important;
-    color: white !important;
-    border: 1px solid rgba(0, 0, 0, 0.3) !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid rgba(0, 0, 0, 0.2) !important;
 }
 
 .btn-welcome.btn-primary .btn-text,
 .btn-welcome.btn-primary .icon {
-    color: white !important;
+    color: var(--text-primary) !important;
 }
 
-/* Исправляем видимость кнопки "Подключиться" в форме */
+/* Исправляем видимость кнопки "Подключиться" в форме - белая с черным текстом */
 .join-room-form .btn-primary {
-    background: var(--primary) !important;
-    color: white !important;
-    border: 1px solid rgba(0, 0, 0, 0.3) !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid rgba(0, 0, 0, 0.2) !important;
 }
 
 .join-room-form .btn-primary .btn-text,
 .join-room-form .btn-primary .icon {
-    color: white !important;
+    color: var(--text-primary) !important;
 }
 
 .join-room-form {
