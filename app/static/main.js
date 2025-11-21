@@ -216,13 +216,8 @@ class VideoCallManager {
                 emptyState = document.createElement('div');
                 emptyState.id = 'emptyStateOverlay';
                 emptyState.className = 'empty-state-overlay';
-                emptyState.innerHTML = `
-                    <div class="brand-logo">
-                        <div class="logo-icon-large">📹</div>
-                        <h1 class="brand-name">obshalka</h1>
-                        <p class="brand-tagline">видео-конференции</p>
-                    </div>
-                `;
+                // Не создаем emptyState - убрали плашку
+                emptyState.innerHTML = '';
                 videoContainer.appendChild(emptyState);
                 console.log("✅ emptyStateOverlay создан");
                 
@@ -251,14 +246,8 @@ class VideoCallManager {
             isInCall: this.isInCall
         });
 
-        // Показываем emptyState ТОЛЬКО когда в звонке И нет удаленных участников
-        if (this.isInCall && !hasRemoteParticipants) {
-            emptyState.style.display = 'flex';
-            console.log('🔄 Показываем emptyState - в звонке, но нет удаленных участников');
-        } else {
-            emptyState.style.display = 'none';
-            console.log('✅ Скрываем emptyState - есть удаленные участники или не в звонке');
-        }
+        // НИКОГДА не показываем emptyState - убрали плашку когда пользователь один
+        emptyState.style.display = 'none';
     }
     
     removeOldWaitingMessage() {
@@ -437,7 +426,8 @@ class VideoCallManager {
 
         document.getElementById('cancelDuplicateJoin').addEventListener('click', () => {
             document.body.removeChild(modal);
-            window.location.href = '/';
+            // Показываем страницу отключения вместо редиректа
+            this.roomManager.showDisconnectedScreen();
         });
     }
 

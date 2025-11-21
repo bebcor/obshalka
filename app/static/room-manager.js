@@ -28,8 +28,8 @@ class RoomManager {
     async joinRoomFromURL() {
         try {
             if (!this.videoCallManager.roomId) {
-                // Если нет roomId, возвращаемся на стартовое окно
-                this.videoCallManager.uiManager.showWelcomeScreen();
+                // Если нет roomId, показываем страницу отключения
+                this.showDisconnectedScreen();
                 return;
             }
             
@@ -56,10 +56,9 @@ class RoomManager {
             
             if (!data.exists) {
                 this.videoCallManager.notificationManager.show('Комната не найдена', 'error');
-                // Возвращаемся на стартовое окно
+                // Показываем страницу отключения
                 this.videoCallManager.roomId = null;
-                window.history.pushState({}, '', '/');
-                this.videoCallManager.uiManager.showWelcomeScreen();
+                this.showDisconnectedScreen();
                 return;
             }
             
@@ -69,10 +68,9 @@ class RoomManager {
         } catch (error) {
             console.error('Error joining room from URL:', error);
             this.videoCallManager.notificationManager.show('Не удалось подключиться: ' + error.message, 'error');
-            // Возвращаемся на стартовое окно при ошибке
+            // Показываем страницу отключения при ошибке
             this.videoCallManager.roomId = null;
-            window.history.pushState({}, '', '/');
-            this.videoCallManager.uiManager.showWelcomeScreen();
+            this.showDisconnectedScreen();
         }
     }
 
@@ -265,9 +263,12 @@ class RoomManager {
         const welcomeScreen = document.getElementById('welcomeScreen');
         const mainContainer = document.getElementById('mainContainer');
         const disconnectedScreen = document.getElementById('disconnectedScreen');
+        const emptyStateOverlay = document.getElementById('emptyStateOverlay');
         
         if (welcomeScreen) welcomeScreen.style.display = 'none';
         if (mainContainer) mainContainer.style.display = 'none';
+        if (emptyStateOverlay) emptyStateOverlay.style.display = 'none';
+        
         if (disconnectedScreen) {
             disconnectedScreen.style.display = 'flex';
         }
@@ -275,9 +276,12 @@ class RoomManager {
         // Привязываем обработчик кнопки перезагрузки
         const reloadBtn = document.getElementById('reloadPageBtn');
         if (reloadBtn) {
-            reloadBtn.onclick = () => {
+            // Удаляем старые обработчики
+            reloadBtn.replaceWith(reloadBtn.cloneNode(true));
+            const newReloadBtn = document.getElementById('reloadPageBtn');
+            newReloadBtn.addEventListener('click', () => {
                 window.location.reload();
-            };
+            });
         }
     }
 }
