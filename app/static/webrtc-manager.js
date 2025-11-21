@@ -112,6 +112,27 @@ class WebRTCManager {
                         this.videoCallManager.checkEmptyState();
                     };
                     
+                    // ВАЖНО: Добавляем обработчик для изменения enabled состояния
+                    // Это нужно для отслеживания когда трек выключается через enabled = false
+                    let previousEnabled = track.enabled;
+                    const checkEnabled = () => {
+                        if (track.enabled !== previousEnabled) {
+                            console.log(`Трек ${track.kind} enabled изменился для пользователя ${targetUserId}: ${previousEnabled} -> ${track.enabled}`);
+                            previousEnabled = track.enabled;
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.checkEmptyState();
+                        }
+                    };
+                    
+                    // Проверяем изменение enabled каждые 100мс
+                    const enabledCheckInterval = setInterval(() => {
+                        if (!remoteStream.getTracks().includes(track)) {
+                            clearInterval(enabledCheckInterval);
+                            return;
+                        }
+                        checkEnabled();
+                    }, 100);
+                    
                     // Периодически проверяем состояние трека (на случай если события не сработали)
                     const checkTrackState = () => {
                         if (track.readyState === 'ended') {
@@ -144,17 +165,19 @@ class WebRTCManager {
                     }
                 }
             
-                // Обновляем srcObject видео элемента на случай если поток изменился
-                if (videoElement && videoElement.srcObject !== remoteStream) {
-                    videoElement.srcObject = remoteStream;
-                }
-            
-                // Обновляем UI сразу после добавления трека с небольшой задержкой
-                // чтобы дать треку время инициализироваться
-                setTimeout(() => {
-                    this.videoCallManager.uiManager.updateVideoOverlays();
-                    this.videoCallManager.checkEmptyState();
-                }, 50);
+            // Обновляем srcObject видео элемента на случай если поток изменился
+            if (videoElement && videoElement.srcObject !== remoteStream) {
+                videoElement.srcObject = remoteStream;
+            }
+        
+            // Обновляем UI сразу после добавления трека с небольшой задержкой
+            // чтобы дать треку время инициализироваться
+            // ВАЖНО: Обновляем дважды - сразу и через задержку, чтобы убедиться что карточка скрыта если трек неактивен
+            this.videoCallManager.uiManager.updateVideoOverlays();
+            setTimeout(() => {
+                this.videoCallManager.uiManager.updateVideoOverlays();
+                this.videoCallManager.checkEmptyState();
+            }, 100);
             };
         
             // Обработчик изменения состояния соединения

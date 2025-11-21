@@ -84,6 +84,16 @@ class UIManager {
             // Карточка показывается ТОЛЬКО если есть активное видео
             const hasActiveVideo = (videoTrack && videoTrack.enabled && videoTrack.readyState === 'live' && !videoTrack.muted) || isSharingScreen;
             
+            // Логирование для отладки
+            if (videoTrack && !hasActiveVideo) {
+                console.log('🔍 Локальная карточка: видео трек есть, но неактивен:', {
+                    enabled: videoTrack.enabled,
+                    readyState: videoTrack.readyState,
+                    muted: videoTrack.muted,
+                    isSharingScreen: isSharingScreen
+                });
+            }
+            
             if (hasActiveVideo) {
                 // Если есть активное видео - показываем карточку с видео
                 localOverlay.style.display = 'none';
@@ -158,6 +168,19 @@ class UIManager {
             
             // ВАЖНО: карточка показывается ТОЛЬКО если есть активное видео
             // Звук может идти независимо от карточки (через скрытый элемент)
+            
+            // Логирование для отладки
+            if (activeVideoTracks.length > 0 && !hasActiveVideo) {
+                console.log(`🔍 Удаленная карточка ${userId}: видео треки есть, но неактивны:`, {
+                    tracksCount: activeVideoTracks.length,
+                    tracksInfo: activeVideoTracks.map(t => ({
+                        enabled: t?.enabled,
+                        readyState: t?.readyState,
+                        muted: t?.muted
+                    }))
+                });
+            }
+            
             if (hasActiveVideo) {
                 // Если есть активное видео - показываем карточку с видео
                 if (overlay) overlay.style.display = 'none';
