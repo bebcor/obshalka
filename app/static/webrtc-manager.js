@@ -71,19 +71,29 @@ class WebRTCManager {
                 
                 let hasChanges = false;
                 
-                // Собираем все trackId из текущих receivers
-                const currentTrackIds = new Set();
+                // Собираем все trackId из текущих receivers, которые активны (не null и enabled)
+                const currentActiveTrackIds = new Set();
                 receivers.forEach(receiver => {
-                    if (receiver.track) {
-                        currentTrackIds.add(receiver.track.id);
+                    const track = receiver.track;
+                    if (track && track.enabled && !track.muted && track.readyState === 'live') {
+                        currentActiveTrackIds.add(track.id);
                     }
                 });
                 
-                // Проверяем все треки в remoteStream - если трека нет в receivers, удаляем его
+                // ВАЖНО: Проверяем все треки в remoteStream - если трека нет в активных receivers, удаляем его
                 const streamTracks = remoteStream.getTracks();
                 streamTracks.forEach(streamTrack => {
-                    if (!currentTrackIds.has(streamTrack.id)) {
-                        console.log(`🗑️ Трек ${streamTrack.kind} (${streamTrack.id}) отсутствует в receivers для ${targetUserId}, удаляем из потока`);
+                    // Удаляем трек если:
+                    // 1. Его нет в receivers вообще
+                    // 2. Он есть в receivers, но неактивен (disabled, muted, или не live)
+                    const receiverTrack = receivers.find(r => r.track && r.track.id === streamTrack.id)?.track;
+                    if (!receiverTrack || !receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live') {
+                        console.log(`🗑️ Трек ${streamTrack.kind} (${streamTrack.id}) неактивен или отсутствует в receivers для ${targetUserId}, удаляем из потока`, {
+                            hasReceiver: !!receiverTrack,
+                            enabled: receiverTrack?.enabled,
+                            muted: receiverTrack?.muted,
+                            readyState: receiverTrack?.readyState
+                        });
                         remoteStream.removeTrack(streamTrack);
                         hasChanges = true;
                     }

@@ -140,13 +140,27 @@ class UIManager {
             const peerConnection = this.videoCallManager.remoteUsers.get(userId);
             if (peerConnection) {
                 const receivers = peerConnection.getReceivers();
-                const receiverTrackIds = new Set(receivers.map(r => r.track?.id).filter(Boolean));
+                // ВАЖНО: Собираем только активные треки (enabled, не muted, live)
+                const activeReceiverTrackIds = new Set();
+                receivers.forEach(receiver => {
+                    const track = receiver.track;
+                    if (track && track.enabled && !track.muted && track.readyState === 'live') {
+                        activeReceiverTrackIds.add(track.id);
+                    }
+                });
                 
-                // Удаляем треки из stream, которых нет в receivers
+                // Удаляем треки из stream, которых нет в активных receivers
                 const streamTracks = stream.getTracks();
                 streamTracks.forEach(track => {
-                    if (!receiverTrackIds.has(track.id)) {
-                        console.log(`🗑️ Трек ${track.kind} (${track.id}) отсутствует в receivers для ${userId}, удаляем из потока`);
+                    const receiverTrack = receivers.find(r => r.track && r.track.id === track.id)?.track;
+                    // Удаляем трек если его нет в активных receivers или он неактивен
+                    if (!activeReceiverTrackIds.has(track.id) || !receiverTrack || !receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live') {
+                        console.log(`🗑️ Трек ${track.kind} (${track.id}) неактивен или отсутствует в активных receivers для ${userId}, удаляем из потока`, {
+                            hasReceiver: !!receiverTrack,
+                            enabled: receiverTrack?.enabled,
+                            muted: receiverTrack?.muted,
+                            readyState: receiverTrack?.readyState
+                        });
                         stream.removeTrack(track);
                     }
                 });
