@@ -942,15 +942,36 @@ class VideoCallManager {
                 this.webrtcManager.addTracksToPeerConnection(data.user_id);
             }
             
-            // ВАЖНО: Ждем немного чтобы соединение установилось, затем создаем offer
+            // ВАЖНО: Создаем offer СРАЗУ после создания соединения
+            // Это нужно чтобы установить соединение и начать обмен медиа
+            // Небольшая задержка чтобы треки успели добавиться
             setTimeout(() => {
                 if (this.remoteUsers.has(data.user_id)) {
-                    console.log(`📤 Создаем offer для нового пользователя ${data.user_id}`);
-                    this.webrtcManager.createOffer(data.user_id).catch(err => {
-                        console.error(`❌ Ошибка создания offer для ${data.user_id}:`, err);
-                    });
+                    const peerConnection = this.remoteUsers.get(data.user_id);
+                    const signalingState = peerConnection.signalingState;
+                    console.log(`📤 Создаем offer для нового пользователя ${data.user_id}, signalingState: ${signalingState}`);
+                    
+                    // Создаем offer только если соединение в стабильном состоянии
+                    if (signalingState === 'stable') {
+                        this.webrtcManager.createOffer(data.user_id).catch(err => {
+                            console.error(`❌ Ошибка создания offer для ${data.user_id}:`, err);
+                        });
+                    } else {
+                        // Если не stable, ждем и пробуем снова
+                        setTimeout(() => {
+                            if (this.remoteUsers.has(data.user_id)) {
+                                const newState = this.remoteUsers.get(data.user_id).signalingState;
+                                if (newState === 'stable') {
+                                    console.log(`📤 Создаем offer для ${data.user_id} после ожидания`);
+                                    this.webrtcManager.createOffer(data.user_id).catch(err => {
+                                        console.error(`❌ Ошибка создания offer для ${data.user_id}:`, err);
+                                    });
+                                }
+                            }
+                        }, 500);
+                    }
                 }
-            }, 500); // Увеличиваем задержку для стабильности
+            }, 200);
         }
     }
 
