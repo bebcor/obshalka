@@ -470,17 +470,21 @@ class WebRTCManager {
                 }
             
             // ВАЖНО: НЕ управляем видимостью карточки здесь - это делает updateVideoOverlays()
-            // Просто устанавливаем srcObject если есть видео треки в потоке
-            // Треки могут быть временно muted, но они все равно должны быть в srcObject
+            // Устанавливаем srcObject ТОЛЬКО если есть АКТИВНЫЕ видео треки (enabled и не muted)
             const videoTracks = remoteStream.getVideoTracks();
-            const hasVideoTracks = videoTracks.length > 0 && 
-                                  videoTracks.some(t => t && t.readyState === 'live');
+            const hasActiveVideoTracks = videoTracks.length > 0 && 
+                                       videoTracks.some(t => 
+                                           t && 
+                                           t.readyState === 'live' && 
+                                           t.enabled && 
+                                           !t.muted
+                                       );
             
             if (videoElement) {
-                if (hasVideoTracks) {
-                    // Если есть видео треки (даже если временно muted) - устанавливаем srcObject
+                if (hasActiveVideoTracks) {
+                    // Если есть АКТИВНЫЕ видео треки - устанавливаем srcObject
                     if (videoElement.srcObject !== remoteStream) {
-                        console.log(`🔄 [ontrack ${targetUserId}] Устанавливаем srcObject, video tracks:`, videoTracks.map(t => `${t.id}:enabled=${t.enabled}:muted=${t.muted}`));
+                        console.log(`🔄 [ontrack ${targetUserId}] Устанавливаем srcObject, активные video tracks:`, videoTracks.filter(t => t.enabled && !t.muted).map(t => `${t.id}`));
                         videoElement.srcObject = remoteStream;
                         // Пробуем воспроизвести видео
                         videoElement.play().catch(err => {
@@ -488,10 +492,12 @@ class WebRTCManager {
                         });
                     }
                 } else {
-                    // Если нет видео треков - НЕ устанавливаем srcObject
-                    // Но НЕ скрываем карточку здесь - это делает updateVideoOverlays()
-                    if (videoElement.srcObject === remoteStream) {
+                    // Если нет АКТИВНЫХ видео треков - очищаем srcObject
+                    // Это предотвращает показ черного экрана
+                    if (videoElement.srcObject === remoteStream || videoElement.srcObject !== null) {
+                        console.log(`🔄 [ontrack ${targetUserId}] Очищаем srcObject (нет активных видео треков)`);
                         videoElement.srcObject = null;
+                        videoElement.pause();
                     }
                 }
             }
