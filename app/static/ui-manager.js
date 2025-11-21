@@ -176,10 +176,17 @@ class UIManager {
                     id: t?.id
                 }));
                 
+                // Раскрываем содержимое массива для отладки
                 if (hasActiveVideo) {
-                    console.log(`✅ Удаленная карточка ${userId}: hasActiveVideo = true, треки:`, tracksInfo);
+                    console.log(`✅ Удаленная карточка ${userId}: hasActiveVideo = true`);
+                    tracksInfo.forEach((trackInfo, index) => {
+                        console.log(`  Трек ${index}:`, trackInfo);
+                    });
                 } else {
-                    console.log(`🔍 Удаленная карточка ${userId}: видео треки есть, но неактивны:`, tracksInfo);
+                    console.log(`🔍 Удаленная карточка ${userId}: видео треки есть, но неактивны:`);
+                    tracksInfo.forEach((trackInfo, index) => {
+                        console.log(`  Трек ${index}:`, trackInfo);
+                    });
                 }
             } else if (hasActiveVideo) {
                 // Это не должно происходить, но на всякий случай логируем
