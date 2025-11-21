@@ -215,13 +215,21 @@ class MediaController {
                 // ЕСЛИ включаем камеру - добавляем видео-трек в соединения
                 console.log('🎥 Включаем камеру, обновляем треки в соединениях...');
                 await this.updateVideoTracksInConnections(videoTracks[0]);
-                // ВАЖНО: После обновления треков нужно обновить UI
-                this.videoCallManager.uiManager.updateVideoOverlays();
+                // ВАЖНО: После обновления треков нужно обновить UI с задержкой
+                // чтобы дать треку время активироваться
+                setTimeout(() => {
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
+                }, 200);
             }
             
             this.videoCallManager.uiManager.updateControlButtons();
+            // ВАЖНО: Обновляем UI сразу и с задержкой для надежности
             this.videoCallManager.uiManager.updateVideoOverlays();
-            this.videoCallManager.checkEmptyState();
+            setTimeout(() => {
+                this.videoCallManager.uiManager.updateVideoOverlays();
+                this.videoCallManager.checkEmptyState();
+            }, 300);
             this.videoCallManager.notificationManager.show(enabled ? 'Камера включена' : 'Камера выключена', 'info');
         }
     }
