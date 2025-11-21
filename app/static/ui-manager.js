@@ -190,10 +190,13 @@ class UIManager {
             
             // ВАЖНО: Проверяем состояние трека в receivers перед проверкой hasActiveVideo
             // Если трек в receivers неактивен, трек в remoteStream тоже неактивен
-            let receiverTrackState = null;
+            // ВАЖНО: Проверяем ВСЕ receivers и удаляем треки из remoteStream, которых нет в активных receivers
             if (peerConnection) {
                 const receivers = peerConnection.getReceivers();
                 console.log(`🔍 [${userId}] Проверка receivers:`, receivers.length, 'receivers');
+                
+                // Собираем все активные видео треки из receivers
+                const activeReceiverVideoTracks = new Map();
                 receivers.forEach((receiver, index) => {
                     const track = receiver.track;
                     console.log(`🔍 [${userId}] Receiver ${index}:`, {
@@ -203,66 +206,54 @@ class UIManager {
                         muted: track?.muted,
                         readyState: track?.readyState
                     });
+                    
+                    // Если это видео трек и он активен - сохраняем его
+                    if (track && track.kind === 'video' && track.enabled && !track.muted && track.readyState === 'live') {
+                        activeReceiverVideoTracks.set(track.id, track);
+                    }
                 });
-                const videoReceiver = receivers.find(r => r.track && r.track.kind === 'video');
-                if (videoReceiver && videoReceiver.track) {
-                    receiverTrackState = {
-                        enabled: videoReceiver.track.enabled,
-                        muted: videoReceiver.track.muted,
-                        readyState: videoReceiver.track.readyState,
-                        id: videoReceiver.track.id
-                    };
-                    console.log(`🔍 [${userId}] receiverTrackState:`, receiverTrackState);
-                } else {
-                    console.log(`🔍 [${userId}] Нет видео receiver или трека`);
-                }
+                
+                console.log(`🔍 [${userId}] Активных видео треков в receivers:`, activeReceiverVideoTracks.size);
+                
+                // Удаляем все видео треки из remoteStream, которых нет в активных receivers
+                activeVideoTracks.forEach(track => {
+                    if (!activeReceiverVideoTracks.has(track.id)) {
+                        console.log(`🗑️ [${userId}] УДАЛЯЕМ видео трек ${track.id} из remoteStream - его нет в активных receivers`, {
+                            streamTrack: { enabled: track.enabled, muted: track.muted, readyState: track.readyState }
+                        });
+                        stream.removeTrack(track);
+                    }
+                });
             } else {
                 console.log(`🔍 [${userId}] Нет peer connection`);
             }
+            
+            // Получаем актуальные треки после очистки
+            const finalVideoTracks = stream.getVideoTracks();
             
             // Проверяем наличие активного видео трека (enabled и live)
             // ВАЖНО: проверяем что трек не только есть, но и активен
             // Также проверяем что трек не null (когда replaceTrack(null) был вызван)
             // ВАЖНО: Трек должен быть enabled И readyState === 'live' И НЕ muted
             // Если трек muted, это значит что камера выключена или трек заменен на null
-            // ВАЖНО: Также проверяем состояние трека в receivers - если он неактивен там, то и в stream неактивен
-            const hasActiveVideo = activeVideoTracks.length > 0 && 
-                                  activeVideoTracks.some(track => {
+            const hasActiveVideo = finalVideoTracks.length > 0 && 
+                                  finalVideoTracks.some(track => {
                                       if (!track) return false;
-                                      
-                                      // ВАЖНО: Проверяем состояние трека в receivers
-                                      // Если трек в receivers неактивен, трек в remoteStream тоже неактивен
-                                      let receiverTrackActive = true;
-                                      if (receiverTrackState && receiverTrackState.id === track.id) {
-                                          receiverTrackActive = receiverTrackState.enabled && 
-                                                               !receiverTrackState.muted && 
-                                                               receiverTrackState.readyState === 'live';
-                                          if (!receiverTrackActive) {
-                                              console.log(`⚠️ Трек ${track.id} в remoteStream активен, но в receivers неактивен для ${userId}, удаляем из потока`, {
-                                                  streamTrack: { enabled: track.enabled, muted: track.muted, readyState: track.readyState },
-                                                  receiverTrack: receiverTrackState
-                                              });
-                                              stream.removeTrack(track);
-                                              return false;
-                                          }
-                                      }
                                       
                                       // ВАЖНО: Трек активен ТОЛЬКО если он enabled, live И НЕ muted
                                       // Если трек muted, это значит что камера выключена
                                       const isActive = track.readyState === 'live' && 
                                                       track.enabled &&
-                                                      !track.muted &&
-                                                      receiverTrackActive;
+                                                      !track.muted;
                                       // Логируем каждый трек для отладки
-                                      if (activeVideoTracks.length > 0) {
+                                      if (finalVideoTracks.length > 0) {
                                           console.log(`🔍 Проверка видео трека для ${userId}:`, {
                                               trackId: track.id,
                                               readyState: track.readyState,
                                               enabled: track.enabled,
                                               muted: track.muted,
                                               isActive: isActive,
-                                              receiverTrackState: receiverTrackState,
-                                              reason: !isActive ? (track.muted ? 'muted' : !track.enabled ? 'disabled' : track.readyState !== 'live' ? 'not live' : !receiverTrackActive ? 'receiver inactive' : 'unknown') : 'active'
+                                              reason: !isActive ? (track.muted ? 'muted' : !track.enabled ? 'disabled' : track.readyState !== 'live' ? 'not live' : 'unknown') : 'active'
                                           });
                                       }
                                       return isActive;
