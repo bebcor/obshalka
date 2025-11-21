@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obshalka - Secure Video Conferencing</title>
+    <title>Общалка - Безопасные видеовстречи</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -68,26 +68,31 @@
         }
         
         .landing-btn-primary {
-            background: var(--primary-blue);
-            color: white;
+            background: rgba(255, 255, 255, 0.95) !important;
+            color: var(--text-primary) !important;
+            border: 1px solid rgba(0, 0, 0, 0.2) !important;
         }
         
         .landing-btn-primary:hover {
-            background: var(--primary-blue-dark);
+            background: rgba(255, 255, 255, 1) !important;
             transform: translateY(-2px);
             box-shadow: var(--shadow);
         }
         
         .landing-btn-secondary {
-            background: var(--surface);
-            color: var(--text-primary);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.95) !important;
+            color: var(--text-primary) !important;
+            border: 1px solid rgba(0, 0, 0, 0.2) !important;
         }
         
         .landing-btn-secondary:hover {
-            background: var(--surface-light);
+            background: rgba(255, 255, 255, 1) !important;
             transform: translateY(-2px);
             box-shadow: var(--shadow);
+        }
+        
+        .landing-btn span {
+            color: var(--text-primary) !important;
         }
         
         .join-form {
@@ -148,7 +153,7 @@
 <body>
     <div class="landing-container">
         <div class="landing-content">
-            <div class="landing-logo">📹 Obshalka</div>
+            <div class="landing-logo">📹 Общалка</div>
             <h1 class="landing-title">Безопасные видеовстречи</h1>
             <p class="landing-subtitle">Создайте комнату или присоединитесь к существующей встрече</p>
             
