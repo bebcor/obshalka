@@ -224,16 +224,17 @@ class UIManager {
                 participantCard.style.setProperty('display', 'none', 'important');
                 if (videoElement) {
                     videoElement.style.setProperty('display', 'none', 'important');
-                    // НЕ очищаем srcObject если есть аудио, чтобы аудио продолжало работать через скрытый элемент
-                    // Очищаем только если нет активного аудио
-                    if (!hasActiveAudio) {
-                        videoElement.srcObject = null;
-                    } else {
+                    // ВАЖНО: Очищаем srcObject если нет активного видео, чтобы не показывать черный экран
+                    // НЕ очищаем srcObject только если есть активное аудио, чтобы аудио продолжало работать через скрытый элемент
+                    if (hasActiveAudio) {
                         // Если есть аудио, но нет видео - оставляем srcObject для воспроизведения звука
                         // но элемент остается скрытым
                         if (!videoElement.srcObject) {
                             videoElement.srcObject = stream;
                         }
+                    } else {
+                        // Если нет ни видео, ни аудио - очищаем srcObject чтобы не показывать черный экран
+                        videoElement.srcObject = null;
                     }
                 }
                 if (overlay) overlay.style.setProperty('display', 'none', 'important');
@@ -375,13 +376,16 @@ class UIManager {
         `;
         
         // Скрываем карточку по умолчанию - она появится только если есть активное видео
-        participantCard.style.display = 'none';
+        // ВАЖНО: Используем setProperty с important чтобы гарантировать скрытие
+        participantCard.style.setProperty('display', 'none', 'important');
         
         participantsGrid.appendChild(participantCard);
         
         const videoElement = document.getElementById(`remoteVideo-${userId}`);
         if (videoElement) {
-            videoElement.srcObject = stream;
+            // ВАЖНО: НЕ устанавливаем srcObject сразу - это сделает updateVideoOverlays()
+            // после проверки состояния треков
+            // videoElement.srcObject = stream;
 
             // ДОБАВЛЯЕМ ОБРАБОТЧИКИ ДЛЯ СЛЕДЕНИЯ ЗА СОСТОЯНИЕМ ТРЕКОВ
             const setupTrackHandlers = (track) => {
@@ -415,15 +419,30 @@ class UIManager {
             stream.addTrack = (track) => {
                 const result = originalAddTrack(track);
                 setupTrackHandlers(track);
+                
+                // ВАЖНО: Если трек неактивен при добавлении, сразу скрываем карточку
+                if (track.kind === 'video' && (track.muted || !track.enabled)) {
+                    console.log(`⚠️ Видео трек добавлен как неактивный для ${userId}, muted: ${track.muted}, enabled: ${track.enabled}`);
+                    const card = document.getElementById(`participant-${userId}`);
+                    if (card) {
+                        card.style.setProperty('display', 'none', 'important');
+                    }
+                }
+                
                 // Обновляем UI с небольшой задержкой, чтобы трек успел инициализироваться
+                // Вызываем сразу и с задержкой для надежности
+                this.updateVideoOverlays();
                 setTimeout(() => {
                     this.updateVideoOverlays();
                     this.videoCallManager.checkEmptyState();
-                }, 50);
+                }, 100);
                 return result;
             };
             
-            // Сразу проверяем состояние треков после создания карточки
+            // ВАЖНО: Сразу проверяем состояние треков после создания карточки
+            // Это нужно чтобы скрыть карточку если треки неактивны
+            // Вызываем сразу и с задержкой для надежности
+            this.updateVideoOverlays();
             setTimeout(() => {
                 this.updateVideoOverlays();
             }, 100);
