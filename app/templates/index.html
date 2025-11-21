@@ -26,7 +26,7 @@
                     <span class="btn-text">Создать встречу</span>
                 </button>
                 <button id="welcomeJoinRoom" class="btn btn-welcome btn-secondary">
-                    <span class="icon">🚪</span>
+                    <span class="icon"><img src="{{ url_for('static', filename='images/door.png') }}" alt="Комната"></span>
                     <span class="btn-text">Подключиться к встрече</span>
                 </button>
             </div>
@@ -51,7 +51,7 @@
                 <p>Хорошего дня!</p>
             </div>
             <button id="reloadPageBtn" class="btn btn-primary">
-                <span class="btn-text">Перезагрузить страницу</span>
+                <span class="btn-text">Вернуться на главную страницу</span>
             </button>
         </div>
     </div>
@@ -96,7 +96,7 @@
         <div class="controls">
             <div class="room-info">
                 <div class="room-info-item">
-                    <span class="icon">🚪</span>
+                    <span class="icon"><img src="{{ url_for('static', filename='images/door.png') }}" alt="Комната"></span>
                     <span class="info-text">Комната: <span id="roomIdDisplay">-</span></span>
                 </div>
                 <div class="room-info-item">

@@ -303,9 +303,9 @@ class RoomManager {
             const newReloadBtn = reloadBtn.cloneNode(true);
             reloadBtn.parentNode.replaceChild(newReloadBtn, reloadBtn);
             newReloadBtn.addEventListener('click', () => {
-                window.location.reload();
+                window.location.href = 'https://obshalka.online';
             });
-            console.log('✅ Обработчик кнопки перезагрузки привязан');
+            console.log('✅ Обработчик кнопки возврата на главную привязан');
         } else {
             console.error('❌ Кнопка перезагрузки не найдена!');
         }
