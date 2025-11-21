@@ -314,9 +314,7 @@ body {
     width: 64px;
     height: 64px;
     display: inline-block;
-    border: 2px solid var(--text-primary);
-    border-radius: 12px;
-    padding: 8px;
+    padding: 0;
     box-sizing: border-box;
 }
 
@@ -742,7 +740,7 @@ input[type="text"]::placeholder {
 .brand-logo-large {
     backdrop-filter: blur(30px) saturate(180%);
     background: rgba(255, 255, 255, 0.9);
-    border: 2px solid var(--text-primary);
+    border: 1px solid var(--glass-border);
     border-radius: var(--border-radius-xl);
     padding: 60px 40px;
     box-shadow: var(--shadow-lg);
@@ -760,6 +758,10 @@ input[type="text"]::placeholder {
     justify-content: center;
     gap: 20px;
     margin-bottom: 1rem;
+    border: 2px solid var(--text-primary);
+    border-radius: 12px;
+    padding: 16px 32px;
+    background: transparent;
 }
 
 .brand-name-large {
@@ -768,9 +770,6 @@ input[type="text"]::placeholder {
     color: var(--text-primary);
     margin: 0;
     line-height: 1.2;
-    border: 2px solid var(--text-primary);
-    border-radius: 12px;
-    padding: 12px 24px;
     display: inline-block;
 }
 
@@ -1720,11 +1719,11 @@ input[type="text"]::placeholder {
     
     .brand-name-large {
         font-size: 2.5rem;
-        padding: 8px 16px;
     }
     
     .brand-header-container {
         gap: 12px;
+        padding: 12px 24px;
     }
     
     .brand-name {
@@ -1871,11 +1870,11 @@ input[type="text"]::placeholder {
     
     .brand-name-large {
         font-size: 2rem;
-        padding: 6px 12px;
     }
     
     .brand-header-container {
         gap: 10px;
+        padding: 10px 20px;
     }
     
     .brand-name {
@@ -1956,16 +1955,15 @@ input[type="text"]::placeholder {
         font-size: 2rem;
         width: 32px;
         height: 32px;
-        padding: 4px;
     }
     
     .brand-name-large {
         font-size: 1.5rem;
-        padding: 6px 10px;
     }
     
     .brand-header-container {
         gap: 8px;
+        padding: 8px 16px;
         flex-direction: column;
     }
     
