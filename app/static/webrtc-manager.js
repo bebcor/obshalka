@@ -61,6 +61,50 @@ class WebRTCManager {
                 }
             };
         
+            // ВАЖНО: Отслеживаем изменения в receivers для обнаружения replaceTrack(null)
+            // Когда трек заменяется на null, receiver.track становится null
+            let previousReceiverTracks = new Map();
+            const checkReceiversForNullTracks = () => {
+                const receivers = peerConnection.getReceivers();
+                const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
+                if (!remoteStream) return;
+                
+                let hasChanges = false;
+                
+                receivers.forEach((receiver, index) => {
+                    const currentTrack = receiver.track;
+                    const previousTrack = previousReceiverTracks.get(index);
+                    
+                    // Если трек был, но стал null - удаляем его из потока
+                    if (previousTrack && !currentTrack) {
+                        console.log(`🗑️ Трек ${previousTrack.kind} заменен на null для ${targetUserId}, удаляем из потока`);
+                        const tracksToRemove = remoteStream.getTracks().filter(t => t.id === previousTrack.id);
+                        tracksToRemove.forEach(track => {
+                            remoteStream.removeTrack(track);
+                            hasChanges = true;
+                        });
+                    }
+                    
+                    // Обновляем предыдущее состояние
+                    previousReceiverTracks.set(index, currentTrack);
+                });
+                
+                if (hasChanges) {
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
+                }
+            };
+            
+            // Проверяем receivers периодически
+            const receiverCheckInterval = setInterval(() => {
+                if (!this.videoCallManager.remoteUsers.has(targetUserId)) {
+                    clearInterval(receiverCheckInterval);
+                    previousReceiverTracks.clear();
+                    return;
+                }
+                checkReceiversForNullTracks();
+            }, 300);
+            
             // Обработчик получения удаленных треков
             peerConnection.ontrack = (event) => {
                 console.log('Remote track received from:', targetUserId, 
@@ -81,6 +125,16 @@ class WebRTCManager {
                 const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
                 
                 const track = event.track;
+                
+                // ВАЖНО: Если трек null (replaceTrack(null) был вызван), удаляем все видео треки из потока
+                if (!track) {
+                    console.log(`🗑️ Трек null получен для ${targetUserId}, удаляем все видео треки из потока`);
+                    const videoTracks = remoteStream.getVideoTracks();
+                    videoTracks.forEach(vt => remoteStream.removeTrack(vt));
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
+                    return;
+                }
                 
                 // Если трек уже есть в потоке, обновляем его
                 const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
@@ -530,6 +584,7 @@ class WebRTCManager {
             console.log('✅ Remote description set successfully');
             
             // ВАЖНО: Проверяем, есть ли уже треки в соединении после установки remote description
+            
             // Иногда треки приходят до того, как срабатывает событие ontrack
             setTimeout(() => {
                 const receivers = peerConnection.getReceivers();
@@ -537,6 +592,11 @@ class WebRTCManager {
                 receivers.forEach((receiver, index) => {
                     const track = receiver.track;
                     console.log(`  Receiver ${index}: kind=${receiver.track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
+                    // ВАЖНО: Если track null, не обрабатываем его
+                    if (!track) {
+                        console.log(`⚠️ Receiver ${index} имеет null track, пропускаем`);
+                        return;
+                    }
                     if (track && track.readyState === 'live') {
                         // Если трек уже есть и активен, но еще не обработан - обрабатываем его
                         const remoteStream = this.videoCallManager.remoteStreams.get(data.sender_id);

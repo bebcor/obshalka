@@ -922,10 +922,27 @@ class VideoCallManager {
                 const videoTrack = this.localStream.getVideoTracks()[0];
                 const audioTrack = this.localStream.getAudioTracks()[0];
                 if (videoTrack && videoTrack.enabled) {
-                    this.mediaController.updateVideoTracksInConnections(videoTrack);
+                    // ВАЖНО: Обновляем треки для конкретного пользователя
+                    const peerConnection = this.remoteUsers.get(data.user_id);
+                    if (peerConnection) {
+                        const videoSender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+                        if (videoSender) {
+                            videoSender.replaceTrack(videoTrack);
+                        } else {
+                            peerConnection.addTrack(videoTrack, this.localStream);
+                        }
+                    }
                 }
                 if (audioTrack && audioTrack.enabled) {
-                    this.mediaController.updateAudioTracksInConnections();
+                    const peerConnection = this.remoteUsers.get(data.user_id);
+                    if (peerConnection) {
+                        const audioSender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
+                        if (audioSender) {
+                            audioSender.replaceTrack(audioTrack);
+                        } else {
+                            peerConnection.addTrack(audioTrack, this.localStream);
+                        }
+                    }
                 }
             }
             // Создаем offer для нового пользователя
