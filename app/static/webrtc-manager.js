@@ -90,7 +90,15 @@ class WebRTCManager {
                 
                 if (!remoteStream.getTracks().some(t => t.id === track.id)) {
                     remoteStream.addTrack(track);
-                    console.log('Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled);
+                    console.log('Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
+                    
+                    // ВАЖНО: Если трек disabled при добавлении, сразу обновляем UI
+                    if (track.kind === 'video' && !track.enabled) {
+                        console.log(`⚠️ Видео трек добавлен как disabled для ${targetUserId}, обновляем UI`);
+                        setTimeout(() => {
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                        }, 50);
+                    }
                     
                     // Добавляем обработчики для отслеживания изменений трека
                     track.onended = () => {

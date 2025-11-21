@@ -164,24 +164,26 @@ class UIManager {
                                       !track.muted
                                   );
             
-            // Логирование только для отладки (можно закомментировать в продакшене)
-            // if ((activeVideoTracks.length > 0 || activeAudioTracks.length > 0) && !hasActiveVideo && !hasActiveAudio) {
-            //     console.log(`⚠️ Есть треки, но все неактивны для ${userId}`);
-            // }
-            
             // ВАЖНО: карточка показывается ТОЛЬКО если есть активное видео
             // Звук может идти независимо от карточки (через скрытый элемент)
             
-            // Логирование для отладки
-            if (activeVideoTracks.length > 0 && !hasActiveVideo) {
-                console.log(`🔍 Удаленная карточка ${userId}: видео треки есть, но неактивны:`, {
-                    tracksCount: activeVideoTracks.length,
-                    tracksInfo: activeVideoTracks.map(t => ({
-                        enabled: t?.enabled,
-                        readyState: t?.readyState,
-                        muted: t?.muted
-                    }))
-                });
+            // ПОДРОБНОЕ логирование для отладки
+            if (activeVideoTracks.length > 0) {
+                const tracksInfo = activeVideoTracks.map(t => ({
+                    enabled: t?.enabled,
+                    readyState: t?.readyState,
+                    muted: t?.muted,
+                    id: t?.id
+                }));
+                
+                if (hasActiveVideo) {
+                    console.log(`✅ Удаленная карточка ${userId}: hasActiveVideo = true, треки:`, tracksInfo);
+                } else {
+                    console.log(`🔍 Удаленная карточка ${userId}: видео треки есть, но неактивны:`, tracksInfo);
+                }
+            } else if (hasActiveVideo) {
+                // Это не должно происходить, но на всякий случай логируем
+                console.warn(`⚠️ Удаленная карточка ${userId}: hasActiveVideo = true, но нет видео треков!`);
             }
             
             if (hasActiveVideo) {
