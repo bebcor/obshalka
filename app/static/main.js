@@ -648,10 +648,10 @@ class VideoCallManager {
                     <h3><img src="/static/images/gear.png" alt="Настройки" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Настройки</h3>
                     <div class="settings-options">
                         <button id="selectMicrophoneSettings" class="btn btn-settings">
-                            <img src="/static/images/microphone.png" alt="Микрофон" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;"> Выбор микрофона
+                            <img src="/static/images/microphone.png" alt="Микрофон" style="width: 20px; height: 20px; display: inline-block; flex-shrink: 0;"> <span style="display: inline-block;">Выбор микрофона</span>
                         </button>
                         <button id="selectCameraSettings" class="btn btn-settings">
-                            <img src="/static/images/photo_camera.png" alt="Камера" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;"> Выбор камеры
+                            <img src="/static/images/photo_camera.png" alt="Камера" style="width: 20px; height: 20px; display: inline-block; flex-shrink: 0;"> <span style="display: inline-block;">Выбор камеры</span>
                         </button>
                     </div>
                     <div class="modal-buttons">

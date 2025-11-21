@@ -851,6 +851,14 @@ input[type="text"]::placeholder {
 .btn-welcome.btn-primary .btn-text,
 .btn-welcome.btn-primary .icon {
     color: var(--text-primary) !important;
+    position: relative;
+    z-index: 2;
+}
+
+.btn-welcome .icon img {
+    display: block;
+    width: 100%;
+    height: 100%;
 }
 
 /* Исправляем видимость кнопки "Подключиться" в форме - белая с черным текстом */
@@ -1013,6 +1021,10 @@ input[type="text"]::placeholder {
 }
 
 .btn-settings {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
     background: rgba(255, 255, 255, 0.8);
     color: var(--text-primary);
     border: 1px solid var(--glass-border);
@@ -1026,9 +1038,19 @@ input[type="text"]::placeholder {
     min-height: 54px;
     display: flex;
     align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
     -webkit-appearance: none;
     appearance: none;
     touch-action: manipulation;
+}
+
+.btn-settings img {
+    flex-shrink: 0;
+}
+
+.btn-settings span {
+    white-space: nowrap;
 }
 
 .btn-settings:hover {
