@@ -136,6 +136,22 @@ class UIManager {
                 return; // Карточка не существует, пропускаем
             }
             
+            // ВАЖНО: Проверяем, что peer connection существует и треки в receivers соответствуют трекам в stream
+            const peerConnection = this.videoCallManager.remoteUsers.get(userId);
+            if (peerConnection) {
+                const receivers = peerConnection.getReceivers();
+                const receiverTrackIds = new Set(receivers.map(r => r.track?.id).filter(Boolean));
+                
+                // Удаляем треки из stream, которых нет в receivers
+                const streamTracks = stream.getTracks();
+                streamTracks.forEach(track => {
+                    if (!receiverTrackIds.has(track.id)) {
+                        console.log(`🗑️ Трек ${track.kind} (${track.id}) отсутствует в receivers для ${userId}, удаляем из потока`);
+                        stream.removeTrack(track);
+                    }
+                });
+            }
+            
             const videoTracks = stream.getVideoTracks();
             const audioTracks = stream.getAudioTracks();
             

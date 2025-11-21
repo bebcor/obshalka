@@ -63,7 +63,7 @@ class WebRTCManager {
         
             // ВАЖНО: Отслеживаем изменения в receivers для обнаружения replaceTrack(null)
             // Когда трек заменяется на null, receiver.track становится null
-            let previousReceiverTracks = new Map();
+            let previousReceiverTracks = new Map(); // Map<receiverIndex, trackId>
             const checkReceiversForNullTracks = () => {
                 const receivers = peerConnection.getReceivers();
                 const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
@@ -71,25 +71,46 @@ class WebRTCManager {
                 
                 let hasChanges = false;
                 
+                // Собираем все trackId из текущих receivers
+                const currentTrackIds = new Set();
+                receivers.forEach(receiver => {
+                    if (receiver.track) {
+                        currentTrackIds.add(receiver.track.id);
+                    }
+                });
+                
+                // Проверяем все треки в remoteStream - если трека нет в receivers, удаляем его
+                const streamTracks = remoteStream.getTracks();
+                streamTracks.forEach(streamTrack => {
+                    if (!currentTrackIds.has(streamTrack.id)) {
+                        console.log(`🗑️ Трек ${streamTrack.kind} (${streamTrack.id}) отсутствует в receivers для ${targetUserId}, удаляем из потока`);
+                        remoteStream.removeTrack(streamTrack);
+                        hasChanges = true;
+                    }
+                });
+                
+                // Также проверяем, что receivers с null track не имеют соответствующих треков в потоке
                 receivers.forEach((receiver, index) => {
                     const currentTrack = receiver.track;
-                    const previousTrack = previousReceiverTracks.get(index);
+                    const previousTrackId = previousReceiverTracks.get(index);
                     
                     // Если трек был, но стал null - удаляем его из потока
-                    if (previousTrack && !currentTrack) {
-                        console.log(`🗑️ Трек ${previousTrack.kind} заменен на null для ${targetUserId}, удаляем из потока`);
-                        const tracksToRemove = remoteStream.getTracks().filter(t => t.id === previousTrack.id);
+                    if (previousTrackId && !currentTrack) {
+                        console.log(`🗑️ Receiver ${index} трек заменен на null для ${targetUserId}, ищем и удаляем из потока`);
+                        const tracksToRemove = remoteStream.getTracks().filter(t => t.id === previousTrackId);
                         tracksToRemove.forEach(track => {
+                            console.log(`🗑️ Удаляем трек ${track.kind} (${track.id}) из потока`);
                             remoteStream.removeTrack(track);
                             hasChanges = true;
                         });
                     }
                     
-                    // Обновляем предыдущее состояние
-                    previousReceiverTracks.set(index, currentTrack);
+                    // Обновляем предыдущее состояние (сохраняем trackId, а не сам трек)
+                    previousReceiverTracks.set(index, currentTrack ? currentTrack.id : null);
                 });
                 
                 if (hasChanges) {
+                    console.log(`🔄 Обновляем UI после удаления треков для ${targetUserId}`);
                     this.videoCallManager.uiManager.updateVideoOverlays();
                     this.videoCallManager.checkEmptyState();
                 }
@@ -103,7 +124,7 @@ class WebRTCManager {
                     return;
                 }
                 checkReceiversForNullTracks();
-            }, 300);
+            }, 200); // Уменьшил интервал для более быстрой реакции
             
             // Обработчик получения удаленных треков
             peerConnection.ontrack = (event) => {
@@ -219,8 +240,24 @@ class WebRTCManager {
                     }
                     
                     const checkTrackState = () => {
+                        // ВАЖНО: Проверяем, что трек все еще есть в remoteStream
+                        if (!remoteStream.getTracks().includes(track)) {
+                            return; // Трек уже удален
+                        }
+                        
                         if (track.readyState === 'ended') {
                             console.log(`🗑️ Трек ${track.kind} завершился для ${targetUserId}, удаляем из потока`);
+                            remoteStream.removeTrack(track);
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.checkEmptyState();
+                            return;
+                        }
+                        
+                        // ВАЖНО: Проверяем, что трек все еще есть в receivers
+                        const receivers = peerConnection.getReceivers();
+                        const trackInReceivers = receivers.some(r => r.track && r.track.id === track.id);
+                        if (!trackInReceivers) {
+                            console.log(`🗑️ Трек ${track.kind} (${track.id}) отсутствует в receivers для ${targetUserId}, удаляем из потока`);
                             remoteStream.removeTrack(track);
                             this.videoCallManager.uiManager.updateVideoOverlays();
                             this.videoCallManager.checkEmptyState();
