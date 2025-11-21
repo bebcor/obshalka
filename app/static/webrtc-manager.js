@@ -149,8 +149,12 @@ class WebRTCManager {
                     videoElement.srcObject = remoteStream;
                 }
             
-                // Обновляем UI сразу после добавления трека
-                this.videoCallManager.uiManager.updateVideoOverlays();
+                // Обновляем UI сразу после добавления трека с небольшой задержкой
+                // чтобы дать треку время инициализироваться
+                setTimeout(() => {
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
+                }, 50);
             };
         
             // Обработчик изменения состояния соединения

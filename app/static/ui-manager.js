@@ -134,22 +134,27 @@ class UIManager {
                                   !activeVideoTracks[0].muted;
             
             // Проверяем наличие активного аудио трека
+            // ВАЖНО: проверяем все аудио треки, а не только первый
             const hasActiveAudio = activeAudioTracks.length > 0 && 
-                                  activeAudioTracks[0] &&
-                                  activeAudioTracks[0].readyState === 'live' && 
-                                  activeAudioTracks[0].enabled &&
-                                  !activeAudioTracks[0].muted;
+                                  activeAudioTracks.some(track => 
+                                      track &&
+                                      track.readyState === 'live' && 
+                                      track.enabled &&
+                                      !track.muted
+                                  );
             
-            // Логируем только при изменениях для отладки
-            // console.log(`🔍 Проверка треков для ${userId}:`, {
-            //     videoTracks: videoTracks.length,
-            //     audioTracks: audioTracks.length,
-            //     hasActiveVideo,
-            //     hasActiveAudio,
-            //     videoEnabled: videoTracks[0]?.enabled,
-            //     videoReadyState: videoTracks[0]?.readyState,
-            //     videoMuted: videoTracks[0]?.muted
-            // });
+            // Логируем для отладки когда есть аудио но нет видео
+            if (activeVideoTracks.length === 0 && activeAudioTracks.length > 0) {
+                console.log(`🔍 Проверка для ${userId} (только аудио):`, {
+                    videoTracks: activeVideoTracks.length,
+                    audioTracks: activeAudioTracks.length,
+                    hasActiveVideo,
+                    hasActiveAudio,
+                    audioEnabled: activeAudioTracks[0]?.enabled,
+                    audioReadyState: activeAudioTracks[0]?.readyState,
+                    audioMuted: activeAudioTracks[0]?.muted
+                });
+            }
             
             // Если есть активное видео - показываем видео, скрываем overlay
             if (hasActiveVideo) {
@@ -166,8 +171,8 @@ class UIManager {
                     // Если нет активного видео - скрываем видео элемент
                     if (videoElement) {
                         videoElement.style.display = 'none';
-                        // Очищаем srcObject чтобы не показывать черный экран
-                        // НО НЕ очищаем если есть аудио, чтобы аудио продолжало работать
+                        // НЕ очищаем srcObject если есть аудио, чтобы аудио продолжало работать
+                        // Очищаем только если нет активного аудио
                         if (!hasActiveAudio) {
                             videoElement.srcObject = null;
                         }
@@ -177,9 +182,13 @@ class UIManager {
                     if (hasActiveAudio) {
                         if (overlay) overlay.style.display = 'flex';
                         participantCard.style.display = 'block';
+                        // Убеждаемся что srcObject установлен для воспроизведения аудио
+                        if (videoElement && !videoElement.srcObject) {
+                            videoElement.srcObject = stream;
+                        }
                     } else {
                         // Если нет ни видео, ни аудио - полностью скрываем карточку
-                        console.log(`❌ Скрываем карточку для ${userId} - нет активных треков`);
+                        console.log(`❌ Скрываем карточку для ${userId} - нет активных треков (видео: ${activeVideoTracks.length}, аудио: ${activeAudioTracks.length})`);
                         participantCard.style.display = 'none';
                         // Очищаем srcObject когда карточка скрыта
                         if (videoElement) {
