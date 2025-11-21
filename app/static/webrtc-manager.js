@@ -428,8 +428,15 @@ class WebRTCManager {
                             return;
                         }
                         
+                        // ВАЖНО: Получаем peerConnection из remoteUsers
+                        const currentPeerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
+                        if (!currentPeerConnection) {
+                            console.log(`⚠️ [checkTrackState] Нет peer connection для ${targetUserId}`);
+                            return;
+                        }
+                        
                         // ВАЖНО: Проверяем, что трек все еще есть в receivers И активен
-                        const receivers = peerConnection.getReceivers();
+                        const receivers = currentPeerConnection.getReceivers();
                         const receiverTrack = receivers.find(r => r.track && r.track.id === track.id)?.track;
                         
                         console.log(`🔍 [checkTrackState ${targetUserId}] Проверка трека ${track.kind} (${track.id}):`, {
