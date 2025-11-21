@@ -108,22 +108,24 @@ class WebRTCManager {
                         this.videoCallManager.checkEmptyState();
                     };
                     
+                    // ВАЖНО: Отслеживаем изменения enabled и muted состояния трека
+                    // Это нужно для отслеживания когда трек выключается через enabled = false или muted = true
+                    let previousEnabled = track.enabled;
+                    let previousMuted = track.muted;
+                    
                     track.onmute = () => {
                         console.log(`Трек ${track.kind} заглушен для пользователя ${targetUserId}`);
+                        previousMuted = true; // Обновляем previousMuted
                         this.videoCallManager.uiManager.updateVideoOverlays();
                         this.videoCallManager.checkEmptyState();
                     };
                     
                     track.onunmute = () => {
                         console.log(`Трек ${track.kind} включен для пользователя ${targetUserId}`);
+                        previousMuted = false; // Обновляем previousMuted
                         this.videoCallManager.uiManager.updateVideoOverlays();
                         this.videoCallManager.checkEmptyState();
                     };
-                    
-                    // ВАЖНО: Отслеживаем изменения enabled и muted состояния трека
-                    // Это нужно для отслеживания когда трек выключается через enabled = false или muted = true
-                    let previousEnabled = track.enabled;
-                    let previousMuted = track.muted;
                     
                     const checkTrackState = () => {
                         if (track.readyState === 'ended') {

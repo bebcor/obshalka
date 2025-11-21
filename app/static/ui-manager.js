@@ -195,15 +195,18 @@ class UIManager {
             
             if (hasActiveVideo) {
                 // Если есть активное видео - показываем карточку с видео
-                if (overlay) overlay.style.display = 'none';
+                if (overlay) overlay.style.setProperty('display', 'none', 'important');
                 if (videoElement) {
-                    videoElement.style.display = 'block';
-                    // Убеждаемся, что видео элемент имеет правильный srcObject
-                    if (videoElement.srcObject !== stream) {
-                        videoElement.srcObject = stream;
-                    }
+                    videoElement.style.setProperty('display', 'block', 'important');
+                    // ВАЖНО: Всегда устанавливаем srcObject при показе карточки
+                    // Это нужно на случай если srcObject был очищен когда карточка была скрыта
+                    videoElement.srcObject = stream;
+                    // Пытаемся воспроизвести видео
+                    videoElement.play().catch(err => {
+                        console.warn(`Не удалось воспроизвести видео для ${userId}:`, err);
+                    });
                 }
-                participantCard.style.display = 'block';
+                participantCard.style.setProperty('display', 'block', 'important');
                 console.log(`✅ Удаленная карточка ${userId}: ПОКАЗЫВАЕМ (есть активное видео)`);
             } else {
                 // Если нет активного видео - полностью скрываем карточку
