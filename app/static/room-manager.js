@@ -12,8 +12,16 @@ class RoomManager {
             this.videoCallManager.roomId = roomId;
             // Показываем основной интерфейс
             this.videoCallManager.uiManager.showMainScreen();
-            // не авто-запускаем медиа, только автопросоединение к комнате
-            setTimeout(() => this.joinRoomFromURL(), 0);
+            // ЖДЕМ подключения socket перед присоединением к комнате
+            const tryJoin = () => {
+                if (this.videoCallManager.isConnected) {
+                    this.joinRoomFromURL();
+                } else {
+                    // Ждем подключения
+                    setTimeout(tryJoin, 100);
+                }
+            };
+            tryJoin();
         }
     }
     
@@ -23,6 +31,21 @@ class RoomManager {
                 // Если нет roomId, возвращаемся на стартовое окно
                 this.videoCallManager.uiManager.showWelcomeScreen();
                 return;
+            }
+            
+            // ЖДЕМ подключения socket если еще не подключен
+            if (!this.videoCallManager.isConnected) {
+                console.log('Waiting for socket connection...');
+                let attempts = 0;
+                while (!this.videoCallManager.isConnected && attempts < 50) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    attempts++;
+                }
+                
+                if (!this.videoCallManager.isConnected) {
+                    this.videoCallManager.notificationManager.show('Не удалось подключиться к серверу', 'error');
+                    return;
+                }
             }
             
             console.log('Checking room existence from URL:', this.videoCallManager.roomId);
@@ -159,8 +182,20 @@ class RoomManager {
     }
 
     joinRoomAfterCreation() {
-        if (!this.videoCallManager.socket || !this.videoCallManager.socket.connected) {
+        // ПРОВЕРЯЕМ isConnected вместо socket.connected (более надежно)
+        if (!this.videoCallManager.socket || !this.videoCallManager.isConnected) {
+            console.error('Socket not connected:', {
+                socket: !!this.videoCallManager.socket,
+                isConnected: this.videoCallManager.isConnected,
+                socketConnected: this.videoCallManager.socket?.connected
+            });
             this.videoCallManager.notificationManager.show('Not connected to server. Please try again.', 'error');
+            // Пробуем подождать и повторить
+            setTimeout(() => {
+                if (this.videoCallManager.isConnected) {
+                    this.joinRoomAfterCreation();
+                }
+            }, 1000);
             return;
         }
         

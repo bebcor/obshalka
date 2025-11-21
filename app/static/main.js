@@ -103,6 +103,8 @@ class VideoCallManager {
                 this.socketId = this.socket.id;
                 this.isConnected = true;
                 console.log('Connected to server with ID:', this.socketId);
+                // Сохраняем socket в window для отладки
+                window.socket = this.socket;
                 this.uiManager.updateUI();
             });
             
@@ -1007,6 +1009,8 @@ class VideoCallManager {
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
     window.videoCallManager = new VideoCallManager();
+    // Сохраняем для отладки
+    window.VideoCallManager = VideoCallManager;
 });
 
 // Обработка полноэкранного режима
