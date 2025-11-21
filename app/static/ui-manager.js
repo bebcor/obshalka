@@ -199,7 +199,20 @@ class UIManager {
         participantCard.className = 'participant-card remote-participant';
         participantCard.id = `participant-${userId}`;
         
-        const userName = this.videoCallManager.userNames.get(userId) || this.getRandomAnimalName();
+        // Используем имя из userNames, если его нет - берем из usersManager, иначе генерируем
+        let userName = this.videoCallManager.userNames.get(userId);
+        if (!userName && this.videoCallManager.usersManager) {
+            const participant = this.videoCallManager.usersManager.participants.get(userId);
+            if (participant) {
+                userName = participant.name;
+                // Сохраняем в userNames для консистентности
+                this.videoCallManager.userNames.set(userId, userName);
+            }
+        }
+        if (!userName) {
+            userName = this.getRandomAnimalName();
+            this.videoCallManager.userNames.set(userId, userName);
+        }
         
         participantCard.innerHTML = `
             <video id="remoteVideo-${userId}" autoplay playsinline></video>
@@ -251,6 +264,16 @@ class UIManager {
             }, 100);
         } else {
             console.error('❌ Video element not found after creation for:', userId);
+        }
+    }
+
+    updateParticipantName(userId, userName) {
+        const participantCard = document.getElementById(`participant-${userId}`);
+        if (participantCard) {
+            const nameElement = participantCard.querySelector('.participant-name');
+            if (nameElement) {
+                nameElement.textContent = this.escapeHtml(userName);
+            }
         }
     }
 

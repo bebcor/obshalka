@@ -99,10 +99,22 @@ class AudioAnalyzer {
             micButton.classList.add('mic-speaking');
             const intensity = Math.min(1, level / 100); // Нормализуем до 0-1 (0-100%)
             
-            // Создаем градиент снизу-вверх: зеленый снизу, прозрачный сверху
+            // Создаем градиент снизу-вверх: зеленый только снизу, белый сверху
             const greenPercent = Math.floor(intensity * 100);
-            micButton.style.background = `linear-gradient(to top, rgba(16, 185, 129, 1) 0%, rgba(16, 185, 129, 1) ${greenPercent}%, rgba(255, 255, 255, 0.8) ${greenPercent}%, rgba(255, 255, 255, 0.8) 100%)`;
+            // Используем два слоя: белый базовый фон и зеленый градиент поверх него
+            // Градиент идет от 0% (снизу) до greenPercent%, остальное прозрачное
+            // Важно: градиент должен начинаться снизу и идти вверх
+            micButton.style.background = `
+                linear-gradient(to top, 
+                    rgba(16, 185, 129, 1) 0%, 
+                    rgba(16, 185, 129, 1) ${greenPercent}%, 
+                    transparent ${greenPercent}%, 
+                    transparent 100%
+                ),
+                rgba(255, 255, 255, 0.8)
+            `;
             micButton.style.backgroundSize = '100% 100%';
+            micButton.style.backgroundRepeat = 'no-repeat';
         } else {
             // Молчит - серый
             micButton.classList.add('mic-idle');

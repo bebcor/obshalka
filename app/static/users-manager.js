@@ -22,6 +22,14 @@ class UsersManager {
             socket_id: userId,
             joined_at: new Date().toISOString()
         });
+        // Синхронизируем имя в userNames и обновляем UI
+        if (this.videoCallManager.userNames) {
+            this.videoCallManager.userNames.set(userId, userName);
+        }
+        // Обновляем имя в карточке участника
+        if (this.videoCallManager.uiManager) {
+            this.videoCallManager.uiManager.updateParticipantName(userId, userName);
+        }
         this.updateUsersModal();
     }
 

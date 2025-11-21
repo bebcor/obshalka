@@ -759,6 +759,23 @@ input[type="text"]::placeholder {
     border: 1px solid rgba(0, 0, 0, 0.3) !important;
 }
 
+.btn-welcome.btn-primary .btn-text,
+.btn-welcome.btn-primary .icon {
+    color: white !important;
+}
+
+/* Исправляем видимость кнопки "Подключиться" в форме */
+.join-room-form .btn-primary {
+    background: var(--primary) !important;
+    color: white !important;
+    border: 1px solid rgba(0, 0, 0, 0.3) !important;
+}
+
+.join-room-form .btn-primary .btn-text,
+.join-room-form .btn-primary .icon {
+    color: white !important;
+}
+
 .join-room-form {
     display: flex;
     flex-direction: column;

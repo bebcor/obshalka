@@ -783,9 +783,17 @@ class VideoCallManager {
         // Обновляем список пользователей (включая текущего пользователя)
         this.usersManager.updateParticipants(data.participants);
         
+        // Сохраняем имена всех участников в userNames для консистентности
+        data.participants.forEach(participant => {
+            if (participant.name) {
+                this.userNames.set(participant.socket_id, participant.name);
+            }
+        });
+        
         // Добавляем текущего пользователя в список, если его там нет
         const hasCurrentUser = data.participants.some(p => p.socket_id === this.socketId);
         if (!hasCurrentUser && this.userName) {
+            this.userNames.set(this.socketId, this.userName);
             this.usersManager.addParticipant(this.socketId, this.userName);
         }
         
@@ -815,6 +823,10 @@ class VideoCallManager {
         
         // Обновляем список пользователей (не добавляем себя)
         if (data.user_id !== this.socketId) {
+            // Сохраняем имя в userNames для консистентности
+            if (data.user_name) {
+                this.userNames.set(data.user_id, data.user_name);
+            }
             this.usersManager.addParticipant(data.user_id, data.user_name);
         }
         
