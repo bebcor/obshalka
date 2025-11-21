@@ -193,25 +193,40 @@ class WebRTCManager {
                 }
             
             // ВАЖНО: Проверяем состояние треков перед установкой srcObject
-            // Если видео трек неактивен, НЕ устанавливаем srcObject и скрываем карточку
+            // Если видео трек неактивен или отсутствует, НЕ устанавливаем srcObject и скрываем карточку
             const videoTracks = remoteStream.getVideoTracks();
             const hasActiveVideo = videoTracks.length > 0 && 
                                   videoTracks.some(t => t && t.readyState === 'live' && t.enabled && !t.muted);
             
-            if (videoElement) {
+            const participantCard = document.getElementById(`participant-${targetUserId}`);
+            
+            if (videoElement && participantCard) {
                 if (hasActiveVideo) {
-                    // Если есть активное видео - устанавливаем srcObject
+                    // Если есть активное видео - устанавливаем srcObject и показываем карточку
                     if (videoElement.srcObject !== remoteStream) {
                         videoElement.srcObject = remoteStream;
                     }
+                    participantCard.style.setProperty('display', 'block', 'important');
+                    videoElement.style.setProperty('display', 'block', 'important');
                 } else {
                     // Если нет активного видео - НЕ устанавливаем srcObject и скрываем карточку
                     videoElement.srcObject = null;
-                    const participantCard = document.getElementById(`participant-${targetUserId}`);
-                    if (participantCard) {
-                        participantCard.style.setProperty('display', 'none', 'important');
-                    }
+                    participantCard.style.setProperty('display', 'none', 'important');
                     videoElement.style.setProperty('display', 'none', 'important');
+                    // ВАЖНО: Также удаляем карточку из DOM если нет видео
+                    // Но только если нет активного аудио тоже
+                    const audioTracks = remoteStream.getAudioTracks();
+                    const hasActiveAudio = audioTracks.length > 0 && 
+                                         audioTracks.some(t => t && t.readyState === 'live' && t.enabled && !t.muted);
+                    if (!hasActiveAudio) {
+                        // Если нет ни видео, ни аудио - полностью скрываем карточку
+                        participantCard.style.setProperty('display', 'none', 'important');
+                        participantCard.style.setProperty('visibility', 'hidden', 'important');
+                        participantCard.style.setProperty('opacity', '0', 'important');
+                        participantCard.style.setProperty('width', '0', 'important');
+                        participantCard.style.setProperty('height', '0', 'important');
+                        participantCard.style.setProperty('overflow', 'hidden', 'important');
+                    }
                 }
             }
         

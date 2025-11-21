@@ -218,10 +218,22 @@ class UIManager {
                     });
                 }
                 participantCard.style.setProperty('display', 'block', 'important');
+                participantCard.style.setProperty('visibility', 'visible', 'important');
+                participantCard.style.setProperty('opacity', '1', 'important');
+                participantCard.style.removeProperty('width');
+                participantCard.style.removeProperty('height');
+                participantCard.style.removeProperty('overflow');
+                participantCard.style.removeProperty('pointer-events');
                 console.log(`✅ Удаленная карточка ${userId}: ПОКАЗЫВАЕМ (есть активное видео)`);
             } else {
                 // Если нет активного видео - полностью скрываем карточку
                 participantCard.style.setProperty('display', 'none', 'important');
+                participantCard.style.setProperty('visibility', 'hidden', 'important');
+                participantCard.style.setProperty('opacity', '0', 'important');
+                participantCard.style.setProperty('width', '0', 'important');
+                participantCard.style.setProperty('height', '0', 'important');
+                participantCard.style.setProperty('overflow', 'hidden', 'important');
+                participantCard.style.setProperty('pointer-events', 'none', 'important');
                 if (videoElement) {
                     videoElement.style.setProperty('display', 'none', 'important');
                     // ВАЖНО: Очищаем srcObject если нет активного видео, чтобы не показывать черный экран
@@ -378,6 +390,12 @@ class UIManager {
         // Скрываем карточку по умолчанию - она появится только если есть активное видео
         // ВАЖНО: Используем setProperty с important чтобы гарантировать скрытие
         participantCard.style.setProperty('display', 'none', 'important');
+        participantCard.style.setProperty('visibility', 'hidden', 'important');
+        participantCard.style.setProperty('opacity', '0', 'important');
+        participantCard.style.setProperty('width', '0', 'important');
+        participantCard.style.setProperty('height', '0', 'important');
+        participantCard.style.setProperty('overflow', 'hidden', 'important');
+        participantCard.style.setProperty('pointer-events', 'none', 'important');
         
         participantsGrid.appendChild(participantCard);
         
@@ -386,6 +404,9 @@ class UIManager {
             // ВАЖНО: НЕ устанавливаем srcObject сразу - это сделает updateVideoOverlays()
             // после проверки состояния треков
             // videoElement.srcObject = stream;
+            // Скрываем видео элемент тоже
+            videoElement.style.setProperty('display', 'none', 'important');
+            videoElement.srcObject = null;
 
             // ДОБАВЛЯЕМ ОБРАБОТЧИКИ ДЛЯ СЛЕДЕНИЯ ЗА СОСТОЯНИЕМ ТРЕКОВ
             const setupTrackHandlers = (track) => {
