@@ -325,10 +325,10 @@ class UIManager {
                         videoElement.play().then(() => {
                             console.log(`✅ [updateVideoOverlays ${userId}] Видео успешно воспроизводится`);
                         }).catch(err => {
-                            console.warn(`⚠️ [updateVideoOverlays ${userId}] Ошибка play:`, err);
-                            setTimeout(() => {
-                                videoElement.play().catch(e => console.warn(`⚠️ [updateVideoOverlays ${userId}] Повторная ошибка play:`, e));
-                            }, 100);
+                            // Игнорируем ошибки связанные с aborted - это нормально при очистке
+                            if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
+                                console.warn(`⚠️ [updateVideoOverlays ${userId}] Ошибка play:`, err);
+                            }
                         });
                     }
                     console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео)`);
@@ -338,64 +338,69 @@ class UIManager {
             
             // Если дошли сюда - значит нет активного видео
             // НЕТ активного видео - СКРЫВАЕМ карточку и ОЧИЩАЕМ srcObject
-            console.log(`❌ [updateVideoOverlays ${userId}] НЕТ активного видео в receivers - скрываем карточку`);
+            console.log(`❌ [updateVideoOverlays ${userId}] НЕТ активного видео в receivers - скрываем карточку и очищаем srcObject`);
             
-            // ВАЖНО: Сначала удаляем ВСЕ видео треки из потока
+            // КРИТИЧНО: СНАЧАЛА очищаем srcObject и скрываем карточку - это предотвращает показ черного экрана
+            if (videoElement) {
+                // Останавливаем воспроизведение
+                videoElement.pause();
+                // Очищаем srcObject СРАЗУ
+                videoElement.srcObject = null;
+                // Используем load() для полной очистки
+                try {
+                    videoElement.load();
+                } catch (e) {
+                    // Игнорируем ошибки
+                }
+                // Скрываем элемент
+                videoElement.style.setProperty('display', 'none', 'important');
+            }
+            
+            // Скрываем карточку полностью СРАЗУ
+            participantCard.style.setProperty('display', 'none', 'important');
+            participantCard.style.setProperty('visibility', 'hidden', 'important');
+            participantCard.style.setProperty('opacity', '0', 'important');
+            participantCard.style.setProperty('width', '0', 'important');
+            participantCard.style.setProperty('height', '0', 'important');
+            participantCard.style.setProperty('overflow', 'hidden', 'important');
+            participantCard.style.setProperty('pointer-events', 'none', 'important');
+            
+            if (overlay) overlay.style.display = 'none';
+            
+            // ВАЖНО: Удаляем ВСЕ видео треки из потока ПОСЛЕ очистки srcObject
             const allVideoTracks = stream.getVideoTracks();
             allVideoTracks.forEach(track => {
                 console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек из потока:`, track.id);
                 stream.removeTrack(track);
             });
-                
-            // КРИТИЧНО: Полностью останавливаем и очищаем видео элемент ПОСЛЕ удаления треков
-            if (videoElement) {
-                console.log(`🔄 [updateVideoOverlays ${userId}] Полностью очищаем видео элемент (нет активного видео)`);
-                
-                // Сначала останавливаем воспроизведение
-                videoElement.pause();
-                
-                // КРИТИЧНО: Полностью очищаем srcObject когда нет активного видео
-                // Это предотвращает показ черного экрана
-                videoElement.srcObject = null;
-                
-                // Используем load() для полной перезагрузки элемента
-                try {
-                    videoElement.load();
-                } catch (e) {
-                    // Игнорируем ошибки load()
-                }
-                
-                // Скрываем элемент
-                videoElement.style.setProperty('display', 'none', 'important');
-                
-                // Проверяем и очищаем еще раз через небольшую задержку
-                setTimeout(() => {
+            
+            // Проверяем и очищаем еще раз через небольшую задержку для надежности
+            setTimeout(() => {
+                if (videoElement) {
                     const currentSrcObject = videoElement.srcObject;
-                    if (currentSrcObject && currentSrcObject.getVideoTracks().length > 0) {
-                        console.warn(`⚠️ [updateVideoOverlays ${userId}] В srcObject все еще есть видео треки, очищаем принудительно`);
-                        videoElement.srcObject = null;
-                        videoElement.pause();
-                        try {
-                            videoElement.load();
-                        } catch (e) {
-                            // Игнорируем ошибки
+                    if (currentSrcObject) {
+                        const videoTracksInSrcObject = currentSrcObject.getVideoTracks();
+                        if (videoTracksInSrcObject.length > 0) {
+                            console.warn(`⚠️ [updateVideoOverlays ${userId}] В srcObject все еще есть видео треки (${videoTracksInSrcObject.length}), очищаем принудительно`);
+                            videoElement.pause();
+                            videoElement.srcObject = null;
+                            try {
+                                videoElement.load();
+                            } catch (e) {
+                                // Игнорируем ошибки
+                            }
                         }
                     }
-                }, 100);
-            }
-                
-                // Скрываем карточку полностью
-                participantCard.style.setProperty('display', 'none', 'important');
-                participantCard.style.setProperty('visibility', 'hidden', 'important');
-                participantCard.style.setProperty('opacity', '0', 'important');
-                participantCard.style.setProperty('width', '0', 'important');
-                participantCard.style.setProperty('height', '0', 'important');
-                participantCard.style.setProperty('overflow', 'hidden', 'important');
-                participantCard.style.setProperty('pointer-events', 'none', 'important');
-                
-                if (overlay) overlay.style.display = 'none';
-                
-                console.log(`❌ [updateVideoOverlays ${userId}] Карточка скрыта, srcObject очищен`);
+                    // Убеждаемся что карточка скрыта
+                    const computedDisplay = window.getComputedStyle(participantCard).display;
+                    if (computedDisplay !== 'none') {
+                        console.warn(`⚠️ [updateVideoOverlays ${userId}] Карточка не скрыта (display: ${computedDisplay}), скрываем принудительно`);
+                        participantCard.style.setProperty('display', 'none', 'important');
+                    }
+                }
+            }, 150);
+            
+            console.log(`❌ [updateVideoOverlays ${userId}] Карточка скрыта, srcObject очищен`);
         });
     }
 

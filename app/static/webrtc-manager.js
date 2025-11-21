@@ -254,6 +254,20 @@ class WebRTCManager {
                         if (track.kind === 'video' && remoteStream.getTracks().includes(track)) {
                             remoteStream.removeTrack(track);
                             console.log(`🗑️ Removed muted video track from stream for ${targetUserId}`);
+                            
+                            // КРИТИЧНО: Очищаем srcObject немедленно
+                            const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                            if (videoElement && videoElement.srcObject === remoteStream) {
+                                console.log(`🔄 Очищаем srcObject немедленно (видео трек muted)`);
+                                videoElement.pause();
+                                videoElement.srcObject = null;
+                                try {
+                                    videoElement.load();
+                                } catch (e) {
+                                    // Игнорируем ошибки
+                                }
+                            }
+                            
                             this.videoCallManager.uiManager.updateVideoOverlays();
                             this.videoCallManager.checkEmptyState();
                         }
@@ -281,10 +295,26 @@ class WebRTCManager {
                             previousEnabled = track.enabled;
                             
                             if (!track.enabled) {
-                                // Трек выключен - удаляем из потока
+                                // Трек выключен - удаляем из потока НЕМЕДЛЕННО
                                 if (remoteStream.getTracks().includes(track)) {
                                     remoteStream.removeTrack(track);
-                                    console.log(`🗑️ Removed disabled track from stream for ${targetUserId}`);
+                                    console.log(`🗑️ Removed disabled ${track.kind} track from stream for ${targetUserId}`);
+                                    
+                                    // КРИТИЧНО: Если это видео трек - очищаем srcObject немедленно
+                                    if (track.kind === 'video') {
+                                        const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                                        if (videoElement && videoElement.srcObject === remoteStream) {
+                                            console.log(`🔄 Очищаем srcObject немедленно (видео трек disabled)`);
+                                            videoElement.pause();
+                                            videoElement.srcObject = null;
+                                            try {
+                                                videoElement.load();
+                                            } catch (e) {
+                                                // Игнорируем ошибки
+                                            }
+                                        }
+                                    }
+                                    
                                     this.videoCallManager.uiManager.updateVideoOverlays();
                                     this.videoCallManager.checkEmptyState();
                                 }
@@ -473,7 +503,23 @@ class WebRTCManager {
                 }
             
             // ВАЖНО: НЕ управляем видимостью карточки здесь - это делает updateVideoOverlays()
-            // Устанавливаем srcObject ТОЛЬКО если есть АКТИВНЫЕ видео треки (enabled и не muted)
+            // Проверяем есть ли активный видео трек в receivers - это единственный надежный источник
+            const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
+            let hasActiveVideoInReceivers = false;
+            
+            if (peerConnection) {
+                const receivers = peerConnection.getReceivers();
+                hasActiveVideoInReceivers = receivers.some(receiver => {
+                    const track = receiver.track;
+                    return track && 
+                           track.kind === 'video' && 
+                           track.readyState === 'live' && 
+                           track.enabled && 
+                           !track.muted;
+                });
+            }
+            
+            // Также проверяем треки в потоке
             const videoTracks = remoteStream.getVideoTracks();
             const hasActiveVideoTracks = videoTracks.length > 0 && 
                                        videoTracks.some(t => 
@@ -483,9 +529,12 @@ class WebRTCManager {
                                            !t.muted
                                        );
             
+            // Видео активно ТОЛЬКО если оно активно И в receivers И в потоке
+            const hasActiveVideo = hasActiveVideoInReceivers && hasActiveVideoTracks;
+            
             if (videoElement) {
-                if (hasActiveVideoTracks) {
-                    // Если есть АКТИВНЫЕ видео треки - устанавливаем srcObject
+                if (hasActiveVideo) {
+                    // Если есть АКТИВНОЕ видео - устанавливаем srcObject
                     if (videoElement.srcObject !== remoteStream) {
                         console.log(`🔄 [ontrack ${targetUserId}] Устанавливаем srcObject, активные video tracks:`, videoTracks.filter(t => t.enabled && !t.muted).map(t => `${t.id}`));
                         videoElement.srcObject = remoteStream;
@@ -498,10 +547,10 @@ class WebRTCManager {
                         });
                     }
                 } else {
-                    // Если нет АКТИВНЫХ видео треков - очищаем srcObject
+                    // Если нет АКТИВНОГО видео - очищаем srcObject
                     // Это предотвращает показ черного экрана
                     if (videoElement.srcObject === remoteStream || videoElement.srcObject !== null) {
-                        console.log(`🔄 [ontrack ${targetUserId}] Очищаем srcObject (нет активных видео треков)`);
+                        console.log(`🔄 [ontrack ${targetUserId}] Очищаем srcObject (нет активного видео в receivers или потоке)`);
                         // Сначала останавливаем воспроизведение
                         videoElement.pause();
                         // Потом очищаем srcObject
