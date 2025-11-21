@@ -242,7 +242,29 @@ class VideoCallManager {
 
         // Считаем ТОЛЬКО удаленных участников (не локального)
         const remoteParticipants = participantsGrid.querySelectorAll('.remote-participant');
-        const hasRemoteParticipants = remoteParticipants.length > 0;
+        // Проверяем видимых участников с активными треками
+        const visibleRemoteParticipants = Array.from(remoteParticipants).filter(element => {
+            const style = window.getComputedStyle(element);
+            const isVisible = style.display !== 'none';
+            
+            // Дополнительно проверяем, есть ли активные треки у этого участника
+            const userId = element.id.replace('participant-', '');
+            const remoteStream = this.remoteStreams.get(userId);
+            if (remoteStream) {
+                const videoTracks = remoteStream.getVideoTracks();
+                const audioTracks = remoteStream.getAudioTracks();
+                const hasActiveVideo = videoTracks.length > 0 && 
+                                      videoTracks[0].readyState === 'live' && 
+                                      videoTracks[0].enabled;
+                const hasActiveAudio = audioTracks.length > 0 && 
+                                      audioTracks[0].readyState === 'live' && 
+                                      audioTracks[0].enabled;
+                // Участник считается видимым только если есть активные треки
+                return isVisible && (hasActiveVideo || hasActiveAudio);
+            }
+            return isVisible;
+        });
+        const hasRemoteParticipants = visibleRemoteParticipants.length > 0;
         
         console.log('🔍 Проверка состояния emptyState:', {
             remoteParticipantsCount: remoteParticipants.length,

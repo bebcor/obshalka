@@ -74,10 +74,22 @@ class UIManager {
         // Local video overlay
         if (localVideo && localOverlay) {
             const videoTrack = this.videoCallManager.localStream?.getVideoTracks()[0];
-            if (videoTrack && videoTrack.enabled && this.videoCallManager.localStream) {
+            const audioTrack = this.videoCallManager.localStream?.getAudioTracks()[0];
+            
+            const hasActiveVideo = videoTrack && videoTrack.enabled && videoTrack.readyState === 'live';
+            const hasActiveAudio = audioTrack && audioTrack.enabled && audioTrack.readyState === 'live';
+            
+            if (hasActiveVideo) {
                 localOverlay.style.display = 'none';
+                localVideo.style.display = 'block';
             } else {
-                localOverlay.style.display = 'flex';
+                localVideo.style.display = 'none';
+                // Показываем overlay только если есть активное аудио
+                if (hasActiveAudio) {
+                    localOverlay.style.display = 'flex';
+                } else {
+                    localOverlay.style.display = 'flex'; // Показываем overlay даже без аудио для локального участника
+                }
             }
         }
         
@@ -87,20 +99,35 @@ class UIManager {
             const participantCard = document.getElementById(`participant-${userId}`);
             const overlay = participantCard?.querySelector('.video-overlay');
             
-            if (videoElement && overlay && participantCard) {
+            if (videoElement && participantCard) {
                 const videoTracks = stream.getVideoTracks();
-                const hasVideo = videoTracks.length > 0 && videoTracks[0].readyState === 'live';
+                const audioTracks = stream.getAudioTracks();
                 
-                if (hasVideo) {
-                    overlay.style.display = 'none';
+                // Проверяем наличие активного видео трека (enabled и live)
+                const hasActiveVideo = videoTracks.length > 0 && 
+                                      videoTracks[0].readyState === 'live' && 
+                                      videoTracks[0].enabled;
+                
+                // Проверяем наличие активного аудио трека
+                const hasActiveAudio = audioTracks.length > 0 && 
+                                      audioTracks[0].readyState === 'live' && 
+                                      audioTracks[0].enabled;
+                
+                // Если есть активное видео - показываем видео, скрываем overlay
+                if (hasActiveVideo) {
+                    if (overlay) overlay.style.display = 'none';
                     videoElement.style.display = 'block';
                     participantCard.style.display = 'block';
                 } else {
-                    overlay.style.display = 'flex';
+                    // Если нет активного видео - скрываем видео элемент
                     videoElement.style.display = 'none';
-                    // НЕ СКРЫВАЕМ карточку если есть аудио
-                    const audioTracks = stream.getAudioTracks();
-                    if (audioTracks.length === 0) {
+                    
+                    // Если есть активное аудио - показываем overlay с иконкой пользователя
+                    if (hasActiveAudio) {
+                        if (overlay) overlay.style.display = 'flex';
+                        participantCard.style.display = 'block';
+                    } else {
+                        // Если нет ни видео, ни аудио - полностью скрываем карточку
                         participantCard.style.display = 'none';
                     }
                 }
@@ -250,18 +277,46 @@ class UIManager {
                 track.onended = () => {
                     console.log(`Трек ${track.kind} завершился для пользователя ${userId}`);
                     this.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
                 };
                 
                 track.onmute = () => {
                     console.log(`Трек ${track.kind} заглушен для пользователя ${userId}`);
                     this.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
                 };
                 
                 track.onunmute = () => {
                     console.log(`Трек ${track.kind} включен для пользователя ${userId}`);
                     this.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
                 };
             });
+            
+            // Отслеживаем добавление новых треков в поток
+            const originalAddTrack = stream.addTrack.bind(stream);
+            stream.addTrack = (track) => {
+                const result = originalAddTrack(track);
+                // Добавляем обработчики для нового трека
+                track.onended = () => {
+                    console.log(`Трек ${track.kind} завершился для пользователя ${userId}`);
+                    this.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
+                };
+                track.onmute = () => {
+                    console.log(`Трек ${track.kind} заглушен для пользователя ${userId}`);
+                    this.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
+                };
+                track.onunmute = () => {
+                    console.log(`Трек ${track.kind} включен для пользователя ${userId}`);
+                    this.updateVideoOverlays();
+                    this.videoCallManager.checkEmptyState();
+                };
+                this.updateVideoOverlays();
+                this.videoCallManager.checkEmptyState();
+                return result;
+            };
             
             videoElement.play().catch(error => {
                 console.log('Автовоспроизведение звука заблокировано:', error);
