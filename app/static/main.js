@@ -693,7 +693,7 @@ class VideoCallManager {
         modal.innerHTML = `
             <div class="modal-overlay">
                 <div class="modal-content">
-                    <h3><img src="/static/images/microphone.png" alt="Микрофон" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Выберите микрофон</h3>
+                    <h3 style="display: flex; align-items: center; gap: 8px;"><img src="/static/images/microphone.png" alt="Микрофон" style="width: 24px; height: 24px; flex-shrink: 0; display: block;"> <span>Выберите микрофон</span></h3>
                     <div class="microphone-list">
                         ${microphones.map((mic, index) => `
                             <div class="microphone-item" data-device-id="${mic.deviceId}">
@@ -759,7 +759,7 @@ class VideoCallManager {
         modal.innerHTML = `
             <div class="modal-overlay">
                 <div class="modal-content">
-                    <h3><img src="/static/images/photo_camera.png" alt="Камера" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Выберите камеру</h3>
+                    <h3 style="display: flex; align-items: center; gap: 8px;"><img src="/static/images/photo_camera.png" alt="Камера" style="width: 24px; height: 24px; flex-shrink: 0; display: block;"> <span>Выберите камеру</span></h3>
                     <div class="camera-list">
                         ${cameras.map((camera, index) => `
                             <div class="camera-item" data-device-id="${camera.deviceId}">

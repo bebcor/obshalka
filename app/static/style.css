@@ -1123,6 +1123,30 @@ input[type="text"]::placeholder {
     align-items: center;
     font-size: 16px;
     flex: 1;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.camera-item label img,
+.microphone-item label img {
+    display: none; /* Скрываем изображения в label, если они есть */
+}
+
+.modal-content h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.modal-content h3 img {
+    flex-shrink: 0;
+    display: block;
+}
+
+.modal-content h3 span {
+    display: inline-block;
 }
 
 .modal-buttons {
