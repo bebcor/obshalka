@@ -612,40 +612,44 @@ class WebRTCManager {
 
     async handleWebRTCOffer(data) {
         try {
-            console.log('Received offer from:', data.sender_id);
+            console.log('📥 Received offer from:', data.sender_id);
         
             // Если соединение с этим пользователем еще не создано, создаем его
             if (!this.videoCallManager.remoteUsers.has(data.sender_id)) {
+                console.log('🔄 Peer connection не существует для', data.sender_id, ', создаем...');
                 this.setupPeerConnection(data.sender_id);
             }
-        
+            
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
             
-            // Устанавливаем полученное предложение (offer) как удаленное описание
-            await peerConnection.setRemoteDescription(data.offer);
-            
-            // Убеждаемся, что локальные треки добавлены перед созданием answer
+            // ВАЖНО: Убеждаемся, что локальные треки добавлены ПЕРЕД установкой remote description
+            // Это нужно чтобы answer содержал информацию о наших треках
             if (this.videoCallManager.localStream) {
+                console.log('🔄 Проверяем локальные треки перед обработкой offer...');
                 const existingSenders = peerConnection.getSenders();
                 const hasVideoSender = existingSenders.some(s => s.track && s.track.kind === 'video');
                 const hasAudioSender = existingSenders.some(s => s.track && s.track.kind === 'audio');
                 
                 if (!hasVideoSender) {
                     const videoTrack = this.videoCallManager.localStream.getVideoTracks()[0];
-                    if (videoTrack) {
+                    if (videoTrack && videoTrack.enabled) {
                         peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
-                        console.log('Added video track when handling offer');
+                        console.log('✅ Added video track when handling offer');
                     }
                 }
                 
                 if (!hasAudioSender) {
                     const audioTrack = this.videoCallManager.localStream.getAudioTracks()[0];
-                    if (audioTrack) {
+                    if (audioTrack && audioTrack.enabled) {
                         peerConnection.addTrack(audioTrack, this.videoCallManager.localStream);
-                        console.log('Added audio track when handling offer');
+                        console.log('✅ Added audio track when handling offer');
                     }
                 }
             }
+            
+            // Устанавливаем полученное предложение (offer) как удаленное описание
+            await peerConnection.setRemoteDescription(data.offer);
+            console.log('✅ Remote description установлено для', data.sender_id);
         
             // Создаем ответ (answer) с правильными опциями
             const answer = await peerConnection.createAnswer({
@@ -745,6 +749,49 @@ class WebRTCManager {
             
         } catch (error) {
             console.error('Error adding ICE candidate:', error);
+        }
+    }
+
+    addTracksToPeerConnection(targetUserId) {
+        if (!this.videoCallManager.localStream) {
+            console.log('⚠️ No local stream available for adding tracks to peer connection');
+            return;
+        }
+        
+        const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
+        if (!peerConnection) {
+            console.log(`⚠️ No peer connection found for ${targetUserId}`);
+            return;
+        }
+        
+        console.log(`🔄 Adding tracks to peer connection for ${targetUserId}`);
+        
+        const videoTrack = this.videoCallManager.localStream.getVideoTracks()[0];
+        const audioTrack = this.videoCallManager.localStream.getAudioTracks()[0];
+        
+        // Проверяем, есть ли уже senders для этих треков
+        const senders = peerConnection.getSenders();
+        const hasVideoSender = senders.some(s => s.track && s.track.kind === 'video');
+        const hasAudioSender = senders.some(s => s.track && s.track.kind === 'audio');
+        
+        // Добавляем видео трек если его нет
+        if (videoTrack && videoTrack.enabled && !hasVideoSender) {
+            try {
+                peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
+                console.log(`✅ Video track added to peer connection for ${targetUserId}`);
+            } catch (error) {
+                console.error(`❌ Error adding video track to peer connection for ${targetUserId}:`, error);
+            }
+        }
+        
+        // Добавляем аудио трек если его нет
+        if (audioTrack && audioTrack.enabled && !hasAudioSender) {
+            try {
+                peerConnection.addTrack(audioTrack, this.videoCallManager.localStream);
+                console.log(`✅ Audio track added to peer connection for ${targetUserId}`);
+            } catch (error) {
+                console.error(`❌ Error adding audio track to peer connection for ${targetUserId}:`, error);
+            }
         }
     }
 
