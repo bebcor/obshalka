@@ -181,17 +181,8 @@ body {
 }
 
 /* ВАЖНО: Принудительно скрываем карточки с display: none !important */
-.participant-card[style*="display: none"] {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-    width: 0 !important;
-    height: 0 !important;
-    overflow: hidden !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
+/* УДАЛЕНО: Это правило конфликтовало с показом карточек */
+/* Теперь скрытие управляется только через inline стили в JavaScript */
 
 .participant-card:hover {
     background: rgba(255, 255, 255, 0.9);

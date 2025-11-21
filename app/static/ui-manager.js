@@ -247,18 +247,29 @@ class UIManager {
                         console.warn(`Не удалось воспроизвести видео для ${userId}:`, err);
                     });
                 }
+                // ВАЖНО: Полностью очищаем все стили скрытия перед показом
+                participantCard.style.cssText = '';
                 participantCard.style.setProperty('display', 'block', 'important');
                 participantCard.style.setProperty('visibility', 'visible', 'important');
-                participantCard.style.removeProperty('width');
-                participantCard.style.removeProperty('height');
-                participantCard.style.removeProperty('overflow');
-                participantCard.style.removeProperty('pointer-events');
-                participantCard.style.removeProperty('position');
-                participantCard.style.removeProperty('left');
-                participantCard.style.removeProperty('top');
-                participantCard.style.removeProperty('margin');
-                participantCard.style.removeProperty('padding');
-                console.log(`✅ Удаленная карточка ${userId}: ПОКАЗЫВАЕМ (есть активное видео)`);
+                participantCard.style.setProperty('opacity', '1', 'important');
+                participantCard.style.setProperty('width', 'auto', 'important');
+                participantCard.style.setProperty('height', 'auto', 'important');
+                participantCard.style.setProperty('overflow', 'visible', 'important');
+                participantCard.style.setProperty('pointer-events', 'auto', 'important');
+                
+                // ВАЖНО: Проверяем computed style после установки
+                const computedDisplay = window.getComputedStyle(participantCard).display;
+                const computedVisibility = window.getComputedStyle(participantCard).visibility;
+                console.log(`✅ Удаленная карточка ${userId}: ПОКАЗЫВАЕМ (есть активное видео), inline display: ${participantCard.style.display}, computed display: ${computedDisplay}, computed visibility: ${computedVisibility}`);
+                
+                // ВАЖНО: Если computed display все еще 'none', принудительно показываем через удаление всех inline стилей
+                if (computedDisplay === 'none') {
+                    console.warn(`⚠️ Карточка ${userId} все еще скрыта (computed display: ${computedDisplay}), принудительно показываем через удаление всех стилей`);
+                    participantCard.style.cssText = '';
+                    participantCard.style.display = 'block';
+                    participantCard.style.visibility = 'visible';
+                    participantCard.style.opacity = '1';
+                }
             } else {
                 // Если нет активного видео - полностью скрываем карточку
                 participantCard.style.setProperty('display', 'none', 'important');
@@ -431,6 +442,10 @@ class UIManager {
         participantCard.style.setProperty('pointer-events', 'none', 'important');
         
         participantsGrid.appendChild(participantCard);
+        
+        // ВАЖНО: Проверяем, что карточка действительно добавлена в DOM
+        const isInDOM = participantsGrid.contains(participantCard);
+        console.log(`🔍 Карточка ${userId} добавлена в DOM: ${isInDOM}, parent: ${participantCard.parentElement?.id || 'null'}`);
         
         const videoElement = document.getElementById(`remoteVideo-${userId}`);
         if (videoElement) {
