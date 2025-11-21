@@ -9,6 +9,10 @@ class ChatManager {
     }
 
     getRandomAnimalName() {
+        // Используем систему уникальности из videoCallManager
+        if (window.videoCallManager && window.videoCallManager.getUniqueAnimalName) {
+            return window.videoCallManager.getUniqueAnimalName();
+        }
         const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
                         'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
         return animals[Math.floor(Math.random() * animals.length)];

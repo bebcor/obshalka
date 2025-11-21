@@ -180,7 +180,31 @@
     </div>
     
     <script>
-        document.getElementById('createRoomBtn').addEventListener('click', async () => {
+        // Ждем полной загрузки DOM перед привязкой обработчиков
+        document.addEventListener('DOMContentLoaded', function() {
+            setupLandingPage();
+        });
+        
+        // Если DOM уже загружен, выполняем сразу
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupLandingPage);
+        } else {
+            setupLandingPage();
+        }
+        
+        function setupLandingPage() {
+            const createRoomBtn = document.getElementById('createRoomBtn');
+            const joinRoomBtn = document.getElementById('joinRoomBtn');
+            const confirmJoinBtn = document.getElementById('confirmJoinBtn');
+            const cancelJoinBtn = document.getElementById('cancelJoinBtn');
+            const roomIdInput = document.getElementById('roomIdInput');
+            
+            if (!createRoomBtn || !joinRoomBtn || !confirmJoinBtn || !cancelJoinBtn) {
+                console.error('Кнопки не найдены на странице');
+                return;
+            }
+            
+            createRoomBtn.addEventListener('click', async () => {
             try {
                 const response = await fetch('/api/create_room', { 
                     method: 'POST',
@@ -202,19 +226,23 @@
             }
         });
         
-        document.getElementById('joinRoomBtn').addEventListener('click', () => {
+        joinRoomBtn.addEventListener('click', () => {
             const joinForm = document.getElementById('joinForm');
-            joinForm.classList.add('active');
-            document.getElementById('roomIdInput').focus();
+            if (joinForm) {
+                joinForm.classList.add('active');
+                if (roomIdInput) roomIdInput.focus();
+            }
         });
         
-        document.getElementById('cancelJoinBtn').addEventListener('click', () => {
-            document.getElementById('joinForm').classList.remove('active');
-            document.getElementById('roomIdInput').value = '';
+        cancelJoinBtn.addEventListener('click', () => {
+            const joinForm = document.getElementById('joinForm');
+            if (joinForm) joinForm.classList.remove('active');
+            if (roomIdInput) roomIdInput.value = '';
         });
         
-        document.getElementById('confirmJoinBtn').addEventListener('click', () => {
-            const roomId = document.getElementById('roomIdInput').value.trim();
+        confirmJoinBtn.addEventListener('click', () => {
+            if (!roomIdInput) return;
+            const roomId = roomIdInput.value.trim();
             if (!roomId) {
                 alert('Введите ID комнаты');
                 return;
@@ -230,11 +258,14 @@
             window.location.href = `/r/${roomId}`;
         });
         
-        document.getElementById('roomIdInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                document.getElementById('confirmJoinBtn').click();
-            }
-        });
+        if (roomIdInput) {
+            roomIdInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    confirmJoinBtn.click();
+                }
+            });
+        }
+        }
     </script>
 </body>
 </html>

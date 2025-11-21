@@ -12,6 +12,44 @@ class VideoCallManager {
         this.isInCall = false;
         this.userName = null;
         this.userNames = new Map();
+        // Глобальный список занятых базовых никнеймов (животных) для уникальности
+        this.usedAnimalNames = new Set();
+        
+        // Метод для получения уникального базового никнейма
+        this.getUniqueAnimalName = function() {
+            const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
+                            'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
+            
+            // Находим свободное имя
+            const available = animals.filter(name => !this.usedAnimalNames.has(name));
+            
+            if (available.length > 0) {
+                const selected = available[Math.floor(Math.random() * available.length)];
+                this.usedAnimalNames.add(selected);
+                return selected;
+            }
+            
+            // Если все заняты, добавляем номер
+            let counter = 1;
+            let nameWithNumber;
+            do {
+                const baseName = animals[Math.floor(Math.random() * animals.length)];
+                nameWithNumber = `${baseName}${counter}`;
+                counter++;
+            } while (this.usedAnimalNames.has(nameWithNumber));
+            
+            this.usedAnimalNames.add(nameWithNumber);
+            return nameWithNumber;
+        };
+        
+        // Метод для проверки, является ли имя базовым (животным)
+        this.isAnimalName = function(name) {
+            if (!name) return false;
+            const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
+                            'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
+            // Проверяем базовое имя или имя с номером
+            return animals.some(animal => name.toLowerCase().startsWith(animal.toLowerCase()));
+        };
         this.availableMicrophones = [];
         this.selectedMicrophoneId = null;
         this.availableCameras = [];
@@ -787,6 +825,10 @@ class VideoCallManager {
         data.participants.forEach(participant => {
             if (participant.name) {
                 this.userNames.set(participant.socket_id, participant.name);
+                // Если это базовый никнейм (животное), отмечаем как занятый
+                if (this.isAnimalName && this.isAnimalName(participant.name)) {
+                    this.usedAnimalNames.add(participant.name);
+                }
             }
         });
         
@@ -794,6 +836,10 @@ class VideoCallManager {
         const hasCurrentUser = data.participants.some(p => p.socket_id === this.socketId);
         if (!hasCurrentUser && this.userName) {
             this.userNames.set(this.socketId, this.userName);
+            // Если это базовый никнейм (животное), отмечаем как занятый
+            if (this.isAnimalName(this.userName)) {
+                this.usedAnimalNames.add(this.userName);
+            }
             this.usersManager.addParticipant(this.socketId, this.userName);
         }
         
@@ -826,6 +872,10 @@ class VideoCallManager {
             // Сохраняем имя в userNames для консистентности
             if (data.user_name) {
                 this.userNames.set(data.user_id, data.user_name);
+                // Если это базовый никнейм (животное), отмечаем как занятый
+                if (this.isAnimalName && this.isAnimalName(data.user_name)) {
+                    this.usedAnimalNames.add(data.user_name);
+                }
             }
             this.usersManager.addParticipant(data.user_id, data.user_name);
         }
@@ -844,6 +894,11 @@ class VideoCallManager {
         
         // Удаляем из списка пользователей
         this.usersManager.removeParticipant(data.user_id);
+        
+        // Освобождаем базовый никнейм, если он был занят
+        if (data.user_name && this.isAnimalName(data.user_name)) {
+            this.usedAnimalNames.delete(data.user_name);
+        }
         
         if (this.remoteUsers.has(data.user_id)) {
             this.remoteUsers.get(data.user_id).close();
@@ -951,6 +1006,9 @@ class VideoCallManager {
         });
         this.remoteUsers.clear();
         
+        // Очищаем список занятых базовых никнеймов при выходе
+        this.usedAnimalNames.clear();
+        
         // Удаляем ВСЕ карточки удаленных участников
         const remoteParticipants = document.querySelectorAll('.remote-participant');
         remoteParticipants.forEach(participant => {
@@ -960,6 +1018,14 @@ class VideoCallManager {
         
         // Очищаем remote streams
         this.remoteStreams.clear();
+        
+        // Освобождаем никнейм текущего пользователя, если это базовый никнейм
+        if (this.userName && this.isAnimalName(this.userName)) {
+            this.usedAnimalNames.delete(this.userName);
+        }
+        
+        // Очищаем список занятых базовых никнеймов при полной очистке
+        this.usedAnimalNames.clear();
         
         // ОБНОВЛЯЕМ СЧЕТЧИК УЧАСТНИКОВ
         const participantsCountElement = document.getElementById('participantsCount');

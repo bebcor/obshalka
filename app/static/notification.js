@@ -7,7 +7,20 @@ class NotificationManager {
     getRandomAnimalName() {
         const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
                         'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
+        
+        // Если есть videoCallManager, используем его систему уникальности
+        if (window.videoCallManager && window.videoCallManager.getUniqueAnimalName) {
+            return window.videoCallManager.getUniqueAnimalName();
+        }
+        
+        // Иначе просто случайный
         return animals[Math.floor(Math.random() * animals.length)];
+    }
+    
+    isAnimalName(name) {
+        const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
+                        'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
+        return animals.includes(name.toLowerCase());
     }
 
     ensureStyles() {
