@@ -268,156 +268,38 @@ class MediaController {
             this.videoCallManager.localStream = newStream;
             this.videoCallManager.screenStream = screenStream;
             this.videoCallManager.hasVideoTrack = true; // ЕСТЬ ВИДЕО (ЭКРАН)
-        
-            if (this.videoCallManager.localStream) {
-                const oldVideoTrack = this.videoCallManager.localStream.getVideoTracks()[0];
-            
-                // Останавливаем старый трек (если был)
-                if (oldVideoTrack && oldVideoTrack !== screenVideoTrack) {
-                    oldVideoTrack.stop();
-                    this.videoCallManager.localStream.removeTrack(oldVideoTrack);
-                }
-                
-                // Добавляем новый трек экрана (если еще не добавлен)
-                if (!this.videoCallManager.localStream.getVideoTracks().includes(screenVideoTrack)) {
-                    this.videoCallManager.localStream.addTrack(screenVideoTrack);
-                }
-            
-                const localVideo = document.getElementById('localVideo');
-                if (localVideo) {
-                    localVideo.srcObject = this.videoCallManager.localStream;
-                }
-            
-                // Заменяем треки во всех соединениях
-                const replacePromises = [];
-                for (const [userId, peerConnection] of this.videoCallManager.remoteUsers) {
-                    const sender = peerConnection.getSenders().find(s => 
-                        s.track && s.track.kind === 'video'
-                    );
-                
-                    if (sender) {
-                        console.log('Replacing video track for:', userId);
-                        replacePromises.push(
-                            sender.replaceTrack(videoTrack).then(() => {
-                                console.log('Video track replaced successfully for:', userId);
-                            }).catch(err => {
-                                console.error('Error replacing track for:', userId, err);
-                            })
-                        );
-                    } else {
-                        // Если нет video sender, добавляем трек
-                        console.log('Adding video track for:', userId);
-                        peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
-                    }
-                }
-                
-                // Ждем замены всех треков
-                await Promise.all(replacePromises);
-                
-                // Запускаем renegotiation для всех соединений
-                // onnegotiationneeded должен сработать автоматически, но на всякий случай
-                for (const [userId, peerConnection] of this.videoCallManager.remoteUsers) {
-                    if (peerConnection.signalingState === 'stable') {
-                        console.log('Triggering renegotiation for screen share:', userId);
-                        setTimeout(() => {
-                            this.videoCallManager.webrtcManager.createOffer(userId).catch(err => {
-                                console.error('Error creating offer for screen share:', err);
-                            });
-                        }, 100);
-                    }
-                }
-            
-                // ОБНОВЛЯЕМ видео элемент
-                const localVideo = document.getElementById('localVideo');
-                if (localVideo) {
-                    localVideo.srcObject = this.videoCallManager.localStream;
-                }
 
-                // ОБНОВЛЯЕМ ОВЕРЛЕИ - показываем видео
-                this.videoCallManager.uiManager.updateVideoOverlays();
-                
-                // ОБНОВЛЯЕМ соединения с новым видео-треком
-                await this.updateVideoTracksInConnections(screenVideoTrack);
-                
-                this.videoCallManager.isSharingScreen = true;
-                this.videoCallManager.uiManager.updateControlButtons();
-                
-                this.videoCallManager.notificationManager.show('Демонстрация экрана начата', 'success');
-                console.log('✅ Демонстрация экрана активна');
-
-                // Обработчик завершения демонстрации пользователем
-                screenVideoTrack.onended = () => {
-                    console.log('Демонстрация экрана завершена пользователем');
-                    this.stopScreenShare();
-                };
-            } else {
-                // Если нет локального потока, создаем новый
-                this.videoCallManager.localStream = newStream;
-                this.videoCallManager.screenStream = screenStream;
-                this.videoCallManager.hasVideoTrack = true;
-                
-                const localVideo = document.getElementById('localVideo');
-                if (localVideo) {
-                    localVideo.srcObject = this.videoCallManager.localStream;
-                }
-                
-                // Добавляем треки во все соединения
-                this.videoCallManager.webrtcManager.addTracksToExistingConnections();
-                
-                // Запускаем renegotiation
-                for (const [userId] of this.videoCallManager.remoteUsers) {
-                    setTimeout(() => {
-                        this.videoCallManager.webrtcManager.createOffer(userId).catch(err => {
-                            console.error('Error creating offer for screen share:', err);
-                        });
-                    }, 100);
-                }
-                
-                this.videoCallManager.isSharingScreen = true;
-                this.videoCallManager.uiManager.updateControlButtons();
-                this.videoCallManager.notificationManager.show('Демонстрация экрана начата', 'success');
-                
-                screenVideoTrack.onended = () => {
-                    console.log('Демонстрация экрана завершена пользователем');
-                    this.stopScreenShare();
-                };
+            // ОБНОВЛЯЕМ видео элемент
+            const localVideo = document.getElementById('localVideo');
+            if (localVideo) {
+                localVideo.srcObject = this.videoCallManager.localStream;
             }
-        
+
+            // ОБНОВЛЯЕМ ОВЕРЛЕИ - показываем видео
+            this.videoCallManager.uiManager.updateVideoOverlays();
+            
+            // ОБНОВЛЯЕМ соединения с новым видео-треком
+            await this.updateVideoTracksInConnections(screenVideoTrack);
+            
+            this.videoCallManager.isSharingScreen = true;
+            this.videoCallManager.uiManager.updateControlButtons();
+            
+            this.videoCallManager.notificationManager.show('Демонстрация экрана начата', 'success');
+            console.log('✅ Демонстрация экрана активна');
+
+            // Обработчик завершения демонстрации пользователем
+            screenVideoTrack.onended = () => {
+                console.log('Демонстрация экрана завершена пользователем');
+                this.stopScreenShare();
+            };
+            
         } catch (error) {
-            console.error('Error sharing screen:', error);
-            if (error.name !== 'NotAllowedError') {
-                this.videoCallManager.notificationManager.show('Failed to share screen: ' + error.message, 'error');
+            console.error('❌ Ошибка демонстрации экрана:', error);
+            if (error.name === 'NotAllowedError') {
+                this.videoCallManager.notificationManager.show('Демонстрация экрана отменена', 'info');
+            } else {
+                this.videoCallManager.notificationManager.show('Ошибка демонстрации экрана: ' + error.message, 'error');
             }
-        }
-    }
-
-    toggleFullscreen() {
-        const container = document.querySelector('.container');
-    
-        if (!document.fullscreenElement) {
-            // Вход в полноэкранный режим
-            if (container.requestFullscreen) {
-                container.requestFullscreen();
-            } else if (container.webkitRequestFullscreen) {
-                container.webkitRequestFullscreen();
-            } else if (container.msRequestFullscreen) {
-                container.msRequestFullscreen();
-            }
-        
-            container.classList.add('fullscreen-mode');
-            this.videoCallManager.notificationManager.show('Fullscreen mode enabled', 'info');
-        } else {
-            // Выход из полноэкранного режима
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            } else if (document.webkitExitFullscreen) {
-                document.webkitExitFullscreen();
-            } else if (document.msExitFullscreen) {
-                document.msExitFullscreen();
-            }
-        
-            container.classList.remove('fullscreen-mode');
-            this.videoCallManager.notificationManager.show('Fullscreen mode disabled', 'info');
         }
     }
 
@@ -777,6 +659,36 @@ class MediaController {
             console.log('✅ Все аудиотреки обновлены');
         } catch (error) {
             console.error('❌ Ошибка обновления аудиотреков:', error);
+        }
+    }
+
+    toggleFullscreen() {
+        const container = document.querySelector('.container');
+    
+        if (!document.fullscreenElement) {
+            // Вход в полноэкранный режим
+            if (container.requestFullscreen) {
+                container.requestFullscreen();
+            } else if (container.webkitRequestFullscreen) {
+                container.webkitRequestFullscreen();
+            } else if (container.msRequestFullscreen) {
+                container.msRequestFullscreen();
+            }
+        
+            container.classList.add('fullscreen-mode');
+            this.videoCallManager.notificationManager.show('Fullscreen mode enabled', 'info');
+        } else {
+            // Выход из полноэкранного режима
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        
+            container.classList.remove('fullscreen-mode');
+            this.videoCallManager.notificationManager.show('Fullscreen mode disabled', 'info');
         }
     }
 }
