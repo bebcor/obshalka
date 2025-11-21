@@ -5,6 +5,12 @@ class RoomManager {
     }
 
     bootstrapFromURL() {
+        // Если мы на странице отключения, не делаем ничего
+        if (this.videoCallManager.isDisconnected) {
+            console.log('⚠️ На странице отключения, пропускаем bootstrapFromURL');
+            return;
+        }
+        
         const path = window.location.pathname;
         const deeplinkMatch = path.match(/^\/r\/([A-Za-z0-9_-]{3,50})$/);
         if (deeplinkMatch) {
@@ -259,29 +265,49 @@ class RoomManager {
     }
     
     showDisconnectedScreen() {
+        console.log('🔄 Показываем страницу отключения...');
+        
+        // Устанавливаем флаг что мы на странице отключения
+        this.videoCallManager.isDisconnected = true;
+        
         // Скрываем все экраны
         const welcomeScreen = document.getElementById('welcomeScreen');
         const mainContainer = document.getElementById('mainContainer');
         const disconnectedScreen = document.getElementById('disconnectedScreen');
         const emptyStateOverlay = document.getElementById('emptyStateOverlay');
         
-        if (welcomeScreen) welcomeScreen.style.display = 'none';
-        if (mainContainer) mainContainer.style.display = 'none';
-        if (emptyStateOverlay) emptyStateOverlay.style.display = 'none';
+        if (welcomeScreen) {
+            welcomeScreen.style.display = 'none';
+            console.log('✅ welcomeScreen скрыт');
+        }
+        if (mainContainer) {
+            mainContainer.style.display = 'none';
+            console.log('✅ mainContainer скрыт');
+        }
+        if (emptyStateOverlay) {
+            emptyStateOverlay.style.display = 'none';
+            console.log('✅ emptyStateOverlay скрыт');
+        }
         
         if (disconnectedScreen) {
             disconnectedScreen.style.display = 'flex';
+            console.log('✅ disconnectedScreen показан');
+        } else {
+            console.error('❌ disconnectedScreen не найден!');
         }
         
         // Привязываем обработчик кнопки перезагрузки
         const reloadBtn = document.getElementById('reloadPageBtn');
         if (reloadBtn) {
             // Удаляем старые обработчики
-            reloadBtn.replaceWith(reloadBtn.cloneNode(true));
-            const newReloadBtn = document.getElementById('reloadPageBtn');
+            const newReloadBtn = reloadBtn.cloneNode(true);
+            reloadBtn.parentNode.replaceChild(newReloadBtn, reloadBtn);
             newReloadBtn.addEventListener('click', () => {
                 window.location.reload();
             });
+            console.log('✅ Обработчик кнопки перезагрузки привязан');
+        } else {
+            console.error('❌ Кнопка перезагрузки не найдена!');
         }
     }
 }

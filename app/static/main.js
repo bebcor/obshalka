@@ -10,6 +10,7 @@ class VideoCallManager {
         this.socketId = null;
         this.isConnected = false;
         this.isInCall = false;
+        this.isDisconnected = false; // Флаг что мы на странице отключения
         this.userName = null;
         this.userNames = new Map();
         // Глобальный список занятых базовых никнеймов (животных) для уникальности
@@ -138,7 +139,10 @@ class VideoCallManager {
                 this.isInCall = false;
                 console.log('Disconnected from server');
                 this.cleanupCall();
-                this.uiManager.updateUI();
+                // Показываем страницу отключения вместо обновления UI
+                if (this.roomManager && !this.isDisconnected) {
+                    this.roomManager.showDisconnectedScreen();
+                }
                 this.notificationManager.show('Соединение потеряно', 'error');
             });
             
@@ -278,6 +282,12 @@ class VideoCallManager {
     }
 
     setupWelcomeScreen() {
+        // Если мы на странице отключения, не показываем welcomeScreen
+        if (this.isDisconnected) {
+            console.log('⚠️ На странице отключения, не показываем welcomeScreen');
+            return;
+        }
+        
         // Проверяем, есть ли room_id в URL
         const path = window.location.pathname;
         const roomMatch = path.match(/^\/r\/([A-Za-z0-9_-]{3,50})$/);

@@ -23,6 +23,12 @@ class UIManager {
     }
 
     showWelcomeScreen() {
+        // Если мы на странице отключения, не показываем welcomeScreen
+        if (this.videoCallManager.isDisconnected) {
+            console.log('⚠️ На странице отключения, не показываем welcomeScreen');
+            return;
+        }
+        
         const welcomeScreen = document.getElementById('welcomeScreen');
         const mainContainer = document.getElementById('mainContainer');
         
