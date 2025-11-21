@@ -256,8 +256,29 @@ class RoomManager {
         
         this.videoCallManager.cleanupCall();
         
-        // Возвращаемся на базовую приветственную страницу (landing)
-        window.location.href = '/';
+        // Показываем страницу отключения
+        this.showDisconnectedScreen();
+    }
+    
+    showDisconnectedScreen() {
+        // Скрываем все экраны
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const mainContainer = document.getElementById('mainContainer');
+        const disconnectedScreen = document.getElementById('disconnectedScreen');
+        
+        if (welcomeScreen) welcomeScreen.style.display = 'none';
+        if (mainContainer) mainContainer.style.display = 'none';
+        if (disconnectedScreen) {
+            disconnectedScreen.style.display = 'flex';
+        }
+        
+        // Привязываем обработчик кнопки перезагрузки
+        const reloadBtn = document.getElementById('reloadPageBtn');
+        if (reloadBtn) {
+            reloadBtn.onclick = () => {
+                window.location.reload();
+            };
+        }
     }
 }
 

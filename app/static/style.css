@@ -743,6 +743,54 @@ input[type="text"]::placeholder {
     margin-top: 24px;
 }
 
+/* Страница отключения */
+.disconnected-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #f8fafc 0%, #ffffff 50%, #f1f5f9 100%);
+    z-index: 10000;
+}
+
+.disconnected-content {
+    text-align: center;
+    max-width: 500px;
+    width: 90%;
+    padding: 40px;
+    backdrop-filter: blur(20px) saturate(180%);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--glass-border);
+}
+
+.disconnected-message {
+    margin-bottom: 32px;
+}
+
+.disconnected-message h2 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.disconnected-message p {
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+}
+
+.disconnected-screen .btn {
+    min-width: 200px;
+    padding: 16px 32px;
+    font-size: 1.1rem;
+}
+
 .btn-welcome {
     width: 100%;
     padding: 18px 24px;
