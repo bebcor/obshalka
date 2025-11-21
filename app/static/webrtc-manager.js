@@ -224,12 +224,37 @@ class WebRTCManager {
                     console.log('✅ [ontrack] Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
                     console.log('✅ [ontrack] RemoteStream now has', remoteStream.getTracks().length, 'tracks:', remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
                     
-                    // ВАЖНО: Если трек muted или disabled при получении, это нормально - он может стать активным позже
+                    // КРИТИЧНО: Если видео трек приходит как disabled или muted - камера выключена
+                    // Сразу скрываем карточку и очищаем srcObject
                     if (track.kind === 'video' && (track.muted || !track.enabled)) {
-                        console.log(`⏳ Видео трек для ${targetUserId} пришел как ${track.muted ? 'muted' : 'disabled'}, но добавлен в поток - ждем активации`);
+                        console.log(`❌ Видео трек для ${targetUserId} пришел как ${track.muted ? 'muted' : 'disabled'} - камера выключена, скрываем карточку`);
+                        // Удаляем трек из потока
+                        remoteStream.removeTrack(track);
+                        // Очищаем srcObject и скрываем карточку
+                        const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                        const participantCard = document.getElementById(`participant-${targetUserId}`);
+                        if (videoElement) {
+                            videoElement.pause();
+                            videoElement.srcObject = null;
+                            try {
+                                videoElement.load();
+                            } catch (e) {}
+                        }
+                        if (participantCard) {
+                            participantCard.style.setProperty('display', 'none', 'important');
+                            participantCard.style.setProperty('visibility', 'hidden', 'important');
+                            participantCard.style.setProperty('opacity', '0', 'important');
+                            participantCard.style.setProperty('width', '0', 'important');
+                            participantCard.style.setProperty('height', '0', 'important');
+                            participantCard.style.setProperty('overflow', 'hidden', 'important');
+                            participantCard.style.setProperty('pointer-events', 'none', 'important');
+                        }
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                        this.videoCallManager.checkEmptyState();
+                        return; // Не добавляем обработчики для неактивного трека
                     }
                     
-                    // ВАЖНО: Обновляем UI после добавления трека (или попытки добавления)
+                    // ВАЖНО: Обновляем UI после добавления трека
                     setTimeout(() => {
                         this.videoCallManager.uiManager.updateVideoOverlays();
                     }, 50);

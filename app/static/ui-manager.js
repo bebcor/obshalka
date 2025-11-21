@@ -240,17 +240,35 @@ class UIManager {
             
             // ПРОСТАЯ ПРОВЕРКА: есть ли активный видео трек в receivers?
             // Если нет - камера выключена, скрываем карточку
+            // КРИТИЧНО: Проверяем receivers ПЕРЕД проверкой потока - это единственный надежный источник истины
             let hasActiveVideo = false;
             if (peerConnection) {
                 const receivers = peerConnection.getReceivers();
-                hasActiveVideo = receivers.some(receiver => {
+                // Ищем активный видео трек в receivers
+                // Трек активен ТОЛЬКО если он есть, это видео, live, enabled И не muted
+                const videoReceiver = receivers.find(receiver => {
                     const track = receiver.track;
-                    return track && 
-                           track.kind === 'video' && 
-                           track.readyState === 'live' && 
-                           track.enabled && 
-                           !track.muted;
+                    return track && track.kind === 'video';
                 });
+                
+                if (videoReceiver && videoReceiver.track) {
+                    const track = videoReceiver.track;
+                    // Проверяем все условия - трек должен быть live, enabled и не muted
+                    hasActiveVideo = track.readyState === 'live' && 
+                                   track.enabled && 
+                                   !track.muted;
+                    
+                    // КРИТИЧНО: Если трек есть, но он disabled или muted - камера выключена
+                    if (!hasActiveVideo) {
+                        console.log(`❌ [${userId}] Видео трек в receivers неактивен: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
+                    }
+                } else {
+                    // Нет видео трека в receivers - камера выключена
+                    console.log(`❌ [${userId}] Нет видео трека в receivers - камера выключена`);
+                }
+            } else {
+                // Нет peer connection - камера выключена
+                console.log(`❌ [${userId}] Нет peer connection - камера выключена`);
             }
             
             // Получаем актуальные треки ПОСЛЕ очистки
