@@ -7,12 +7,13 @@ class WebRTCManager {
     setupPeerConnection(targetUserId) {
         // Проверяем, нет ли уже соединения с этим пользователем
         if (this.videoCallManager.remoteUsers.has(targetUserId)) {
-            console.log('Peer connection already exists for:', targetUserId);
+            console.log('⚠️ [setupPeerConnection] Peer connection already exists for:', targetUserId);
             return;
         }
+        console.log('🔄 [setupPeerConnection] Создаем peer connection для:', targetUserId);
 
         try {
-            console.log('Setting up peer connection for:', targetUserId);
+            console.log('🔄 [setupPeerConnection] Setting up peer connection for:', targetUserId);
         
             // Конфигурация ICE-серверов - используем this.configuration из VideoCallManager
             const configuration = this.videoCallManager.configuration;
@@ -171,6 +172,7 @@ class WebRTCManager {
             }, 200); // Уменьшил интервал для более быстрой реакции
             
             // Обработчик получения удаленных треков
+            console.log('🔄 [setupPeerConnection] Устанавливаем обработчик ontrack для:', targetUserId);
             peerConnection.ontrack = (event) => {
                 console.log('🎥 [ontrack] Remote track received from:', targetUserId, 
                             'Track kind:', event.track.kind, 
@@ -563,7 +565,8 @@ class WebRTCManager {
             // Сохраняем соединение в Map
             this.videoCallManager.remoteUsers.set(targetUserId, peerConnection);
         
-            console.log('✅ Peer connection setup completed for:', targetUserId);
+            console.log('✅ [setupPeerConnection] Peer connection setup completed for:', targetUserId);
+            console.log('✅ [setupPeerConnection] Обработчик ontrack установлен для:', targetUserId);
         
         } catch (error) {
             console.error('❌ Error setting up peer connection:', error);
@@ -812,17 +815,18 @@ class WebRTCManager {
 
     async handleWebRTCAnswer(data) {
         try {
-            console.log('📥 Received ANSWER from:', data.sender_id);
-            console.log('Answer SDP:', data.answer.sdp.substring(0, 100) + '...');
+            console.log('📥 [handleWebRTCAnswer] Received ANSWER from:', data.sender_id);
+            console.log('📥 [handleWebRTCAnswer] Answer SDP:', data.answer.sdp.substring(0, 100) + '...');
         
             if (!this.videoCallManager.remoteUsers.has(data.sender_id)) {
-                console.error('No peer connection for:', data.sender_id);
+                console.error('❌ [handleWebRTCAnswer] No peer connection for:', data.sender_id);
                 return;
             }
         
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
+            console.log('📥 [handleWebRTCAnswer] Setting remote description, current signalingState:', peerConnection.signalingState);
             await peerConnection.setRemoteDescription(data.answer);
-            console.log('✅ Remote description set successfully');
+            console.log('✅ [handleWebRTCAnswer] Remote description set successfully, new signalingState:', peerConnection.signalingState);
             
             // ВАЖНО: Проверяем, есть ли уже треки в соединении после установки remote description
             
@@ -830,7 +834,8 @@ class WebRTCManager {
             // Но иногда они уже есть в receivers, поэтому проверяем их тоже
             setTimeout(() => {
                 const receivers = peerConnection.getReceivers();
-                console.log(`🔍 Проверка receivers после установки remote description для ${data.sender_id}:`, receivers.length);
+                console.log(`🔍 [handleWebRTCAnswer] Проверка receivers после установки remote description для ${data.sender_id}:`, receivers.length);
+                console.log(`🔍 [handleWebRTCAnswer] Текущие remoteStreams:`, Array.from(this.videoCallManager.remoteStreams.keys()));
                 receivers.forEach((receiver, index) => {
                     const track = receiver.track;
                     console.log(`  Receiver ${index}: kind=${receiver.track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
@@ -851,12 +856,13 @@ class WebRTCManager {
                     if (track && track.readyState === 'live' && !remoteStream.getTracks().some(t => t.id === track.id)) {
                         const isTrackActive = track.enabled && !track.muted;
                         if (isTrackActive) {
-                            console.log(`✅ Трек ${track.kind} уже активен для ${data.sender_id}, но еще не обработан, добавляем в поток...`);
+                            console.log(`✅ [handleWebRTCAnswer] Трек ${track.kind} (${track.id}) уже активен для ${data.sender_id}, но еще не обработан, добавляем в поток...`);
                             remoteStream.addTrack(track);
+                            console.log(`✅ [handleWebRTCAnswer] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
                             // Обновляем UI
                             this.videoCallManager.uiManager.updateVideoOverlays();
                         } else {
-                            console.log(`⚠️ Трек ${track.kind} для ${data.sender_id} неактивен (enabled=${track.enabled}, muted=${track.muted}), не добавляем в поток`);
+                            console.log(`⚠️ [handleWebRTCAnswer] Трек ${track.kind} (${track.id}) для ${data.sender_id} неактивен (enabled=${track.enabled}, muted=${track.muted}), не добавляем в поток`);
                         }
                     }
                 });
