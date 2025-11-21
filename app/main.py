@@ -96,8 +96,14 @@ def index():
 def room_page(room_id):
     """Страница комнаты с валидацией room_id"""
     if not validate_room_id(room_id):
-        return render_template('error.html', error='Invalid room ID'), 400
+        return render_template('404.html'), 404
     return render_template('index.html', room_id=room_id)
+
+
+@app.errorhandler(404)
+def not_found(error):
+    """Обработчик 404 ошибки"""
+    return render_template('404.html'), 404
 
 
 @app.route('/api/create_room', methods=['POST'])

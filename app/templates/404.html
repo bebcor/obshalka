@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Встреча не найдена</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .error-404-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #f8fafc 0%, #ffffff 50%, #f1f5f9 100%);
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .error-404-content {
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+            backdrop-filter: blur(20px) saturate(180%);
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--glass-border);
+        }
+        
+        .error-404-emoji {
+            font-size: 5rem;
+            margin-bottom: 24px;
+        }
+        
+        .error-404-title {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+        
+        .error-404-message {
+            font-size: 1.125rem;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+            line-height: 1.6;
+        }
+        
+        .error-404-button {
+            padding: 16px 32px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.95);
+            color: var(--text-primary);
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            border-radius: var(--border-radius-sm);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .error-404-button:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-404-container">
+        <div class="error-404-content">
+            <div class="error-404-emoji">😢</div>
+            <h1 class="error-404-title">404</h1>
+            <p class="error-404-message">Упс, кажется встреча закончилась или вы ошиблись комнатой.</p>
+            <a href="/" class="error-404-button">Вернуться на главную</a>
+        </div>
+    </div>
+</body>
+</html>
+
