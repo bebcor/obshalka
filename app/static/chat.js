@@ -8,6 +8,12 @@ class ChatManager {
         this.setupSocketListeners();
     }
 
+    getRandomAnimalName() {
+        const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
+                        'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
+        return animals[Math.floor(Math.random() * animals.length)];
+    }
+
     setupSocketListeners() {
         if (!this.socket) return;
 
@@ -63,7 +69,7 @@ class ChatManager {
         chatMessages.innerHTML = this.messages.map(msg => `
             <div class="chat-message">
                 <div class="chat-message-header">
-                    <span class="chat-message-user">${escapeHtml(msg.user_name || 'Anonymous')}</span>
+                    <span class="chat-message-user">${escapeHtml(msg.user_name || 'Анонимный')}</span>
                     <span class="chat-message-time">${formatTime(msg.timestamp)}</span>
                 </div>
                 <div class="chat-message-text">${escapeHtml(msg.message)}</div>
@@ -117,7 +123,7 @@ class ChatManager {
             const sendMessage = () => {
                 const message = chatInput.value.trim();
                 if (message) {
-                    const userName = window.videoCallManager?.userNames?.get(window.videoCallManager?.socketId) || 'User';
+                    const userName = window.videoCallManager?.userNames?.get(window.videoCallManager?.socketId) || this.getRandomAnimalName();
                     this.sendMessage(message, userName);
                     chatInput.value = '';
                 }

@@ -425,16 +425,16 @@ input[type="text"]::placeholder {
 
 
 .btn-primary {
-    background: var(--primary);
-    border: 1px solid rgba(0, 0, 0, 0.3);
-    color: white;
+    background: var(--primary) !important;
+    border: 1px solid rgba(0, 0, 0, 0.3) !important;
+    color: white !important;
     flex: 1;
 }
 
-
 .btn-secondary {
-    background: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.9);
     color: var(--text-primary);
+    border: 1px solid rgba(0, 0, 0, 0.2);
     min-width: 44px;
     min-height: 44px;
     padding: 10px;
@@ -476,7 +476,7 @@ input[type="text"]::placeholder {
     color: white;
 }
 
-/* Умные кнопки микрофона и камеры */
+/* Умные кнопки микрофона и камеры - НЕ ИСПОЛЬЗУЕМСЯ (заменено на градиент снизу-вверх) */
 .btn-control.audio-level-0 {
     background: rgba(128, 128, 128, 0.6) !important;
 }
@@ -728,11 +728,19 @@ input[type="text"]::placeholder {
     line-height: 1.4;
 }
 
+.welcome-description {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin-top: 12px;
+    text-align: center;
+}
+
 .welcome-buttons {
     display: flex;
     flex-direction: column;
     gap: 16px;
     margin-bottom: 20px;
+    margin-top: 24px;
 }
 
 .btn-welcome {
@@ -1291,6 +1299,7 @@ input[type="text"]::placeholder {
 .notification-info {
     border-left-color: var(--primary);
     background: rgba(30, 41, 59, 0.95);
+    color: white !important;
 }
 
 /* Audio Activation Button */

@@ -4,6 +4,12 @@ class NotificationManager {
         this.ensureStyles();
     }
 
+    getRandomAnimalName() {
+        const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
+                        'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
+        return animals[Math.floor(Math.random() * animals.length)];
+    }
+
     ensureStyles() {
         if (!document.querySelector('#notification-styles')) {
             const styles = document.createElement('style');
@@ -15,7 +21,7 @@ class NotificationManager {
                     right: 20px;
                     padding: 12px 20px;
                     border-radius: 8px;
-                    color: white;
+                    color: white !important;
                     z-index: 1000;
                     max-width: 300px;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
@@ -24,10 +30,22 @@ class NotificationManager {
                     justify-content: space-between;
                     gap: 10px;
                 }
-                .notification-info { background: var(--primary-blue); }
-                .notification-success { background: var(--success); }
-                .notification-error { background: var(--error); }
-                .notification-warning { background: var(--warning); }
+                .notification-info { 
+                    background: rgba(30, 41, 59, 0.95) !important;
+                    color: white !important;
+                }
+                .notification-success { 
+                    background: rgba(16, 185, 129, 0.95) !important;
+                    color: white !important;
+                }
+                .notification-error { 
+                    background: rgba(239, 68, 68, 0.95) !important;
+                    color: white !important;
+                }
+                .notification-warning { 
+                    background: rgba(245, 158, 11, 0.95) !important;
+                    color: white !important;
+                }
                 .notification-close {
                     background: none;
                     border: none;
@@ -175,7 +193,7 @@ class NotificationManager {
                 <div class="modal-content">
                     <h3>Присоединиться к видеозвонку</h3>
                     <p>Введите ваше имя для присоединения к комнате</p>
-                    <input type="text" id="userNameInput" placeholder="Ваше имя" maxlength="20" value="Пользователь${Math.floor(Math.random() * 1000)}">
+                    <input type="text" id="userNameInput" placeholder="Ваше имя" maxlength="20" value="${this.getRandomAnimalName()}">
                     <div class="modal-buttons">
                         <button id="cancelJoin" class="btn btn-secondary">Отмена</button>
                         <button id="confirmJoin" class="btn btn-primary">Присоединиться</button>

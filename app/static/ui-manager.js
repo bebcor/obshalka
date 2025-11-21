@@ -4,6 +4,12 @@ class UIManager {
         this.videoCallManager = videoCallManager;
     }
 
+    getRandomAnimalName() {
+        const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
+                        'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
+        return animals[Math.floor(Math.random() * animals.length)];
+    }
+
     showMainScreen() {
         const welcomeScreen = document.getElementById('welcomeScreen');
         const mainContainer = document.getElementById('mainContainer');
@@ -193,7 +199,7 @@ class UIManager {
         participantCard.className = 'participant-card remote-participant';
         participantCard.id = `participant-${userId}`;
         
-        const userName = this.videoCallManager.userNames.get(userId) || `User ${userId.substring(0, 8)}`;
+        const userName = this.videoCallManager.userNames.get(userId) || this.getRandomAnimalName();
         
         participantCard.innerHTML = `
             <video id="remoteVideo-${userId}" autoplay playsinline></video>

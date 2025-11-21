@@ -83,23 +83,30 @@ class AudioAnalyzer {
         const audioTracks = this.videoCallManager.localStream?.getAudioTracks();
         const isEnabled = audioTracks && audioTracks.length > 0 && audioTracks[0].enabled;
 
-        // Удаляем все классы состояний
-        micButton.classList.remove('mic-idle', 'mic-speaking', 'mic-muted');
+        // Удаляем все классы состояний и старые стили
+        micButton.classList.remove('mic-idle', 'mic-speaking', 'mic-muted', 
+            'audio-level-0', 'audio-level-1', 'audio-level-2', 'audio-level-3', 'audio-level-4');
+        micButton.style.background = '';
+        micButton.style.backgroundImage = '';
+        micButton.style.backgroundSize = '';
 
         if (!isEnabled) {
             // Микрофон выключен - красный
             micButton.classList.add('mic-muted');
             micButton.style.background = `var(--error)`;
         } else if (level > 5) {
-            // Говорит - зеленый с интенсивностью
+            // Говорит - зеленое закрашивание снизу-вверх
             micButton.classList.add('mic-speaking');
-            const intensity = Math.min(1, level / 50); // Нормализуем до 0-1
-            const greenIntensity = Math.floor(16 + (185 - 16) * intensity); // От #10 до #b9
-            micButton.style.background = `rgb(16, ${greenIntensity}, 129)`;
+            const intensity = Math.min(1, level / 100); // Нормализуем до 0-1 (0-100%)
+            
+            // Создаем градиент снизу-вверх: зеленый снизу, прозрачный сверху
+            const greenPercent = Math.floor(intensity * 100);
+            micButton.style.background = `linear-gradient(to top, rgba(16, 185, 129, 1) 0%, rgba(16, 185, 129, 1) ${greenPercent}%, rgba(255, 255, 255, 0.8) ${greenPercent}%, rgba(255, 255, 255, 0.8) 100%)`;
+            micButton.style.backgroundSize = '100% 100%';
         } else {
             // Молчит - серый
             micButton.classList.add('mic-idle');
-            micButton.style.background = `var(--surface-light)`;
+            micButton.style.background = `rgba(255, 255, 255, 0.8)`;
         }
     }
 
