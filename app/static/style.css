@@ -855,10 +855,32 @@ input[type="text"]::placeholder {
     z-index: 2;
 }
 
+.btn-welcome .icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
 .btn-welcome .icon img {
     display: block;
     width: 100%;
     height: 100%;
+    object-fit: contain;
+}
+
+/* Убеждаемся, что alt текст не отображается */
+.btn-welcome .icon img,
+.landing-btn-icon img {
+    text-indent: -9999px;
+    overflow: hidden;
+}
+
+/* Убеждаемся, что кнопки правильно отображают содержимое */
+.btn-welcome {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
 }
 
 /* Исправляем видимость кнопки "Подключиться" в форме - белая с черным текстом */
@@ -1688,6 +1710,11 @@ input[type="text"]::placeholder {
         padding: 16px 20px;
         font-size: 1rem;
         min-height: 56px;
+    }
+    
+    .btn-welcome .icon {
+        width: 16px;
+        height: 16px;
     }
     
     .chat-modal-content {

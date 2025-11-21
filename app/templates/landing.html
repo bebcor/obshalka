@@ -95,6 +95,23 @@
             color: var(--text-primary) !important;
         }
         
+        .landing-btn-icon {
+            width: 20px;
+            height: 20px;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+        
+        .landing-btn-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        .landing-btn-text {
+            display: inline-block;
+        }
+        
         .join-form {
             display: none;
             margin-top: 24px;
@@ -147,6 +164,11 @@
                 padding: 16px 24px;
                 font-size: 1rem;
             }
+            
+            .landing-btn-icon {
+                width: 16px;
+                height: 16px;
+            }
         }
     </style>
 </head>
@@ -159,13 +181,13 @@
             
             <div class="landing-actions">
                 <button id="createRoomBtn" class="landing-btn landing-btn-primary">
-                    <span><img src="{{ url_for('static', filename='images/plus.png') }}" alt="Создать" style="width: 20px; height: 20px; vertical-align: middle;"></span>
-                    Создать встречу
+                    <span><img src="{{ url_for('static', filename='images/earth.png') }}" alt="Создать" class="landing-btn-icon"></span>
+                    <span class="landing-btn-text">Создать встречу</span>
                 </button>
                 
                 <button id="joinRoomBtn" class="landing-btn landing-btn-secondary">
-                    <span><img src="{{ url_for('static', filename='images/link_chain.png') }}" alt="Подключиться" style="width: 20px; height: 20px; vertical-align: middle;"></span>
-                    Подключиться к встрече
+                    <span><img src="{{ url_for('static', filename='images/keep-distance.png') }}" alt="Подключиться" class="landing-btn-icon"></span>
+                    <span class="landing-btn-text">Подключиться к встрече</span>
                 </button>
             </div>
             
