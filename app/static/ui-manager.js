@@ -420,12 +420,18 @@ class UIManager {
                 const result = originalAddTrack(track);
                 setupTrackHandlers(track);
                 
-                // ВАЖНО: Если трек неактивен при добавлении, сразу скрываем карточку
+                // ВАЖНО: Если видео трек неактивен при добавлении, сразу скрываем карточку и очищаем srcObject
                 if (track.kind === 'video' && (track.muted || !track.enabled)) {
                     console.log(`⚠️ Видео трек добавлен как неактивный для ${userId}, muted: ${track.muted}, enabled: ${track.enabled}`);
                     const card = document.getElementById(`participant-${userId}`);
+                    const videoEl = document.getElementById(`remoteVideo-${userId}`);
                     if (card) {
                         card.style.setProperty('display', 'none', 'important');
+                    }
+                    if (videoEl) {
+                        videoEl.style.setProperty('display', 'none', 'important');
+                        // Очищаем srcObject чтобы не показывать черный экран
+                        videoEl.srcObject = null;
                     }
                 }
                 

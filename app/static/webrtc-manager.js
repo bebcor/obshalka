@@ -92,13 +92,27 @@ class WebRTCManager {
                     remoteStream.addTrack(track);
                     console.log('Added track to remote stream:', track.kind, track.id, 'enabled:', track.enabled, 'readyState:', track.readyState, 'muted:', track.muted);
                     
-                    // ВАЖНО: Если трек disabled при добавлении, сразу обновляем UI
-                    if (track.kind === 'video' && !track.enabled) {
-                        console.log(`⚠️ Видео трек добавлен как disabled для ${targetUserId}, обновляем UI`);
-                        setTimeout(() => {
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                        }, 50);
+                    // ВАЖНО: Если видео трек неактивен при добавлении (disabled или muted), сразу скрываем карточку
+                    if (track.kind === 'video' && (!track.enabled || track.muted)) {
+                        console.log(`⚠️ Видео трек добавлен как неактивный для ${targetUserId}, enabled: ${track.enabled}, muted: ${track.muted}`);
+                        const participantCard = document.getElementById(`participant-${targetUserId}`);
+                        if (participantCard) {
+                            participantCard.style.setProperty('display', 'none', 'important');
+                            const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                            if (videoElement) {
+                                videoElement.style.setProperty('display', 'none', 'important');
+                                // Очищаем srcObject если трек неактивен
+                                if (!track.enabled || track.muted) {
+                                    videoElement.srcObject = null;
+                                }
+                            }
+                        }
                     }
+                    
+                    // Всегда обновляем UI после добавления трека
+                    setTimeout(() => {
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                    }, 50);
                     
                     // Добавляем обработчики для отслеживания изменений трека
                     track.onended = () => {
@@ -178,9 +192,27 @@ class WebRTCManager {
                     }
                 }
             
-            // Обновляем srcObject видео элемента на случай если поток изменился
-            if (videoElement && videoElement.srcObject !== remoteStream) {
-                videoElement.srcObject = remoteStream;
+            // ВАЖНО: Проверяем состояние треков перед установкой srcObject
+            // Если видео трек неактивен, НЕ устанавливаем srcObject и скрываем карточку
+            const videoTracks = remoteStream.getVideoTracks();
+            const hasActiveVideo = videoTracks.length > 0 && 
+                                  videoTracks.some(t => t && t.readyState === 'live' && t.enabled && !t.muted);
+            
+            if (videoElement) {
+                if (hasActiveVideo) {
+                    // Если есть активное видео - устанавливаем srcObject
+                    if (videoElement.srcObject !== remoteStream) {
+                        videoElement.srcObject = remoteStream;
+                    }
+                } else {
+                    // Если нет активного видео - НЕ устанавливаем srcObject и скрываем карточку
+                    videoElement.srcObject = null;
+                    const participantCard = document.getElementById(`participant-${targetUserId}`);
+                    if (participantCard) {
+                        participantCard.style.setProperty('display', 'none', 'important');
+                    }
+                    videoElement.style.setProperty('display', 'none', 'important');
+                }
             }
         
             // Обновляем UI сразу после добавления трека с небольшой задержкой
