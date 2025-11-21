@@ -119,16 +119,12 @@ class MediaController {
                 this.videoCallManager.audioAnalyzer.startAnalysis();
             }
             
-            // Добавляем треки во все существующие соединения
-            this.videoCallManager.webrtcManager.addTracksToExistingConnections();
-            
-            if (this.videoCallManager.remoteUsers.size > 0) {
-                this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
-                    this.videoCallManager.webrtcManager.createOffer(userId);
-                });
-            }
-            
             console.log('✅ Камера успешно запущена');
+            
+            // ВАЖНО: После запуска камеры обновляем треки во всех существующих соединениях
+            // Это нужно чтобы новые треки были добавлены в peer connections, которые уже были созданы
+            // updateVideoTracksInConnections сам добавит треки и создаст offer если нужно
+            await this.updateVideoTracksInConnections();
             
         } catch (error) {
             console.error('Error accessing media devices:', error);
@@ -600,6 +596,11 @@ class MediaController {
                 // ЕСЛИ отправителя нет, но есть трек - добавляем
                 console.log(`🎯 Добавляем видео-трек для пользователя: ${userId}`);
                 peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
+                // ВАЖНО: После добавления трека нужно создать новый offer для переговоров
+                // Это нужно чтобы удаленная сторона получила новый трек
+                this.videoCallManager.webrtcManager.createOffer(userId).catch(err => {
+                    console.error(`❌ Ошибка создания offer после добавления видео трека для ${userId}:`, err);
+                });
             } else {
                 // ЕСЛИ трека нет - удаляем видео-отправитель если есть
                 console.log(`🗑️ Удаляем видео-трек для пользователя: ${userId}`);
