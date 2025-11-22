@@ -727,9 +727,44 @@ class WebRTCManager {
                 console.log('⚠️ Локальный поток не доступен при обработке offer');
             }
             
+            // ВАЖНО: Проверяем, что remote description еще не установлен
+            if (peerConnection.remoteDescription) {
+                console.warn('⚠️ [handleWebRTCOffer] Remote description already set, skipping');
+                // Если remote description уже установлен, возможно нужно пересоздать соединение
+                return;
+            }
+            
             // Устанавливаем полученное предложение (offer) как удаленное описание
-            await peerConnection.setRemoteDescription(data.offer);
-            console.log('✅ Remote description установлено для', data.sender_id);
+            try {
+                await peerConnection.setRemoteDescription(data.offer);
+                console.log('✅ Remote description установлено для', data.sender_id);
+                
+                // ВАЖНО: Добавляем отложенные ICE кандидаты после установки remote description
+                if (peerConnection._pendingIceCandidates && peerConnection._pendingIceCandidates.length > 0) {
+                    console.log(`🔄 [handleWebRTCOffer] Adding ${peerConnection._pendingIceCandidates.length} pending ICE candidates`);
+                    for (const candidate of peerConnection._pendingIceCandidates) {
+                        try {
+                            await peerConnection.addIceCandidate(candidate);
+                        } catch (err) {
+                            console.warn('⚠️ [handleWebRTCOffer] Error adding pending ICE candidate:', err);
+                        }
+                    }
+                    peerConnection._pendingIceCandidates = [];
+                }
+            } catch (error) {
+                // Обрабатываем ошибку "Remote description changes the media type"
+                if (error.message && error.message.includes('changes the media type')) {
+                    console.warn('⚠️ [handleWebRTCOffer] Remote description changes media type, recreating connection');
+                    // Пересоздаем соединение
+                    peerConnection.close();
+                    this.videoCallManager.remoteUsers.delete(data.sender_id);
+                    // Создаем новое соединение
+                    this.setupPeerConnection(data.sender_id);
+                    // Повторяем обработку offer
+                    return this.handleWebRTCOffer(data);
+                }
+                throw error;
+            }
         
             // Создаем ответ (answer) с правильными опциями
             const answer = await peerConnection.createAnswer({
@@ -792,8 +827,34 @@ class WebRTCManager {
         
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
             console.log('📥 [handleWebRTCAnswer] Setting remote description, current signalingState:', peerConnection.signalingState);
+            
+            // ВАЖНО: Проверяем signalingState - нельзя устанавливать answer в stable
+            if (peerConnection.signalingState === 'stable') {
+                console.warn('⚠️ [handleWebRTCAnswer] SignalingState is stable, skipping setRemoteDescription');
+                return;
+            }
+            
+            // ВАЖНО: Проверяем, что remote description еще не установлен
+            if (peerConnection.remoteDescription) {
+                console.warn('⚠️ [handleWebRTCAnswer] Remote description already set, skipping');
+                return;
+            }
+            
             await peerConnection.setRemoteDescription(data.answer);
             console.log('✅ [handleWebRTCAnswer] Remote description set successfully, new signalingState:', peerConnection.signalingState);
+            
+            // ВАЖНО: Добавляем отложенные ICE кандидаты после установки remote description
+            if (peerConnection._pendingIceCandidates && peerConnection._pendingIceCandidates.length > 0) {
+                console.log(`🔄 [handleWebRTCAnswer] Adding ${peerConnection._pendingIceCandidates.length} pending ICE candidates`);
+                for (const candidate of peerConnection._pendingIceCandidates) {
+                    try {
+                        await peerConnection.addIceCandidate(candidate);
+                    } catch (err) {
+                        console.warn('⚠️ [handleWebRTCAnswer] Error adding pending ICE candidate:', err);
+                    }
+                }
+                peerConnection._pendingIceCandidates = [];
+            }
             
             // ВАЖНО: Проверяем, есть ли уже треки в соединении после установки remote description
             
@@ -848,10 +909,33 @@ class WebRTCManager {
             }
             
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
+            
+            // ВАЖНО: Проверяем, что remote description установлен перед добавлением ICE кандидатов
+            if (!peerConnection.remoteDescription) {
+                console.warn('⚠️ [handleICECandidate] Remote description not set yet, storing candidate for later');
+                // Сохраняем кандидата для добавления позже
+                if (!peerConnection._pendingIceCandidates) {
+                    peerConnection._pendingIceCandidates = [];
+                }
+                peerConnection._pendingIceCandidates.push(data.candidate);
+                return;
+            }
+            
+            // ВАЖНО: Проверяем, что кандидат не null
+            if (!data.candidate) {
+                console.log('✅ [handleICECandidate] End of ICE candidates');
+                return;
+            }
+            
             await peerConnection.addIceCandidate(data.candidate);
             
         } catch (error) {
-            console.error('Error adding ICE candidate:', error);
+            // Игнорируем ошибки "Unknown ufrag" - это нормально если кандидат пришел до установки remote description
+            if (error.message && error.message.includes('Unknown ufrag')) {
+                console.warn('⚠️ [handleICECandidate] Unknown ufrag (candidate arrived before remote description), ignoring');
+            } else {
+                console.error('Error adding ICE candidate:', error);
+            }
         }
     }
 
