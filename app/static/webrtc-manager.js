@@ -365,11 +365,14 @@ class WebRTCManager {
                         console.log(`🔊 [ontrack] Трек ${track.kind} unmuted для ${targetUserId}`);
                         // Для видео треков: добавляем обратно в поток при unmute, если enabled
                         if (track.kind === 'video' && track.enabled && !remoteStream.getTracks().includes(track)) {
+                            console.log(`✅ [ontrack] Добавляем видео трек обратно в поток после unmute для ${targetUserId}`);
                             remoteStream.addTrack(track);
-                            // Проверяем состояние в receivers
-                            const checkResult = this.checkAndSyncTrackWithReceivers(targetUserId, track);
+                            // Обновляем UI сразу и через небольшую задержку
                             this.videoCallManager.uiManager.updateVideoOverlays();
-                            this.videoCallManager.checkEmptyState();
+                            setTimeout(() => {
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                                this.videoCallManager.checkEmptyState();
+                            }, 100);
                         }
                     };
                     

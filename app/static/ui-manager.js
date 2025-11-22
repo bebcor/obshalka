@@ -328,15 +328,24 @@ class UIManager {
                         }
                     });
                     
-                    // КРИТИЧНО: Проверяем через задержку, что видео действительно активно
-                    // НО: проверяем только один раз через достаточную задержку, чтобы дать треку время активироваться
-                    setTimeout(() => {
+                    // КРИТИЧНО: Периодически проверяем, что видео действительно активно
+                    // Проверяем несколько раз с разными задержками для надежности
+                    let checkCount = 0;
+                    const maxChecks = 3;
+                    const checkVideoActive = () => {
+                        checkCount++;
+                        
+                        // Проверяем, что соединение все еще существует
+                        const peerConnection = this.videoCallManager.remoteUsers.get(userId);
+                        if (!peerConnection) {
+                            return; // Соединение закрыто, не проверяем
+                        }
+                        
                         // Проверяем состояние треков в потоке
                         const videoTracks = stream.getVideoTracks();
                         const hasActiveTracks = videoTracks.some(t => t.enabled && !t.muted && t.readyState === 'live');
                         
                         // Проверяем состояние треков в receivers
-                        const peerConnection = this.videoCallManager.remoteUsers.get(userId);
                         let hasActiveReceiverVideo = false;
                         if (peerConnection) {
                             const receivers = peerConnection.getReceivers();
@@ -344,13 +353,23 @@ class UIManager {
                             if (videoReceiver && videoReceiver.track) {
                                 const track = videoReceiver.track;
                                 hasActiveReceiverVideo = track.readyState === 'live' && track.enabled && !track.muted;
+                                
+                                // ВАЖНО: Если трек активен в receivers, но его нет в потоке - добавляем его
+                                if (hasActiveReceiverVideo && !videoTracks.some(t => t.id === track.id)) {
+                                    console.log(`✅ [updateVideoOverlays ${userId}] Добавляем активный видео трек из receivers в поток`);
+                                    stream.addTrack(track);
+                                    // Обновляем UI
+                                    this.videoCallManager.uiManager.updateVideoOverlays();
+                                    return; // Выходим, не скрываем карточку
+                                }
                             }
                         }
                         
                         // ВАЖНО: Скрываем карточку ТОЛЬКО если нет активных треков И нет активного видео в receivers
                         // И проверяем, что карточка все еще показывается (не была скрыта ранее)
-                        if ((!hasActiveTracks || !hasActiveReceiverVideo) && participantCard.style.display !== 'none') {
-                            console.log(`🗑️ [updateVideoOverlays ${userId}] Видео неактивно после проверки (hasActiveTracks=${hasActiveTracks}, hasActiveReceiverVideo=${hasActiveReceiverVideo}), скрываем карточку`);
+                        // И только после нескольких проверок (чтобы дать треку время активироваться)
+                        if (checkCount >= 2 && (!hasActiveTracks || !hasActiveReceiverVideo) && participantCard.style.display !== 'none') {
+                            console.log(`🗑️ [updateVideoOverlays ${userId}] Видео неактивно после проверки ${checkCount} (hasActiveTracks=${hasActiveTracks}, hasActiveReceiverVideo=${hasActiveReceiverVideo}), скрываем карточку`);
                             // Удаляем все видео треки из потока
                             stream.getVideoTracks().forEach(track => stream.removeTrack(track));
                             // Скрываем карточку
@@ -365,8 +384,14 @@ class UIManager {
                                 } catch (e) {}
                             }
                             this.videoCallManager.checkEmptyState();
+                        } else if (checkCount < maxChecks) {
+                            // Продолжаем проверять
+                            setTimeout(checkVideoActive, 500);
                         }
-                    }, 1000); // Даем треку время активироваться
+                    };
+                    
+                    // Запускаем проверку с задержкой
+                    setTimeout(checkVideoActive, 500);
                 }
                 console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео)`);
                 return; // Выходим, не переходим к логике скрытия
