@@ -1148,7 +1148,7 @@ class WebRTCManager {
     syncTracksAfterUserJoined(targetUserId) {
         console.log(`🔄 [syncTracksAfterUserJoined] Синхронизация треков для ${targetUserId}`);
         
-        const peerConnection = this.remoteUsers.get(targetUserId);
+        const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
         if (!peerConnection) {
             console.warn(`⚠️ [syncTracksAfterUserJoined] Нет peer connection для ${targetUserId}`);
             return;
@@ -1157,7 +1157,7 @@ class WebRTCManager {
         // Проверяем receivers с несколькими задержками для надежности
         const checkAndSync = (delay) => {
             setTimeout(() => {
-                if (!this.remoteUsers.has(targetUserId)) {
+                if (!this.videoCallManager.remoteUsers.has(targetUserId)) {
                     return; // Соединение закрыто
                 }
                 
