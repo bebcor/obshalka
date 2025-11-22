@@ -979,16 +979,23 @@ class VideoCallManager {
                             
                             // КРИТИЧНО: Также синхронизируем треки для ВСЕХ существующих участников
                             // Это нужно чтобы они увидели видео нового пользователя
+                            // Делаем это несколько раз с разными задержками для надежности
                             console.log(`🔄 [handleUserJoined] Синхронизируем треки для всех существующих участников`);
-                            this.remoteUsers.forEach((peerConnection, existingUserId) => {
-                                if (existingUserId !== data.user_id) {
-                                    console.log(`🔄 [handleUserJoined] Синхронизируем треки для существующего участника ${existingUserId}`);
-                                    // Синхронизируем с задержкой чтобы треки успели прийти
-                                    setTimeout(() => {
-                                        this.webrtcManager.syncTracksAfterUserJoined(existingUserId);
-                                    }, 1000);
-                                }
-                            });
+                            const syncAllExisting = (delay) => {
+                                setTimeout(() => {
+                                    this.remoteUsers.forEach((peerConnection, existingUserId) => {
+                                        if (existingUserId !== data.user_id) {
+                                            console.log(`🔄 [handleUserJoined] Синхронизируем треки для существующего участника ${existingUserId} (delay=${delay}ms)`);
+                                            this.webrtcManager.syncTracksAfterUserJoined(existingUserId);
+                                        }
+                                    });
+                                }, delay);
+                            };
+                            syncAllExisting(500);
+                            syncAllExisting(1000);
+                            syncAllExisting(2000);
+                            syncAllExisting(3000);
+                            syncAllExisting(5000);
                         }).catch(err => {
                             console.error(`❌ Ошибка создания offer для ${data.user_id}:`, err);
                         });
@@ -1007,16 +1014,23 @@ class VideoCallManager {
                                         
                                         // КРИТИЧНО: Также синхронизируем треки для ВСЕХ существующих участников
                                         // Это нужно чтобы они увидели видео нового пользователя
+                                        // Делаем это несколько раз с разными задержками для надежности
                                         console.log(`🔄 [handleUserJoined] Синхронизируем треки для всех существующих участников`);
-                                        this.remoteUsers.forEach((peerConnection, existingUserId) => {
-                                            if (existingUserId !== data.user_id) {
-                                                console.log(`🔄 [handleUserJoined] Синхронизируем треки для существующего участника ${existingUserId}`);
-                                                // Синхронизируем с задержкой чтобы треки успели прийти
-                                                setTimeout(() => {
-                                                    this.webrtcManager.syncTracksAfterUserJoined(existingUserId);
-                                                }, 1000);
-                                            }
-                                        });
+                                        const syncAllExisting = (delay) => {
+                                            setTimeout(() => {
+                                                this.remoteUsers.forEach((peerConnection, existingUserId) => {
+                                                    if (existingUserId !== data.user_id) {
+                                                        console.log(`🔄 [handleUserJoined] Синхронизируем треки для существующего участника ${existingUserId} (delay=${delay}ms)`);
+                                                        this.webrtcManager.syncTracksAfterUserJoined(existingUserId);
+                                                    }
+                                                });
+                                            }, delay);
+                                        };
+                                        syncAllExisting(500);
+                                        syncAllExisting(1000);
+                                        syncAllExisting(2000);
+                                        syncAllExisting(3000);
+                                        syncAllExisting(5000);
                                     }).catch(err => {
                                         console.error(`❌ Ошибка создания offer для ${data.user_id}:`, err);
                                     });

@@ -321,6 +321,34 @@ class WebRTCManager {
                             'Track muted:', event.track.muted,
                             'Streams count:', event.streams.length);
             
+                // КРИТИЧНО: После получения трека через ontrack, проверяем все receivers
+                // Это нужно чтобы убедиться что все треки добавлены в поток
+                setTimeout(() => {
+                    const allReceivers = peerConnection.getReceivers();
+                    console.log(`🔍 [ontrack] Проверяем все receivers для ${targetUserId}:`, allReceivers.length);
+                    allReceivers.forEach((receiver, index) => {
+                        const track = receiver.track;
+                        if (track && track.readyState === 'live') {
+                            const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
+                            if (remoteStream && !remoteStream.getTracks().some(t => t.id === track.id)) {
+                                console.log(`✅ [ontrack] Добавляем пропущенный трек ${track.kind} ${track.id} для ${targetUserId}`);
+                                remoteStream.addTrack(track);
+                                if (track.kind === 'video') {
+                                    const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                                    if (videoElement && videoElement.srcObject !== remoteStream) {
+                                        videoElement.srcObject = remoteStream;
+                                    }
+                                }
+                                // Сбрасываем кэш и обновляем UI
+                                if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                                    this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
+                                }
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                            }
+                        }
+                    });
+                }, 500);
+            
                 // Создаем или получаем удаленный поток для этого пользователя
                 // КРИТИЧНО: remoteStream должен быть ОТДЕЛЬНЫМ потоком, НЕ localStream
                 if (!this.videoCallManager.remoteStreams.has(targetUserId)) {
@@ -1281,6 +1309,9 @@ class WebRTCManager {
                 
                 const receivers = peerConnection.getReceivers();
                 console.log(`🔍 [syncTracksAfterUserJoined ${targetUserId}] Проверка receivers (delay=${delay}ms):`, receivers.length);
+                console.log(`🔍 [syncTracksAfterUserJoined ${targetUserId}] ConnectionState:`, peerConnection.connectionState);
+                console.log(`🔍 [syncTracksAfterUserJoined ${targetUserId}] SignalingState:`, peerConnection.signalingState);
+                console.log(`🔍 [syncTracksAfterUserJoined ${targetUserId}] ICEConnectionState:`, peerConnection.iceConnectionState);
                 
                 // Убеждаемся что remoteStream существует
                 if (!this.videoCallManager.remoteStreams.has(targetUserId)) {
@@ -1354,6 +1385,59 @@ class WebRTCManager {
         checkAndSync(2000);
         checkAndSync(3000);
         checkAndSync(5000);
+        
+        // КРИТИЧНО: Также запускаем периодическую проверку для этого пользователя
+        // Это нужно на случай если треки придут позже
+        let checkCount = 0;
+        const maxChecks = 10; // Проверяем 10 раз
+        const periodicCheck = () => {
+            if (!this.videoCallManager.remoteUsers.has(targetUserId)) {
+                return; // Соединение закрыто
+            }
+            if (checkCount >= maxChecks) {
+                return; // Прекращаем проверку
+            }
+            checkCount++;
+            
+            const receivers = peerConnection.getReceivers();
+            const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
+            
+            if (remoteStream) {
+                const streamTracks = remoteStream.getTracks();
+                const receiverTracks = receivers.map(r => r.track).filter(t => t && t.readyState === 'live');
+                
+                // Проверяем есть ли треки в receivers которых нет в потоке
+                let tracksAdded = false;
+                receiverTracks.forEach(track => {
+                    if (!streamTracks.some(t => t.id === track.id)) {
+                        console.log(`🔄 [syncTracksAfterUserJoined periodic] Добавляем трек ${track.kind} ${track.id} для ${targetUserId}`);
+                        remoteStream.addTrack(track);
+                        tracksAdded = true;
+                        
+                        if (track.kind === 'video') {
+                            const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                            if (videoElement && videoElement.srcObject !== remoteStream) {
+                                videoElement.srcObject = remoteStream;
+                            }
+                        }
+                    }
+                });
+                
+                if (tracksAdded) {
+                    // Сбрасываем кэш и обновляем UI
+                    if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                        this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
+                    }
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                }
+            }
+            
+            // Продолжаем проверку
+            setTimeout(periodicCheck, 1000);
+        };
+        
+        // Начинаем периодическую проверку через 2 секунды
+        setTimeout(periodicCheck, 2000);
     }
 
     async handleICECandidate(data) {
