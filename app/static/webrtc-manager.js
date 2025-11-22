@@ -269,20 +269,23 @@ class WebRTCManager {
                         }
                     }
                     
-                    // ВАЖНО: Также проверяем, если receiver.track есть, но он неактивен (enabled=false или muted=true)
-                    // Это может означать, что камера выключена
+                    // ВАЖНО: НЕ удаляем треки если они просто muted или disabled!
+                    // Удаляем ТОЛЬКО если трек ended (полностью завершен)
+                    // Управление отображением через enabled/muted, а не через удаление треков
                     if (currentTrack && currentTrack.kind === 'video') {
-                        const isTrackActive = currentTrack.readyState === 'live' && currentTrack.enabled && !currentTrack.muted;
-                        if (!isTrackActive) {
-                            // Трек неактивен - удаляем его из потока
+                        // Удаляем ТОЛЬКО если трек ended
+                        if (currentTrack.readyState === 'ended') {
                             const tracksToRemove = remoteStream.getTracks().filter(t => t.id === currentTrack.id && t.kind === 'video');
                             if (tracksToRemove.length > 0) {
                                 tracksToRemove.forEach(track => {
-                                    console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] Receiver ${index} трек ${currentTrack.id} неактивен (enabled=${currentTrack.enabled}, muted=${currentTrack.muted}), удаляем из потока`);
+                                    console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] Receiver ${index} трек ${currentTrack.id} ended, удаляем из потока`);
                                     remoteStream.removeTrack(track);
                                     hasChanges = true;
                                 });
                             }
+                        } else {
+                            // Трек live (даже если muted или disabled) - НЕ УДАЛЯЕМ!
+                            // Оставляем трек в потоке, управление через enabled/muted
                         }
                     }
                     
@@ -464,15 +467,18 @@ class WebRTCManager {
                             // Проверяем состояние в receivers и синхронизируем
                             const checkResult = this.checkAndSyncTrackWithReceivers(targetUserId, track);
                             
-                            if (!track.enabled || track.muted) {
-                                // Трек выключен или muted - удаляем из потока если он там есть
+                            // ВАЖНО: НЕ удаляем треки если они просто disabled или muted!
+                            // Удаляем ТОЛЬКО если трек ended
+                            // Управление отображением через enabled/muted, а не через удаление треков
+                            if (track.readyState === 'ended') {
+                                // Трек ended - удаляем из потока
                                 if (track.kind === 'video' && remoteStream.getTracks().includes(track)) {
                                     remoteStream.removeTrack(track);
                                     this.videoCallManager.uiManager.updateVideoOverlays();
                                     this.videoCallManager.checkEmptyState();
                                 }
-                            } else if (track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted && !remoteStream.getTracks().includes(track)) {
-                                // Трек включен, не muted и live - добавляем в поток если его там нет
+                            } else if (track.kind === 'video' && track.readyState === 'live' && !remoteStream.getTracks().includes(track)) {
+                                // Трек live (даже если disabled или muted) - добавляем в поток если его там нет
                                 remoteStream.addTrack(track);
                                 this.videoCallManager.uiManager.updateVideoOverlays();
                                 this.videoCallManager.checkEmptyState();
