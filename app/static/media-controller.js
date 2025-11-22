@@ -41,6 +41,18 @@ class MediaController {
                 
             } else {
                 // ЕСЛИ камера есть - запрашиваем оба с ВЫБРАННОЙ КАМЕРОЙ
+                const needAdditionalAudio = !this.videoCallManager.localStream || this.videoCallManager.localStream.getAudioTracks().length === 0;
+                const audioConstraints = this.videoCallManager.selectedMicrophoneId ? {
+                    deviceId: { ideal: this.videoCallManager.selectedMicrophoneId },
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                } : {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                };
+
                 const constraints = {
                     video: this.videoCallManager.selectedCameraId ? {
                         deviceId: { exact: this.videoCallManager.selectedCameraId },
@@ -52,16 +64,7 @@ class MediaController {
                         height: { ideal: 720 }, 
                         frameRate: { ideal: 30 }
                     },
-                    audio: this.videoCallManager.selectedMicrophoneId ? {
-                        deviceId: { ideal: this.videoCallManager.selectedMicrophoneId },
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    } : {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    }
+                    audio: needAdditionalAudio ? audioConstraints : false
                 };
                 
                 console.log('🎥 Запрашиваем медиа с constraints:', constraints);
