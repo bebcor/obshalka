@@ -353,30 +353,50 @@ class UIManager {
                     
                     // КРИТИЧНО: Проверяем через небольшую задержку, что видео действительно воспроизводится
                     // Если видео не воспроизводится (черный экран), скрываем карточку
-                    setTimeout(() => {
-                        const isPlaying = !videoElement.paused && !videoElement.ended && videoElement.readyState >= 2;
-                        const hasVideoTracks = stream.getVideoTracks().length > 0;
-                        const hasActiveVideoTracks = stream.getVideoTracks().some(t => t.enabled && !t.muted && t.readyState === 'live');
-                        
-                        // Если видео не воспроизводится И нет активных треков - скрываем карточку
-                        if (!isPlaying && (!hasVideoTracks || !hasActiveVideoTracks)) {
-                            console.log(`🗑️ [updateVideoOverlays ${userId}] Видео не воспроизводится и нет активных треков, скрываем карточку`);
-                            // Удаляем все видео треки из потока
-                            stream.getVideoTracks().forEach(track => stream.removeTrack(track));
-                            // Скрываем карточку
-                            participantCard.style.setProperty('display', 'none', 'important');
-                            participantCard.style.setProperty('visibility', 'hidden', 'important');
-                            participantCard.style.setProperty('opacity', '0', 'important');
-                            if (videoElement) {
-                                videoElement.pause();
-                                videoElement.srcObject = null;
-                                try {
-                                    videoElement.load();
-                                } catch (e) {}
+                    // Используем несколько проверок с разными задержками для надежности
+                    const checkVideoPlaying = (delay) => {
+                        setTimeout(() => {
+                            // Проверяем состояние треков в потоке
+                            const videoTracks = stream.getVideoTracks();
+                            const hasActiveTracks = videoTracks.some(t => t.enabled && !t.muted && t.readyState === 'live');
+                            
+                            // Проверяем состояние треков в receivers
+                            const peerConnection = this.videoCallManager.remoteUsers.get(userId);
+                            let hasActiveReceiverVideo = false;
+                            if (peerConnection) {
+                                const receivers = peerConnection.getReceivers();
+                                const videoReceiver = receivers.find(r => r.track && r.track.kind === 'video');
+                                if (videoReceiver && videoReceiver.track) {
+                                    const track = videoReceiver.track;
+                                    hasActiveReceiverVideo = track.readyState === 'live' && track.enabled && !track.muted;
+                                }
                             }
-                            this.checkEmptyState();
-                        }
-                    }, 500);
+                            
+                            // Если нет активных треков ИЛИ нет активного видео в receivers - скрываем карточку
+                            if (!hasActiveTracks || !hasActiveReceiverVideo) {
+                                console.log(`🗑️ [updateVideoOverlays ${userId}] Видео неактивно (hasActiveTracks=${hasActiveTracks}, hasActiveReceiverVideo=${hasActiveReceiverVideo}), скрываем карточку`);
+                                // Удаляем все видео треки из потока
+                                stream.getVideoTracks().forEach(track => stream.removeTrack(track));
+                                // Скрываем карточку
+                                participantCard.style.setProperty('display', 'none', 'important');
+                                participantCard.style.setProperty('visibility', 'hidden', 'important');
+                                participantCard.style.setProperty('opacity', '0', 'important');
+                                if (videoElement) {
+                                    videoElement.pause();
+                                    videoElement.srcObject = null;
+                                    try {
+                                        videoElement.load();
+                                    } catch (e) {}
+                                }
+                                this.checkEmptyState();
+                            }
+                        }, delay);
+                    };
+                    
+                    // Проверяем несколько раз с разными задержками
+                    checkVideoPlaying(300);
+                    checkVideoPlaying(800);
+                    checkVideoPlaying(1500);
                 }
                 console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео)`);
                 return; // Выходим, не переходим к логике скрытия
