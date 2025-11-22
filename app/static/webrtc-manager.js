@@ -1173,6 +1173,7 @@ class WebRTCManager {
                 const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
                 
                 // Проверяем все receivers и добавляем треки в поток
+                let tracksAdded = false;
                 receivers.forEach((receiver, index) => {
                     const track = receiver.track;
                     if (!track) {
@@ -1185,14 +1186,17 @@ class WebRTCManager {
                     // Добавляем треки в поток если они live (даже если disabled или muted)
                     if (track.readyState === 'live' && !remoteStream.getTracks().some(t => t.id === track.id)) {
                         remoteStream.addTrack(track);
+                        tracksAdded = true;
                         console.log(`✅ [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} добавлен в поток`);
                         
-                        // Для видео треков устанавливаем srcObject и обновляем UI
+                        // Для видео треков устанавливаем srcObject
                         if (track.kind === 'video') {
                             const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                            if (videoElement && videoElement.srcObject !== remoteStream) {
-                                console.log(`🔄 [syncTracksAfterUserJoined ${targetUserId}] Устанавливаем srcObject для videoElement`);
-                                videoElement.srcObject = remoteStream;
+                            if (videoElement) {
+                                if (videoElement.srcObject !== remoteStream) {
+                                    console.log(`🔄 [syncTracksAfterUserJoined ${targetUserId}] Устанавливаем srcObject для videoElement`);
+                                    videoElement.srcObject = remoteStream;
+                                }
                                 videoElement.play().catch(err => {
                                     if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
                                         console.warn(`⚠️ [syncTracksAfterUserJoined ${targetUserId}] Ошибка play:`, err);
@@ -1203,16 +1207,32 @@ class WebRTCManager {
                     }
                 });
                 
-                // Обновляем UI после синхронизации
-                this.videoCallManager.uiManager.updateVideoOverlays();
+                // КРИТИЧНО: Если треки были добавлены, сбрасываем кэш состояния и обновляем UI
+                if (tracksAdded) {
+                    // Сбрасываем кэш состояния для этого пользователя
+                    if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                        this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
+                    }
+                    // Принудительно обновляем UI
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                    // Еще раз через небольшую задержку для надежности
+                    setTimeout(() => {
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                    }, 100);
+                } else {
+                    // Даже если треки не добавлены, обновляем UI (может быть треки уже были в потоке)
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                }
             }, delay);
         };
         
         // Проверяем с несколькими задержками для надежности
-        checkAndSync(100);
-        checkAndSync(300);
+        // Увеличиваем задержки чтобы треки успели прийти через ontrack
+        checkAndSync(200);
         checkAndSync(500);
         checkAndSync(1000);
+        checkAndSync(2000);
+        checkAndSync(3000);
     }
 
     async handleICECandidate(data) {
