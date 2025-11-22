@@ -371,13 +371,36 @@ class WebRTCManager {
                         // Для видео: добавляем только если активен
                         const isActive = track.readyState === 'live' && track.enabled && !track.muted;
                         if (isActive) {
-                            remoteStream.addTrack(track);
-                            console.log(`✅ [ontrack] Активный видео трек ${track.id} для ${targetUserId} добавлен в поток`);
-                            console.log(`✅ [ontrack] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
-                            // Обновляем UI
-                            setTimeout(() => {
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                            }, 100);
+                            // КРИТИЧНО: Проверяем, что трек еще не добавлен в поток
+                            const trackAlreadyInStream = remoteStream.getTracks().some(t => t.id === track.id);
+                            if (!trackAlreadyInStream) {
+                                remoteStream.addTrack(track);
+                                console.log(`✅ [ontrack] Активный видео трек ${track.id} для ${targetUserId} добавлен в поток`);
+                                console.log(`✅ [ontrack] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
+                                
+                                // КРИТИЧНО: Убеждаемся, что videoElement существует и обновляем его srcObject
+                                const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                                if (videoElement && videoElement.srcObject !== remoteStream) {
+                                    console.log(`🔄 [ontrack] Устанавливаем srcObject для videoElement ${targetUserId}`);
+                                    videoElement.srcObject = remoteStream;
+                                    // Пробуем воспроизвести видео
+                                    videoElement.play().catch(err => {
+                                        if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
+                                            console.warn(`⚠️ [ontrack] Ошибка play для ${targetUserId}:`, err);
+                                        }
+                                    });
+                                }
+                                
+                                // Обновляем UI с задержками для надежности
+                                setTimeout(() => {
+                                    this.videoCallManager.uiManager.updateVideoOverlays();
+                                }, 50);
+                                setTimeout(() => {
+                                    this.videoCallManager.uiManager.updateVideoOverlays();
+                                }, 200);
+                            } else {
+                                console.log(`⚠️ [ontrack] Видео трек ${track.id} уже в потоке для ${targetUserId}`);
+                            }
                         } else {
                             console.log(`⚠️ [ontrack] Видео трек ${track.id} для ${targetUserId} неактивен (enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}), не добавляем в поток`);
                             // НЕ добавляем неактивный трек - он будет добавлен позже когда станет активным
@@ -915,7 +938,23 @@ class WebRTCManager {
                             if (isActive && !remoteStream.getTracks().some(t => t.id === track.id)) {
                                 remoteStream.addTrack(track);
                                 console.log(`✅ [handleWebRTCOffer] Активный видео трек ${track.id} для ${data.sender_id} добавлен в поток (delay=${delay}ms)`);
-                                console.log(`✅ [handleWebRTCOffer] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
+                                console.log(`✅ [handleWebRTCOffer] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
+                                
+                                // КРИТИЧНО: Убеждаемся, что videoElement существует и обновляем его srcObject
+                                const videoElement = document.getElementById(`remoteVideo-${data.sender_id}`);
+                                if (videoElement) {
+                                    if (videoElement.srcObject !== remoteStream) {
+                                        console.log(`🔄 [handleWebRTCOffer] Устанавливаем srcObject для videoElement ${data.sender_id}`);
+                                        videoElement.srcObject = remoteStream;
+                                    }
+                                    // Пробуем воспроизвести видео
+                                    videoElement.play().catch(err => {
+                                        if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
+                                            console.warn(`⚠️ [handleWebRTCOffer] Ошибка play для ${data.sender_id}:`, err);
+                                        }
+                                    });
+                                }
+                                
                                 // Обновляем UI
                                 this.videoCallManager.uiManager.updateVideoOverlays();
                             } else if (!isActive) {
@@ -1039,7 +1078,23 @@ class WebRTCManager {
                             if (isActive && !remoteStream.getTracks().some(t => t.id === track.id)) {
                                 remoteStream.addTrack(track);
                                 console.log(`✅ [handleWebRTCAnswer] Активный видео трек ${track.id} для ${data.sender_id} добавлен в поток (delay=${delay}ms)`);
-                                console.log(`✅ [handleWebRTCAnswer] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
+                                console.log(`✅ [handleWebRTCAnswer] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
+                                
+                                // КРИТИЧНО: Убеждаемся, что videoElement существует и обновляем его srcObject
+                                const videoElement = document.getElementById(`remoteVideo-${data.sender_id}`);
+                                if (videoElement) {
+                                    if (videoElement.srcObject !== remoteStream) {
+                                        console.log(`🔄 [handleWebRTCAnswer] Устанавливаем srcObject для videoElement ${data.sender_id}`);
+                                        videoElement.srcObject = remoteStream;
+                                    }
+                                    // Пробуем воспроизвести видео
+                                    videoElement.play().catch(err => {
+                                        if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
+                                            console.warn(`⚠️ [handleWebRTCAnswer] Ошибка play для ${data.sender_id}:`, err);
+                                        }
+                                    });
+                                }
+                                
                                 // Обновляем UI
                                 this.videoCallManager.uiManager.updateVideoOverlays();
                             } else if (!isActive) {

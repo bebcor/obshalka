@@ -427,7 +427,13 @@ class UIManager {
             
             // КРИТИЧНО: Финальная проверка - видео активно ТОЛЬКО если в потоке есть активные треки
             // Это единственный надежный источник истины для отображения
-            const finalHasActiveVideo = hasActiveVideoInStream;
+            // ДОПОЛНИТЕЛЬНО: Проверяем, что треки действительно активны (enabled, не muted, live)
+            const finalHasActiveVideo = hasActiveVideoInStream && finalVideoTracks.some(track => 
+                track && 
+                track.readyState === 'live' && 
+                track.enabled && 
+                !track.muted
+            );
             
             console.log(`🔍 [updateVideoOverlays ${userId}] Проверка: video=${finalHasActiveVideo}, audio=${hasActiveAudio}, tracks=${finalVideoTracks.length}v/${finalAudioTracks.length}a`);
             console.log(`🔍 [updateVideoOverlays ${userId}] Stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
@@ -469,18 +475,48 @@ class UIManager {
                         }
                     }
                     
+                    // КРИТИЧНО: Проверяем, что в потоке есть активные видео треки ПЕРЕД установкой srcObject
+                    const activeVideoTracks = stream.getVideoTracks().filter(t => 
+                        t && t.readyState === 'live' && t.enabled && !t.muted
+                    );
+                    
+                    if (activeVideoTracks.length === 0) {
+                        console.warn(`⚠️ [updateVideoOverlays ${userId}] Нет активных видео треков в потоке, не устанавливаем srcObject`);
+                        // Не устанавливаем srcObject если нет активных треков
+                        return; // Выходим, не показываем карточку
+                    }
+                    
                     // ВАЖНО: Устанавливаем srcObject если он еще не установлен или отличается
                     if (videoElement.srcObject !== stream) {
                         console.log(`🔄 [updateVideoOverlays ${userId}] Устанавливаем srcObject для videoElement (remoteStream)`);
-                        console.log(`🔍 [updateVideoOverlays ${userId}] Stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}`));
+                        console.log(`🔍 [updateVideoOverlays ${userId}] Stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
+                        console.log(`🔍 [updateVideoOverlays ${userId}] Active video tracks:`, activeVideoTracks.map(t => `${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
                         videoElement.srcObject = stream;
                     }
-                    // ВАЖНО: Убеждаемся что видео воспроизводится
-                    videoElement.play().catch(err => {
-                        if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
-                            console.warn(`⚠️ [updateVideoOverlays ${userId}] Ошибка play:`, err);
+                    
+                    // КРИТИЧНО: Убеждаемся что видео воспроизводится
+                    // Вызываем play() с задержкой чтобы дать потоку время установиться
+                    const playVideo = async () => {
+                        try {
+                            await videoElement.play();
+                            console.log(`✅ [updateVideoOverlays ${userId}] Видео успешно воспроизводится`);
+                        } catch (err) {
+                            if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
+                                console.warn(`⚠️ [updateVideoOverlays ${userId}] Ошибка play:`, err);
+                                // Пробуем еще раз через небольшую задержку
+                                setTimeout(() => {
+                                    videoElement.play().catch(e => {
+                                        console.warn(`⚠️ [updateVideoOverlays ${userId}] Повторная ошибка play:`, e);
+                                    });
+                                }, 200);
+                            }
                         }
-                    });
+                    };
+                    
+                    // Вызываем play() сразу и с задержкой для надежности
+                    playVideo();
+                    setTimeout(playVideo, 100);
+                    setTimeout(playVideo, 300);
                     
                     // ВАЖНО: Периодически проверяем, что видео действительно активно
                     // Это нужно для случая, когда трек становится неактивным после показа карточки
