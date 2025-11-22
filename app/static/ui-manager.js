@@ -233,40 +233,94 @@ class UIManager {
             });
             
             // КРИТИЧНО: Проверяем receivers - это единственный надежный источник истины
-            // ВАЖНО: НЕ удаляем треки из потока здесь - это делает checkReceiversForNullTracks
-            // Здесь только проверяем наличие активного видео и добавляем треки из receivers в поток, если их там нет
+            // ВАЖНО: Удаляем неактивные треки из потока ПРЯМО ЗДЕСЬ для более быстрой реакции
             let hasActiveVideo = false;
             if (peerConnection) {
                 const receivers = peerConnection.getReceivers();
+                
+                // КРИТИЧНО: Сначала удаляем все неактивные видео треки из потока
+                // Это нужно для немедленной реакции на выключение камеры
+                const streamVideoTracks = stream.getVideoTracks();
+                streamVideoTracks.forEach(streamTrack => {
+                    // Ищем соответствующий receiver для этого трека
+                    // ВАЖНО: Проверяем все receivers, включая те, у которых track === null
+                    const receiver = receivers.find(r => {
+                        const rTrack = r.track;
+                        return rTrack && rTrack.id === streamTrack.id;
+                    });
+                    const receiverTrack = receiver?.track;
+                    
+                    // Удаляем трек если:
+                    // 1. Нет receiver для этого трека
+                    // 2. Receiver.track === null (replaceTrack(null))
+                    // 3. Трек неактивен (disabled, muted, или не live)
+                    let shouldRemove = false;
+                    if (!receiver) {
+                        // Нет receiver для этого трека - возможно, он был удален
+                        shouldRemove = true;
+                        console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек ${streamTrack.id} - нет receiver`);
+                    } else if (!receiverTrack || receiverTrack === null) {
+                        // Receiver существует, но track === null - это replaceTrack(null)
+                        shouldRemove = true;
+                        console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек ${streamTrack.id} - receiver.track === null (replaceTrack(null))`);
+                    } else if (receiverTrack.kind === 'video') {
+                        const isActive = receiverTrack.readyState === 'live' && 
+                                        receiverTrack.enabled && 
+                                        !receiverTrack.muted;
+                        if (!isActive) {
+                            shouldRemove = true;
+                            console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем неактивный видео трек ${streamTrack.id} из потока (enabled=${receiverTrack.enabled}, muted=${receiverTrack.muted}, readyState=${receiverTrack.readyState})`);
+                        }
+                    }
+                    
+                    if (shouldRemove && stream.getTracks().includes(streamTrack)) {
+                        stream.removeTrack(streamTrack);
+                    }
+                });
+                
                 // Ищем активный видео трек в receivers
                 const videoReceiver = receivers.find(receiver => {
                     const track = receiver.track;
-                    return track && track.kind === 'video';
+                    return track && track.kind === 'video' && 
+                           track.readyState === 'live' && 
+                           track.enabled && 
+                           !track.muted;
                 });
                 
-                // КРИТИЧНО: Проверяем, есть ли receiver с null track (replaceTrack(null) был вызван)
-                // ВАЖНО: Проверяем как null, так и отсутствие трека вообще
+                // КРИТИЧНО: Проверяем, есть ли видео receiver с null track (replaceTrack(null) был вызван)
+                // ВАЖНО: Если есть receiver с null track И нет активного видео receiver - камера выключена
                 const hasNullVideoReceiver = receivers.some(receiver => {
-                    // Проверяем, что это видео receiver и трек null или отсутствует
                     const track = receiver.track;
-                    return !track || track === null;
+                    // Если трек null, это может быть видео receiver с replaceTrack(null)
+                    // Проверяем через transceivers, чтобы определить тип
+                    if (!track || track === null) {
+                        const transceivers = peerConnection.getTransceivers();
+                        const transceiver = transceivers.find(t => t.receiver === receiver);
+                        // Если transceiver существует и receiver.track === null, это может быть видео
+                        // Но более надежно - если нет активного видео receiver, и есть null receiver, то камера выключена
+                        return true; // Есть null receiver
+                    }
+                    return false;
                 });
                 
-                // Если нет videoReceiver или его трек null - камера выключена
-                if (!videoReceiver || !videoReceiver.track || hasNullVideoReceiver) {
+                // Если нет активного videoReceiver ИЛИ есть null receiver - камера выключена
+                // ВАЖНО: Если есть null receiver, это означает, что replaceTrack(null) был вызван
+                if (!videoReceiver) {
                     // Нет активного видео трека в receivers - камера выключена
-                    console.log(`❌ [${userId}] Нет активного видео трека в receivers (hasNullVideoReceiver=${hasNullVideoReceiver}, videoReceiver=${!!videoReceiver}, videoReceiverTrack=${!!videoReceiver?.track})`);
+                    if (hasNullVideoReceiver) {
+                        console.log(`❌ [${userId}] Нет активного видео трека в receivers - есть null receiver (replaceTrack(null))`);
+                    } else {
+                        console.log(`❌ [${userId}] Нет активного видео трека в receivers`);
+                    }
                     hasActiveVideo = false;
                 } else {
                     const track = videoReceiver.track;
-                    // Проверяем все условия - трек должен быть live, enabled и не muted
-                    hasActiveVideo = track.readyState === 'live' && 
-                                   track.enabled && 
-                                   !track.muted;
+                    // Трек уже проверен на активность выше
+                    hasActiveVideo = true;
                     
                     // ВАЖНО: Если трек активен в receivers, но его нет в потоке - добавляем его
                     const trackInStream = stream.getTracks().find(t => t.id === track.id);
-                    if (hasActiveVideo && !trackInStream) {
+                    if (!trackInStream) {
                         console.log(`✅ [${userId}] Добавляем активный видео трек из receivers в поток`);
                         stream.addTrack(track);
                     }
@@ -277,12 +331,9 @@ class UIManager {
                 hasActiveVideo = false;
             }
             
-            // Получаем актуальные треки
+            // Получаем актуальные треки ПОСЛЕ удаления неактивных
             const finalVideoTracks = stream.getVideoTracks();
             const finalAudioTracks = stream.getAudioTracks();
-            
-            // ВАЖНО: НЕ удаляем треки из потока здесь - это делает checkReceiversForNullTracks
-            // Здесь только проверяем наличие активных треков для определения hasActiveVideo
             
             // ВАЖНО: Проверяем наличие активного аудио
             const hasActiveAudio = finalAudioTracks.length > 0 && 
@@ -317,13 +368,25 @@ class UIManager {
                         console.log(`✅ [${userId}] Добавляем активный видео трек из receivers в поток (финальная проверка)`);
                         stream.addTrack(track);
                         // Обновляем hasActiveVideoInStream после добавления
-                        hasActiveVideoInStream = true;
+                        hasActiveVideo = true; // Трек добавлен, видео активно
+                    } else {
+                        // Трек уже в потоке, но неактивен - это странно, но оставляем hasActiveVideo как есть
+                        hasActiveVideo = false;
                     }
+                } else {
+                    // Нет активного видео receiver - камера выключена
+                    hasActiveVideo = false;
                 }
+            } else if (!hasActiveVideoInStream) {
+                // В потоке нет активных видео треков - камера выключена
+                hasActiveVideo = false;
             }
             
-            // Видео активно ТОЛЬКО если оно активно И в receivers И в потоке
-            hasActiveVideo = hasActiveVideo && hasActiveVideoInStream;
+            // КРИТИЧНО: Финальная проверка - видео активно ТОЛЬКО если оно активно И в receivers И в потоке
+            // Если в потоке нет активных треков, видео неактивно, независимо от receivers
+            if (!hasActiveVideoInStream) {
+                hasActiveVideo = false;
+            }
             
             console.log(`🔍 [updateVideoOverlays ${userId}] Проверка: video=${hasActiveVideo}, audio=${hasActiveAudio}, tracks=${finalVideoTracks.length}v/${finalAudioTracks.length}a`);
             console.log(`🔍 [updateVideoOverlays ${userId}] Stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
@@ -353,13 +416,10 @@ class UIManager {
                         }
                     });
                     
-                    // КРИТИЧНО: Периодически проверяем, что видео действительно активно
-                    // Проверяем несколько раз с разными задержками для надежности
-                    let checkCount = 0;
-                    const maxChecks = 3;
-                    const checkVideoActive = () => {
-                        checkCount++;
-                        
+                    // ВАЖНО: Периодически проверяем, что видео действительно активно
+                    // Это нужно для случая, когда трек становится неактивным после показа карточки
+                    // Но проверка уже выполнена выше, поэтому здесь только дополнительная проверка
+                    setTimeout(() => {
                         // Проверяем, что соединение все еще существует
                         const peerConnection = this.videoCallManager.remoteUsers.get(userId);
                         if (!peerConnection) {
@@ -372,59 +432,44 @@ class UIManager {
                         
                         // Проверяем состояние треков в receivers
                         let hasActiveReceiverVideo = false;
-                        if (peerConnection) {
-                            const receivers = peerConnection.getReceivers();
-                            const videoReceiver = receivers.find(r => r.track && r.track.kind === 'video');
-                            if (videoReceiver && videoReceiver.track) {
-                                const track = videoReceiver.track;
-                                hasActiveReceiverVideo = track.readyState === 'live' && track.enabled && !track.muted;
-                                
-                                // ВАЖНО: Если трек активен в receivers, но его нет в потоке - добавляем его
-                                if (hasActiveReceiverVideo && !videoTracks.some(t => t.id === track.id)) {
-                                    console.log(`✅ [updateVideoOverlays ${userId}] Добавляем активный видео трек из receivers в поток`);
-                                    stream.addTrack(track);
-                                    // Обновляем UI
-                                    this.videoCallManager.uiManager.updateVideoOverlays();
-                                    return; // Выходим, не скрываем карточку
-                                }
+                        const receivers = peerConnection.getReceivers();
+                        const videoReceiver = receivers.find(r => {
+                            const track = r.track;
+                            return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
+                        });
+                        if (videoReceiver && videoReceiver.track) {
+                            hasActiveReceiverVideo = true;
+                            
+                            // ВАЖНО: Если трек активен в receivers, но его нет в потоке - добавляем его
+                            const track = videoReceiver.track;
+                            if (!videoTracks.some(t => t.id === track.id)) {
+                                console.log(`✅ [updateVideoOverlays ${userId}] Добавляем активный видео трек из receivers в поток (дополнительная проверка)`);
+                                stream.addTrack(track);
+                                // Обновляем UI
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                                return; // Выходим, не скрываем карточку
                             }
                         }
                         
                         // ВАЖНО: Скрываем карточку ТОЛЬКО если нет активных треков И нет активного видео в receivers
-                        // И проверяем, что карточка все еще показывается (не была скрыта ранее)
-                        // Проверяем сразу и после задержки (чтобы дать треку время активироваться при первом подключении)
                         if ((!hasActiveTracks || !hasActiveReceiverVideo) && participantCard.style.display !== 'none') {
-                            // Если это первая проверка (checkCount === 1), даем еще одну попытку
-                            // Это нужно для случая, когда трек только что пришел и еще не активировался
-                            if (checkCount === 1) {
-                                console.log(`⏳ [updateVideoOverlays ${userId}] Видео неактивно на первой проверке, ждем еще...`);
-                                setTimeout(checkVideoActive, 500);
-                            } else {
-                                // После второй проверки скрываем карточку
-                                console.log(`🗑️ [updateVideoOverlays ${userId}] Видео неактивно после проверки ${checkCount} (hasActiveTracks=${hasActiveTracks}, hasActiveReceiverVideo=${hasActiveReceiverVideo}), скрываем карточку`);
-                                // Удаляем все видео треки из потока
-                                stream.getVideoTracks().forEach(track => stream.removeTrack(track));
-                                // Скрываем карточку
-                                participantCard.style.setProperty('display', 'none', 'important');
-                                participantCard.style.setProperty('visibility', 'hidden', 'important');
-                                participantCard.style.setProperty('opacity', '0', 'important');
-                                if (videoElement) {
-                                    videoElement.pause();
-                                    videoElement.srcObject = null;
-                                    try {
-                                        videoElement.load();
-                                    } catch (e) {}
-                                }
-                                this.videoCallManager.checkEmptyState();
+                            console.log(`🗑️ [updateVideoOverlays ${userId}] Видео неактивно (hasActiveTracks=${hasActiveTracks}, hasActiveReceiverVideo=${hasActiveReceiverVideo}), скрываем карточку`);
+                            // Удаляем все видео треки из потока
+                            stream.getVideoTracks().forEach(track => stream.removeTrack(track));
+                            // Скрываем карточку
+                            participantCard.style.setProperty('display', 'none', 'important');
+                            participantCard.style.setProperty('visibility', 'hidden', 'important');
+                            participantCard.style.setProperty('opacity', '0', 'important');
+                            if (videoElement) {
+                                videoElement.pause();
+                                videoElement.srcObject = null;
+                                try {
+                                    videoElement.load();
+                                } catch (e) {}
                             }
-                        } else if (checkCount < maxChecks) {
-                            // Если видео активно, но еще не все проверки выполнены - продолжаем проверять
-                            setTimeout(checkVideoActive, 500);
+                            this.videoCallManager.checkEmptyState();
                         }
-                    };
-                    
-                    // Запускаем проверку с задержкой
-                    setTimeout(checkVideoActive, 500);
+                    }, 300);
                 }
                 console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео)`);
                 return; // Выходим, не переходим к логике скрытия
