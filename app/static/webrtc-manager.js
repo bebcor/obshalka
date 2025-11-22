@@ -318,29 +318,26 @@ class WebRTCManager {
                 }
                 
                 // Добавляем трек в поток, если его еще нет
-                // КРИТИЧНО: Для видео треков проверяем, что трек действительно активен перед добавлением
+                // ВАЖНО: Добавляем трек ВСЕГДА - проверка активности будет в updateVideoOverlays
                 if (!remoteStream.getTracks().some(t => t.id === track.id)) {
-                    // Для видео треков: добавляем ТОЛЬКО если трек активен (enabled, не muted, live)
-                    if (track.kind === 'video') {
-                        const isTrackActive = track.readyState === 'live' && track.enabled && !track.muted;
-                        if (!isTrackActive) {
-                            console.log(`⚠️ [ontrack] Видео трек ${track.id} для ${targetUserId} неактивен (enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}), НЕ добавляем в поток`);
-                            return; // Не добавляем неактивный видео трек
-                        }
-                    }
-                    
                     remoteStream.addTrack(track);
                     console.log(`✅ [ontrack] Добавлен трек ${track.kind} (${track.id}) для ${targetUserId}, enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
                     console.log(`✅ [ontrack] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
                     
-                    // ВАЖНО: Сразу проверяем состояние трека в receivers и синхронизируем
-                    const checkResult = this.checkAndSyncTrackWithReceivers(targetUserId, track);
-                    if (checkResult.shouldRemove) {
-                        // Трек был удален из потока - сразу обновляем UI
-                        console.log(`🔄 [ontrack ${targetUserId}] Трек был удален из потока, обновляем UI`);
-                        this.videoCallManager.uiManager.updateVideoOverlays();
-                        this.videoCallManager.checkEmptyState();
-                    }
+                    // ВАЖНО: Проверяем состояние трека в receivers через небольшую задержку
+                    // Это нужно, чтобы дать треку время инициализироваться
+                    setTimeout(() => {
+                        const checkResult = this.checkAndSyncTrackWithReceivers(targetUserId, track);
+                        if (checkResult.shouldRemove) {
+                            // Трек был удален из потока - обновляем UI
+                            console.log(`🔄 [ontrack ${targetUserId}] Трек был удален из потока после проверки, обновляем UI`);
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.checkEmptyState();
+                        } else {
+                            // Трек активен - обновляем UI
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                        }
+                    }, 100);
                     
                     // Простые обработчики: только добавляют/удаляют треки из потока
                     track.onended = () => {
