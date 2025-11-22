@@ -23,11 +23,12 @@ class WebRTCManager {
         const receiverTrack = receivers.find(r => r.track && r.track.id === track.id)?.track;
         
         // Если трека нет в receivers - это может быть временное состояние, не удаляем сразу
+        // КРИТИЧНО: muted не влияет на активность - это временное состояние браузера
         if (!receiverTrack) {
             console.log(`🔍 [checkAndSyncTrackWithReceivers ${targetUserId}] Трек ${track.kind} (${track.id}) не найден в receivers`);
             return { 
-                hasActiveVideo: track.kind === 'video' && track.enabled && !track.muted && track.readyState === 'live',
-                hasActiveAudio: track.kind === 'audio' && track.enabled && !track.muted && track.readyState === 'live',
+                hasActiveVideo: track.kind === 'video' && track.enabled && track.readyState === 'live',
+                hasActiveAudio: track.kind === 'audio' && track.enabled && track.readyState === 'live',
                 shouldRemove: false 
             };
         }
@@ -580,10 +581,11 @@ class WebRTCManager {
                         }
                         
                         // Проверяем изменения enabled и muted
+                        // КРИТИЧНО: muted не влияет на активность - это временное состояние браузера
                         if (track.enabled !== lastEnabled || track.muted !== lastMuted) {
                             console.log(`🔄 [ontrack] Трек ${track.kind} состояние изменилось для ${targetUserId}: enabled ${lastEnabled}->${track.enabled}, muted ${lastMuted}->${track.muted}`);
                             const wasMuted = lastMuted;
-                            const isNowActive = track.enabled && !track.muted;
+                            const isNowActive = track.enabled && track.readyState === 'live';
                             lastEnabled = track.enabled;
                             lastMuted = track.muted;
                             
@@ -608,6 +610,7 @@ class WebRTCManager {
                                 }
                                 
                                 // КРИТИЧНО: Если трек стал активным (muted изменился с true на false) - принудительно обновляем UI
+                                // Это нужно для обновления UI когда трек становится unmuted
                                 if (wasMuted && !track.muted && isNowActive) {
                                     console.log(`✅ [ontrack checkEnabled] Видео трек стал активным для ${targetUserId}, принудительно обновляем UI`);
                                     
@@ -672,10 +675,11 @@ class WebRTCManager {
                         }
                         
                         // Проверяем изменения enabled/muted
+                        // КРИТИЧНО: muted не влияет на активность - это временное состояние браузера
                         if (track.enabled !== lastPeriodicEnabled || track.muted !== lastPeriodicMuted) {
                             console.log(`🔄 [periodicCheck] Состояние трека ${track.kind} изменилось для ${targetUserId}: enabled ${lastPeriodicEnabled}->${track.enabled}, muted ${lastPeriodicMuted}->${track.muted}`);
                             const wasMuted = lastPeriodicMuted;
-                            const isNowActive = track.enabled && !track.muted;
+                            const isNowActive = track.enabled && track.readyState === 'live';
                             lastPeriodicEnabled = track.enabled;
                             lastPeriodicMuted = track.muted;
                             
@@ -685,6 +689,7 @@ class WebRTCManager {
                             }
                             
                             // КРИТИЧНО: Если трек стал активным (muted изменился с true на false) - принудительно обновляем UI
+                            // Это нужно для обновления UI когда трек становится unmuted
                             if (track.kind === 'video' && wasMuted && !track.muted && isNowActive) {
                                 console.log(`✅ [periodicCheck] Видео трек стал активным для ${targetUserId}, принудительно обновляем UI`);
                                 
