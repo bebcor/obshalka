@@ -904,7 +904,11 @@ class VideoCallManager {
                             if (this.remoteUsers.has(participant.socket_id)) {
                                 const peerConnection = this.remoteUsers.get(participant.socket_id);
                                 if (peerConnection.signalingState === 'stable') {
-                                    this.webrtcManager.createOffer(participant.socket_id).catch(err => {
+                                    this.webrtcManager.createOffer(participant.socket_id).then(() => {
+                                        // КРИТИЧНО: После создания offer синхронизируем треки для существующих участников
+                                        console.log(`🔄 [handleRoomInfo] Синхронизируем треки для ${participant.socket_id}`);
+                                        this.webrtcManager.syncTracksAfterUserJoined(participant.socket_id);
+                                    }).catch(err => {
                                         console.error(`Ошибка создания offer для ${participant.socket_id}:`, err);
                                     });
                                 }
@@ -969,6 +973,7 @@ class VideoCallManager {
                     if (signalingState === 'stable') {
                         this.webrtcManager.createOffer(data.user_id).then(() => {
                             // КРИТИЧНО: После создания offer проверяем receivers и синхронизируем треки
+                            // Это нужно чтобы увидеть видео нового пользователя
                             console.log(`🔄 [handleUserJoined] Проверяем receivers и синхронизируем треки для ${data.user_id}`);
                             this.webrtcManager.syncTracksAfterUserJoined(data.user_id);
                         }).catch(err => {
@@ -983,6 +988,7 @@ class VideoCallManager {
                                     console.log(`📤 Создаем offer для ${data.user_id} после ожидания`);
                                     this.webrtcManager.createOffer(data.user_id).then(() => {
                                         // КРИТИЧНО: После создания offer проверяем receivers и синхронизируем треки
+                                        // Это нужно чтобы увидеть видео нового пользователя
                                         console.log(`🔄 [handleUserJoined] Проверяем receivers и синхронизируем треки для ${data.user_id}`);
                                         this.webrtcManager.syncTracksAfterUserJoined(data.user_id);
                                     }).catch(err => {

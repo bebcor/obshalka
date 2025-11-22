@@ -578,6 +578,11 @@ class WebRTCManager {
                 if (state === 'connected') {
                     this.videoCallManager.notificationManager.show('Звонок подключен', 'success');
                     console.log('✅ WebRTC connection established!');
+                    // КРИТИЧНО: После установки соединения синхронизируем треки
+                    // Это нужно чтобы увидеть видео другого пользователя
+                    setTimeout(() => {
+                        this.syncTracksAfterUserJoined(targetUserId);
+                    }, 200);
                 } else if (state === 'disconnected') {
                     this.videoCallManager.notificationManager.show('Звонок отключен', 'warning');
                 } else if (state === 'failed') {
@@ -602,6 +607,11 @@ class WebRTCManager {
             
                 if (iceState === 'connected' || iceState === 'completed') {
                     console.log('✅ ICE connection successful!');
+                    // КРИТИЧНО: После установки ICE соединения синхронизируем треки
+                    // Это нужно чтобы увидеть видео другого пользователя
+                    setTimeout(() => {
+                        this.syncTracksAfterUserJoined(targetUserId);
+                    }, 200);
                 } else if (iceState === 'disconnected') {
                     console.warn('⚠️ ICE connection disconnected');
                 } else if (iceState === 'failed') {
@@ -1228,11 +1238,14 @@ class WebRTCManager {
         
         // Проверяем с несколькими задержками для надежности
         // Увеличиваем задержки чтобы треки успели прийти через ontrack
-        checkAndSync(200);
+        // КРИТИЧНО: Проверяем сразу и с большими задержками для надежности
+        checkAndSync(100);
+        checkAndSync(300);
         checkAndSync(500);
         checkAndSync(1000);
         checkAndSync(2000);
         checkAndSync(3000);
+        checkAndSync(5000);
     }
 
     async handleICECandidate(data) {
