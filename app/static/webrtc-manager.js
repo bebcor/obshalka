@@ -489,11 +489,26 @@ class WebRTCManager {
                 }
                 
                 // ВАЖНО: Обновляем UI - updateVideoOverlays проверит receivers и покажет/скроет карточку
-                this.videoCallManager.uiManager.updateVideoOverlays();
-                setTimeout(() => {
+                // ВАЖНО: Для видео треков обновляем UI с небольшой задержкой, чтобы трек успел активироваться
+                if (track.kind === 'video') {
+                    // Для видео треков - обновляем сразу и с задержкой
                     this.videoCallManager.uiManager.updateVideoOverlays();
-                    this.videoCallManager.checkEmptyState();
-                }, 100);
+                    setTimeout(() => {
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                        this.videoCallManager.checkEmptyState();
+                    }, 200);
+                    // Дополнительная проверка через 500мс для случая первого подключения
+                    setTimeout(() => {
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                    }, 500);
+                } else {
+                    // Для аудио треков - обновляем сразу
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                    setTimeout(() => {
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                        this.videoCallManager.checkEmptyState();
+                    }, 100);
+                }
             };
         
             // Обработчик изменения состояния соединения
@@ -841,56 +856,64 @@ class WebRTCManager {
             // ВАЖНО: После установки local description треки должны прийти через ontrack
             // Но иногда они уже есть в receivers, поэтому проверяем их тоже
             // КРИТИЧНО: Добавляем треки из receivers в поток, если их там еще нет
-            setTimeout(() => {
-                const receivers = peerConnection.getReceivers();
-                console.log(`🔍 [handleWebRTCOffer] Проверка receivers после установки local description для ${data.sender_id}:`, receivers.length);
-                console.log(`🔍 [handleWebRTCOffer] Текущие remoteStreams:`, Array.from(this.videoCallManager.remoteStreams.keys()));
-                
-                // ВАЖНО: Проверяем, есть ли уже remoteStream для этого пользователя
-                if (!this.videoCallManager.remoteStreams.has(data.sender_id)) {
-                    const remoteStream = new MediaStream();
-                    this.videoCallManager.remoteStreams.set(data.sender_id, remoteStream);
-                    this.videoCallManager.uiManager.createRemoteVideoElement(data.sender_id, remoteStream);
-                }
-                const remoteStream = this.videoCallManager.remoteStreams.get(data.sender_id);
-                
-                receivers.forEach((receiver, index) => {
-                    const track = receiver.track;
-                    console.log(`  [handleWebRTCOffer] Receiver ${index}: kind=${receiver.track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
+            // ВАЖНО: Делаем несколько проверок с задержками для надежности
+            const checkReceivers = (delay) => {
+                setTimeout(() => {
+                    const receivers = peerConnection.getReceivers();
+                    console.log(`🔍 [handleWebRTCOffer] Проверка receivers после установки local description для ${data.sender_id} (delay=${delay}ms):`, receivers.length);
+                    console.log(`🔍 [handleWebRTCOffer] Текущие remoteStreams:`, Array.from(this.videoCallManager.remoteStreams.keys()));
                     
-                    // ВАЖНО: Если track null, не обрабатываем его
-                    if (!track) {
-                        console.log(`⚠️ [handleWebRTCOffer] Receiver ${index} имеет null track, пропускаем`);
-                        return;
+                    // ВАЖНО: Проверяем, есть ли уже remoteStream для этого пользователя
+                    if (!this.videoCallManager.remoteStreams.has(data.sender_id)) {
+                        const remoteStream = new MediaStream();
+                        this.videoCallManager.remoteStreams.set(data.sender_id, remoteStream);
+                        this.videoCallManager.uiManager.createRemoteVideoElement(data.sender_id, remoteStream);
                     }
+                    const remoteStream = this.videoCallManager.remoteStreams.get(data.sender_id);
                     
-                    // ВАЖНО: Для видео треков добавляем в поток ТОЛЬКО если трек активен (enabled и не muted)
-                    // Для аудио треков добавляем всегда если live
-                    if (track.kind === 'video') {
-                        // Для видео: добавляем только если активен
-                        const isActive = track.readyState === 'live' && track.enabled && !track.muted;
-                        if (isActive && !remoteStream.getTracks().some(t => t.id === track.id)) {
-                            remoteStream.addTrack(track);
-                            console.log(`✅ [handleWebRTCOffer] Активный видео трек ${track.id} для ${data.sender_id} добавлен в поток`);
-                            console.log(`✅ [handleWebRTCOffer] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
-                            // Обновляем UI
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                        } else if (!isActive) {
-                            console.log(`⚠️ [handleWebRTCOffer] Видео трек ${track.id} неактивен (enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}), не добавляем в поток`);
+                    receivers.forEach((receiver, index) => {
+                        const track = receiver.track;
+                        console.log(`  [handleWebRTCOffer] Receiver ${index}: kind=${receiver.track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
+                        
+                        // ВАЖНО: Если track null, не обрабатываем его
+                        if (!track) {
+                            console.log(`⚠️ [handleWebRTCOffer] Receiver ${index} имеет null track, пропускаем`);
+                            return;
                         }
-                    } else if (track.kind === 'audio') {
-                        // Для аудио: добавляем если live
-                        if (track.readyState === 'live' && !remoteStream.getTracks().some(t => t.id === track.id)) {
-                            remoteStream.addTrack(track);
-                            console.log(`✅ [handleWebRTCOffer] Аудио трек ${track.id} для ${data.sender_id} добавлен в поток`);
-                            // Обновляем UI
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                        } else if (track.readyState !== 'live') {
-                            console.log(`⚠️ [handleWebRTCOffer] Аудио трек ${track.id} не live (readyState=${track.readyState}), не добавляем в поток`);
+                        
+                        // ВАЖНО: Для видео треков добавляем в поток ТОЛЬКО если трек активен (enabled и не muted)
+                        // Для аудио треков добавляем всегда если live
+                        if (track.kind === 'video') {
+                            // Для видео: добавляем только если активен
+                            const isActive = track.readyState === 'live' && track.enabled && !track.muted;
+                            if (isActive && !remoteStream.getTracks().some(t => t.id === track.id)) {
+                                remoteStream.addTrack(track);
+                                console.log(`✅ [handleWebRTCOffer] Активный видео трек ${track.id} для ${data.sender_id} добавлен в поток (delay=${delay}ms)`);
+                                console.log(`✅ [handleWebRTCOffer] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
+                                // Обновляем UI
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                            } else if (!isActive) {
+                                console.log(`⚠️ [handleWebRTCOffer] Видео трек ${track.id} неактивен (enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}), не добавляем в поток`);
+                            }
+                        } else if (track.kind === 'audio') {
+                            // Для аудио: добавляем если live
+                            if (track.readyState === 'live' && !remoteStream.getTracks().some(t => t.id === track.id)) {
+                                remoteStream.addTrack(track);
+                                console.log(`✅ [handleWebRTCOffer] Аудио трек ${track.id} для ${data.sender_id} добавлен в поток`);
+                                // Обновляем UI
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                            } else if (track.readyState !== 'live') {
+                                console.log(`⚠️ [handleWebRTCOffer] Аудио трек ${track.id} не live (readyState=${track.readyState}), не добавляем в поток`);
+                            }
                         }
-                    }
-                });
-            }, 100);
+                    });
+                }, delay);
+            };
+            
+            // Проверяем несколько раз с разными задержками для надежности
+            checkReceivers(100);
+            checkReceivers(300);
+            checkReceivers(500);
         
             console.log('📤 [handleWebRTCOffer] Sending answer to:', data.sender_id);
             console.log('Answer transceivers:');
@@ -958,55 +981,63 @@ class WebRTCManager {
             
             // ВАЖНО: После установки remote description треки должны прийти через ontrack
             // Но иногда они уже есть в receivers, поэтому проверяем их тоже
-            setTimeout(() => {
-                const receivers = peerConnection.getReceivers();
-                console.log(`🔍 [handleWebRTCAnswer] Проверка receivers после установки remote description для ${data.sender_id}:`, receivers.length);
-                console.log(`🔍 [handleWebRTCAnswer] Текущие remoteStreams:`, Array.from(this.videoCallManager.remoteStreams.keys()));
-                
-                // ВАЖНО: Проверяем, есть ли уже remoteStream для этого пользователя
-                if (!this.videoCallManager.remoteStreams.has(data.sender_id)) {
-                    const remoteStream = new MediaStream();
-                    this.videoCallManager.remoteStreams.set(data.sender_id, remoteStream);
-                    this.videoCallManager.uiManager.createRemoteVideoElement(data.sender_id, remoteStream);
-                }
-                const remoteStream = this.videoCallManager.remoteStreams.get(data.sender_id);
-                
-                receivers.forEach((receiver, index) => {
-                    const track = receiver.track;
-                    console.log(`  [handleWebRTCAnswer] Receiver ${index}: kind=${receiver.track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
-                    // ВАЖНО: Если track null, не обрабатываем его
-                    if (!track) {
-                        console.log(`⚠️ [handleWebRTCAnswer] Receiver ${index} имеет null track, пропускаем`);
-                        return;
-                    }
+            // ВАЖНО: Делаем несколько проверок с задержками для надежности
+            const checkReceivers = (delay) => {
+                setTimeout(() => {
+                    const receivers = peerConnection.getReceivers();
+                    console.log(`🔍 [handleWebRTCAnswer] Проверка receivers после установки remote description для ${data.sender_id} (delay=${delay}ms):`, receivers.length);
+                    console.log(`🔍 [handleWebRTCAnswer] Текущие remoteStreams:`, Array.from(this.videoCallManager.remoteStreams.keys()));
                     
-                    // ВАЖНО: Для видео треков добавляем в поток ТОЛЬКО если трек активен (enabled и не muted)
-                    // Для аудио треков добавляем всегда если live
-                    if (track.kind === 'video') {
-                        // Для видео: добавляем только если активен
-                        const isActive = track.readyState === 'live' && track.enabled && !track.muted;
-                        if (isActive && !remoteStream.getTracks().some(t => t.id === track.id)) {
-                            remoteStream.addTrack(track);
-                            console.log(`✅ [handleWebRTCAnswer] Активный видео трек ${track.id} для ${data.sender_id} добавлен в поток`);
-                            console.log(`✅ [handleWebRTCAnswer] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
-                            // Обновляем UI
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                        } else if (!isActive) {
-                            console.log(`⚠️ [handleWebRTCAnswer] Видео трек ${track.id} неактивен (enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}), не добавляем в поток`);
-                        }
-                    } else if (track.kind === 'audio') {
-                        // Для аудио: добавляем если live
-                        if (track.readyState === 'live' && !remoteStream.getTracks().some(t => t.id === track.id)) {
-                            remoteStream.addTrack(track);
-                            console.log(`✅ [handleWebRTCAnswer] Аудио трек ${track.id} для ${data.sender_id} добавлен в поток`);
-                            // Обновляем UI
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                        } else if (track.readyState !== 'live') {
-                            console.log(`⚠️ [handleWebRTCAnswer] Аудио трек ${track.id} не live (readyState=${track.readyState}), не добавляем в поток`);
-                        }
+                    // ВАЖНО: Проверяем, есть ли уже remoteStream для этого пользователя
+                    if (!this.videoCallManager.remoteStreams.has(data.sender_id)) {
+                        const remoteStream = new MediaStream();
+                        this.videoCallManager.remoteStreams.set(data.sender_id, remoteStream);
+                        this.videoCallManager.uiManager.createRemoteVideoElement(data.sender_id, remoteStream);
                     }
-                });
-            }, 100);
+                    const remoteStream = this.videoCallManager.remoteStreams.get(data.sender_id);
+                    
+                    receivers.forEach((receiver, index) => {
+                        const track = receiver.track;
+                        console.log(`  [handleWebRTCAnswer] Receiver ${index}: kind=${receiver.track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
+                        // ВАЖНО: Если track null, не обрабатываем его
+                        if (!track) {
+                            console.log(`⚠️ [handleWebRTCAnswer] Receiver ${index} имеет null track, пропускаем`);
+                            return;
+                        }
+                        
+                        // ВАЖНО: Для видео треков добавляем в поток ТОЛЬКО если трек активен (enabled и не muted)
+                        // Для аудио треков добавляем всегда если live
+                        if (track.kind === 'video') {
+                            // Для видео: добавляем только если активен
+                            const isActive = track.readyState === 'live' && track.enabled && !track.muted;
+                            if (isActive && !remoteStream.getTracks().some(t => t.id === track.id)) {
+                                remoteStream.addTrack(track);
+                                console.log(`✅ [handleWebRTCAnswer] Активный видео трек ${track.id} для ${data.sender_id} добавлен в поток (delay=${delay}ms)`);
+                                console.log(`✅ [handleWebRTCAnswer] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
+                                // Обновляем UI
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                            } else if (!isActive) {
+                                console.log(`⚠️ [handleWebRTCAnswer] Видео трек ${track.id} неактивен (enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}), не добавляем в поток`);
+                            }
+                        } else if (track.kind === 'audio') {
+                            // Для аудио: добавляем если live
+                            if (track.readyState === 'live' && !remoteStream.getTracks().some(t => t.id === track.id)) {
+                                remoteStream.addTrack(track);
+                                console.log(`✅ [handleWebRTCAnswer] Аудио трек ${track.id} для ${data.sender_id} добавлен в поток`);
+                                // Обновляем UI
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                            } else if (track.readyState !== 'live') {
+                                console.log(`⚠️ [handleWebRTCAnswer] Аудио трек ${track.id} не live (readyState=${track.readyState}), не добавляем в поток`);
+                            }
+                        }
+                    });
+                }, delay);
+            };
+            
+            // Проверяем несколько раз с разными задержками для надежности
+            checkReceivers(100);
+            checkReceivers(300);
+            checkReceivers(500);
         
         } catch (error) {
             console.error('Error handling WebRTC answer:', error);

@@ -513,8 +513,31 @@ class UIManager {
             }
             
             // Если дошли сюда - значит нет активного видео
+            // НО ПЕРЕД СКРЫТИЕМ - еще раз проверяем receivers на случай если трек только что пришел
+            // Это критично для случая первого подключения
+            if (peerConnection) {
+                const receivers = peerConnection.getReceivers();
+                const videoReceiver = receivers.find(receiver => {
+                    const track = receiver.track;
+                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
+                });
+                if (videoReceiver && videoReceiver.track) {
+                    const track = videoReceiver.track;
+                    const trackInStream = stream.getTracks().find(t => t.id === track.id);
+                    if (!trackInStream) {
+                        console.log(`✅ [updateVideoOverlays ${userId}] НАЙДЕН активный видео трек в receivers при финальной проверке, добавляем в поток`);
+                        stream.addTrack(track);
+                        // Обновляем UI и выходим - карточка будет показана
+                        setTimeout(() => {
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                        }, 50);
+                        return; // Выходим, не скрываем карточку
+                    }
+                }
+            }
+            
             // НЕТ активного видео - СКРЫВАЕМ карточку и ОЧИЩАЕМ srcObject
-            console.log(`❌ [updateVideoOverlays ${userId}] НЕТ активного видео в receivers - скрываем карточку и очищаем srcObject`);
+            console.log(`❌ [updateVideoOverlays ${userId}] НЕТ активного видео - скрываем карточку и очищаем srcObject`);
             
             // КРИТИЧНО: СНАЧАЛА очищаем srcObject и скрываем карточку - это предотвращает показ черного экрана
             if (videoElement) {
