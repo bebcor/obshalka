@@ -425,10 +425,14 @@ class UIManager {
                 // Если трек не был добавлен, hasActiveVideo = false
             }
             
-            console.log(`🔍 [updateVideoOverlays ${userId}] Проверка: video=${hasActiveVideo}, audio=${hasActiveAudio}, tracks=${finalVideoTracks.length}v/${finalAudioTracks.length}a`);
+            // КРИТИЧНО: Финальная проверка - видео активно ТОЛЬКО если в потоке есть активные треки
+            // Это единственный надежный источник истины для отображения
+            const finalHasActiveVideo = hasActiveVideoInStream;
+            
+            console.log(`🔍 [updateVideoOverlays ${userId}] Проверка: video=${finalHasActiveVideo}, audio=${hasActiveAudio}, tracks=${finalVideoTracks.length}v/${finalAudioTracks.length}a`);
             console.log(`🔍 [updateVideoOverlays ${userId}] Stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
             
-            if (hasActiveVideo) {
+            if (finalHasActiveVideo) {
                 // Есть активное видео - показываем карточку
                 participantCard.style.setProperty('display', 'block', 'important');
                 participantCard.style.removeProperty('visibility');
@@ -512,9 +516,10 @@ class UIManager {
                 return; // Выходим, не переходим к логике скрытия
             }
             
-            // Если дошли сюда - значит нет активного видео
+            // Если дошли сюда - значит нет активного видео в потоке
             // НО ПЕРЕД СКРЫТИЕМ - еще раз проверяем receivers на случай если трек только что пришел
             // Это критично для случая первого подключения
+            let foundActiveTrackInReceivers = false;
             if (peerConnection) {
                 const receivers = peerConnection.getReceivers();
                 const videoReceiver = receivers.find(receiver => {
@@ -527,6 +532,7 @@ class UIManager {
                     if (!trackInStream) {
                         console.log(`✅ [updateVideoOverlays ${userId}] НАЙДЕН активный видео трек в receivers при финальной проверке, добавляем в поток`);
                         stream.addTrack(track);
+                        foundActiveTrackInReceivers = true;
                         // Обновляем UI и выходим - карточка будет показана
                         setTimeout(() => {
                             this.videoCallManager.uiManager.updateVideoOverlays();
@@ -537,13 +543,21 @@ class UIManager {
             }
             
             // НЕТ активного видео - СКРЫВАЕМ карточку и ОЧИЩАЕМ srcObject
+            // ВАЖНО: Делаем это ТОЛЬКО если не нашли активный трек в receivers выше
+            if (foundActiveTrackInReceivers) {
+                return; // Уже обработали выше
+            }
+            
             console.log(`❌ [updateVideoOverlays ${userId}] НЕТ активного видео - скрываем карточку и очищаем srcObject`);
             
             // КРИТИЧНО: СНАЧАЛА очищаем srcObject и скрываем карточку - это предотвращает показ черного экрана
+            // ВАЖНО: Делаем это в правильном порядке для предотвращения черных квадратов
             if (videoElement) {
-                // Останавливаем воспроизведение
+                // СНАЧАЛА скрываем элемент - это предотвращает показ черного экрана
+                videoElement.style.setProperty('display', 'none', 'important');
+                // Затем останавливаем воспроизведение
                 videoElement.pause();
-                // Очищаем srcObject СРАЗУ
+                // Затем очищаем srcObject
                 videoElement.srcObject = null;
                 // Используем load() для полной очистки
                 try {
@@ -551,8 +565,6 @@ class UIManager {
                 } catch (e) {
                     // Игнорируем ошибки
                 }
-                // Скрываем элемент
-                videoElement.style.setProperty('display', 'none', 'important');
             }
             
             // Скрываем карточку полностью СРАЗУ
@@ -569,10 +581,11 @@ class UIManager {
             // ВАЖНО: Удаляем ВСЕ видео треки из потока ПОСЛЕ очистки srcObject
             const allVideoTracks = stream.getVideoTracks();
             allVideoTracks.forEach(track => {
+                console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек ${track.id} из потока (нет активного видео)`);
                 stream.removeTrack(track);
             });
             
-            console.log(`❌ [updateVideoOverlays ${userId}] Карточка скрыта, srcObject очищен`);
+            console.log(`❌ [updateVideoOverlays ${userId}] Карточка скрыта, srcObject очищен, треки удалены`);
         });
         } finally {
             // Сбрасываем флаг после завершения обновления

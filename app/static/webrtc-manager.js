@@ -492,7 +492,12 @@ class WebRTCManager {
                 // ВАЖНО: Для видео треков обновляем UI с небольшой задержкой, чтобы трек успел активироваться
                 if (track.kind === 'video') {
                     // Для видео треков - обновляем сразу и с задержкой
-                    this.videoCallManager.uiManager.updateVideoOverlays();
+                    // ВАЖНО: Если трек был добавлен в поток, сразу обновляем UI
+                    const wasAdded = remoteStream.getTracks().some(t => t.id === track.id);
+                    if (wasAdded) {
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                    }
+                    
                     setTimeout(() => {
                         this.videoCallManager.uiManager.updateVideoOverlays();
                         this.videoCallManager.checkEmptyState();
@@ -501,6 +506,10 @@ class WebRTCManager {
                     setTimeout(() => {
                         this.videoCallManager.uiManager.updateVideoOverlays();
                     }, 500);
+                    // Еще одна проверка через 1000мс для надежности
+                    setTimeout(() => {
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                    }, 1000);
                 } else {
                     // Для аудио треков - обновляем сразу
                     this.videoCallManager.uiManager.updateVideoOverlays();
