@@ -388,7 +388,7 @@ class UIManager {
                                         videoElement.load();
                                     } catch (e) {}
                                 }
-                                this.checkEmptyState();
+                                this.videoCallManager.checkEmptyState();
                             }
                         }, delay);
                     };
