@@ -180,28 +180,10 @@ class UIManager {
                     }
                 });
                 
-                // ВАЖНО: Также добавляем треки из receivers, которых нет в stream
-                // Это критично - если ontrack не сработал, треки все равно должны попасть в stream
-                receivers.forEach(receiver => {
-                    const track = receiver.track;
-                    if (track && track.enabled && !track.muted && track.readyState === 'live') {
-                        const trackInStream = stream.getTracks().find(t => t.id === track.id);
-                        if (!trackInStream) {
-                            console.log(`✅ [updateVideoOverlays] Добавляем трек ${track.kind} (${track.id}) из receivers в remoteStream для ${userId}`, {
-                                enabled: track.enabled,
-                                muted: track.muted,
-                                readyState: track.readyState
-                            });
-                            // ВАЖНО: Используем оригинальный addTrack чтобы избежать рекурсии
-                            if (stream._originalAddTrack) {
-                                stream._originalAddTrack(track);
-                            } else {
-                                MediaStream.prototype.addTrack.call(stream, track);
-                            }
-                            console.log(`✅ [updateVideoOverlays] RemoteStream теперь имеет ${stream.getTracks().length} треков:`, stream.getTracks().map(t => `${t.kind}:${t.id}`));
-                        }
-                    }
-                });
+                // ВАЖНО: НЕ добавляем треки из receivers в updateVideoOverlays
+                // Это должно происходить только в ontrack
+                // Если мы будем добавлять треки здесь, они будут конфликтовать с checkReceiversForNullTracks
+                // который удаляет треки, когда их нет в receivers
                 
                 // Удаляем треки из stream, которых нет в активных receivers
                 const streamTracks = stream.getTracks();

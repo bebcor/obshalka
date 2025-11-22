@@ -176,11 +176,16 @@ class WebRTCManager {
                     // КРИТИЧНО: Для видео треков удаляем если:
                     // 1. Receiver существует, но track === null (replaceTrack(null) был вызван)
                     // 2. Трек есть в receivers, но неактивен (disabled, muted, или не live)
+                    // НЕ удаляем если receivers пустые (receiversCount === 0) - это может быть временное состояние при переподключении
                     let shouldRemove = false;
                     let reason = '';
                     
                     if (streamTrack.kind === 'video') {
-                        if (receiver && !receiverTrack) {
+                        // ВАЖНО: Если receivers пустые, не удаляем трек - это может быть временное состояние
+                        if (receivers.length === 0) {
+                            shouldRemove = false;
+                            reason = 'receivers empty (temporary state, skipping)';
+                        } else if (receiver && !receiverTrack) {
                             // КРИТИЧНО: Receiver существует, но track === null - это означает replaceTrack(null)
                             shouldRemove = true;
                             reason = 'receiver track is null (replaceTrack(null))';
@@ -193,9 +198,9 @@ class WebRTCManager {
                                         receiverTrack.readyState !== 'live' ? 'receiver not live' : 'unknown';
                             }
                         } else {
-                            // Нет receiver для этого трека - возможно трек был удален
+                            // Нет receiver для этого трека, но receivers не пустые - трек был удален
                             shouldRemove = true;
-                            reason = 'no receiver found';
+                            reason = 'no receiver found (track removed)';
                         }
                     }
                     
