@@ -681,17 +681,47 @@ class MediaController {
             console.error('❌ Ошибка обновления видеотреков:', error);
         }
         
-        // КРИТИЧНО: Принудительно обновляем UI для всех удаленных участников
-        // Это нужно чтобы они увидели новый видео трек
+        // КРИТИЧНО: Принудительно проверяем все receivers для всех участников
+        // Это нужно чтобы они увидели новый видео трек сразу
         if (videoTrack && videoTrack.enabled) {
-            console.log('🔄 Принудительно обновляем UI для всех участников после включения камеры');
+            console.log('🔄 Принудительно проверяем receivers для всех участников после включения камеры');
             this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
-                // Сбрасываем кэш состояния для каждого участника
-                if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
-                    this.videoCallManager.uiManager._lastVideoOverlaysState.delete(userId);
+                // Принудительно проверяем все receivers и обновляем потоки
+                const receivers = peerConnection.getReceivers();
+                const remoteStream = this.videoCallManager.remoteStreams.get(userId);
+                
+                if (remoteStream) {
+                    let tracksUpdated = false;
+                    receivers.forEach(receiver => {
+                        const track = receiver.track;
+                        if (track && track.readyState === 'live') {
+                            if (!remoteStream.getTracks().some(t => t.id === track.id)) {
+                                remoteStream.addTrack(track);
+                                tracksUpdated = true;
+                                console.log(`✅ [updateVideoTracksInConnections] Добавлен трек ${track.kind} ${track.id} для ${userId}`);
+                            }
+                            
+                            // Для видео треков обновляем videoElement
+                            if (track.kind === 'video') {
+                                const videoElement = document.getElementById(`remoteVideo-${userId}`);
+                                if (videoElement) {
+                                    if (videoElement.srcObject !== remoteStream) {
+                                        videoElement.srcObject = remoteStream;
+                                    }
+                                    videoElement.play().catch(() => {});
+                                }
+                            }
+                        }
+                    });
+                    
+                    if (tracksUpdated) {
+                        // Сбрасываем кэш и обновляем UI
+                        if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                            this.videoCallManager.uiManager._lastVideoOverlaysState.delete(userId);
+                        }
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                    }
                 }
-                // Запускаем синхронизацию треков для каждого участника
-                this.videoCallManager.webrtcManager.syncTracksAfterUserJoined(userId);
             });
         }
         
