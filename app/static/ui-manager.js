@@ -209,16 +209,18 @@ class UIManager {
                 // Если мы будем добавлять треки здесь, они будут конфликтовать с checkReceiversForNullTracks
                 // который удаляет треки, когда их нет в receivers
                 
-                // Удаляем треки из stream, которых нет в активных receivers
+                // КРИТИЧНО: НЕ удаляем треки из потока если они просто muted или disabled!
+                // Удаляем ТОЛЬКО если трек ended или его нет в receivers
                 const streamTracks = stream.getTracks();
                 streamTracks.forEach(track => {
                     const receiverTrack = receivers.find(r => r.track && r.track.id === track.id)?.track;
-                    // Удаляем трек если его нет в активных receivers или он неактивен
-                    if (!activeReceiverTrackIds.has(track.id) || !receiverTrack || !receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live') {
-                        console.log(`🗑️ [updateVideoOverlays] Трек ${track.kind} (${track.id}) неактивен или отсутствует в активных receivers для ${userId}, удаляем из потока`, {
+                    // Удаляем трек ТОЛЬКО если:
+                    // 1. Трека нет в receivers вообще
+                    // 2. Трек ended
+                    // НЕ удаляем если трек просто muted или disabled - он может стать активным!
+                    if (!receiverTrack || receiverTrack.readyState === 'ended') {
+                        console.log(`🗑️ [updateVideoOverlays] Трек ${track.kind} (${track.id}) удаляем из потока для ${userId}`, {
                             hasReceiver: !!receiverTrack,
-                            enabled: receiverTrack?.enabled,
-                            muted: receiverTrack?.muted,
                             readyState: receiverTrack?.readyState
                         });
                         stream.removeTrack(track);
@@ -231,21 +233,18 @@ class UIManager {
             const videoTracks = stream.getVideoTracks();
             const audioTracks = stream.getAudioTracks();
             
-            // ВАЖНО: Удаляем неактивные видео треки (ended, disabled, или muted)
-            // Это предотвращает показ черных экранов
+            // КРИТИЧНО: НЕ удаляем треки из потока если они просто disabled или muted!
+            // Удаляем ТОЛЬКО если трек ended
+            // Треки могут быть muted временно и стать активными позже
             videoTracks.forEach(track => {
-                const isInactive = track.readyState === 'ended' || 
-                                  !track.enabled || 
-                                  track.muted;
-                if (isInactive) {
-                    console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем неактивный видео трек:`, {
+                if (track.readyState === 'ended') {
+                    console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем ended видео трек:`, {
                         id: track.id,
-                        readyState: track.readyState,
-                        enabled: track.enabled,
-                        muted: track.muted
+                        readyState: track.readyState
                     });
                     stream.removeTrack(track);
                 }
+                // НЕ удаляем если трек просто disabled или muted - он может стать активным!
             });
             
             // Для аудио удаляем только ended треки (disabled/muted аудио может снова включиться)
@@ -545,11 +544,23 @@ class UIManager {
                     lastState.videoTracksMuted.some((muted, i) => muted !== currentState.videoTracksMuted[i]) ||
                     lastState.videoTracksEnabled.some((enabled, i) => enabled !== currentState.videoTracksEnabled[i]);
                 
-                if (!tracksStateChanged) {
+                // КРИТИЧНО: Проверяем, стал ли трек активным (muted изменился с true на false)
+                const trackBecameActive = lastState.videoTracksMuted && currentState.videoTracksMuted &&
+                    lastState.videoTracksMuted.some((wasMuted, i) => 
+                        wasMuted === true && 
+                        currentState.videoTracksMuted[i] === false &&
+                        currentState.videoTracksEnabled[i] === true
+                    );
+                
+                if (!tracksStateChanged && !trackBecameActive) {
                     console.log(`⏭️ [updateVideoOverlays ${userId}] Состояние не изменилось, пропускаем обновление UI`);
                     return; // Выходим, не обновляем UI
                 } else {
-                    console.log(`🔄 [updateVideoOverlays ${userId}] Состояние треков изменилось (muted/enabled), обновляем UI`);
+                    if (trackBecameActive) {
+                        console.log(`✅ [updateVideoOverlays ${userId}] Трек стал активным (muted: true -> false), принудительно обновляем UI`);
+                    } else {
+                        console.log(`🔄 [updateVideoOverlays ${userId}] Состояние треков изменилось (muted/enabled), обновляем UI`);
+                    }
                 }
             }
             
