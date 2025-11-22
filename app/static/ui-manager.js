@@ -287,16 +287,48 @@ class UIManager {
             const activeVideoTracks = stream.getVideoTracks();
             const activeAudioTracks = stream.getAudioTracks();
             
+            // КРИТИЧНО: Дополнительная проверка - если трек в потоке неактивен, удаляем его
+            // Это нужно для случая, когда трек в receivers еще активен (задержка синхронизации),
+            // но трек в потоке уже неактивен (enabled=false или muted=true)
+            activeVideoTracks.forEach(track => {
+                const isTrackActive = track.readyState === 'live' && 
+                                     track.enabled && 
+                                     !track.muted;
+                
+                if (!isTrackActive) {
+                    console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем неактивный видео трек из потока: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
+                    stream.removeTrack(track);
+                    // Если трек в потоке неактивен, значит камера выключена
+                    hasActiveVideo = false;
+                }
+            });
+            
+            // Получаем актуальные треки ПОСЛЕ дополнительной очистки
+            const finalVideoTracks = stream.getVideoTracks();
+            const finalAudioTracks = stream.getAudioTracks();
+            
             // ВАЖНО: Проверяем наличие активного аудио
-            const hasActiveAudio = activeAudioTracks.length > 0 && 
-                                  activeAudioTracks.some(track => 
+            const hasActiveAudio = finalAudioTracks.length > 0 && 
+                                  finalAudioTracks.some(track => 
                                       track && 
                                       track.readyState === 'live' && 
                                       track.enabled && 
                                       !track.muted
                                   );
             
-            console.log(`🔍 [updateVideoOverlays ${userId}] Проверка: video=${hasActiveVideo}, audio=${hasActiveAudio}, tracks=${activeVideoTracks.length}v/${activeAudioTracks.length}a`);
+            // КРИТИЧНО: Финальная проверка - если в потоке нет активных видео треков, камера выключена
+            const hasActiveVideoInStream = finalVideoTracks.length > 0 && 
+                                          finalVideoTracks.some(track => 
+                                              track && 
+                                              track.readyState === 'live' && 
+                                              track.enabled && 
+                                              !track.muted
+                                          );
+            
+            // Видео активно ТОЛЬКО если оно активно И в receivers И в потоке
+            hasActiveVideo = hasActiveVideo && hasActiveVideoInStream;
+            
+            console.log(`🔍 [updateVideoOverlays ${userId}] Проверка: video=${hasActiveVideo}, audio=${hasActiveAudio}, tracks=${finalVideoTracks.length}v/${finalAudioTracks.length}a`);
             console.log(`🔍 [updateVideoOverlays ${userId}] Stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
             
             if (hasActiveVideo) {
