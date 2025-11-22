@@ -444,8 +444,16 @@ class WebRTCManager {
                                 console.log(`✅ [ontrack] Добавляем видео трек в поток после unmute для ${targetUserId}`);
                                 remoteStream.addTrack(track);
                             }
+                            // КРИТИЧНО: Сбрасываем кэш состояния для принудительного обновления UI
+                            if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                                this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
+                            }
                             // Обновляем UI чтобы показать видео
                             this.videoCallManager.uiManager.updateVideoOverlays();
+                            // Еще раз через небольшую задержку для надежности
+                            setTimeout(() => {
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                            }, 100);
                         }
                     };
                     
@@ -462,6 +470,8 @@ class WebRTCManager {
                         // Проверяем изменения enabled и muted
                         if (track.enabled !== lastEnabled || track.muted !== lastMuted) {
                             console.log(`🔄 [ontrack] Трек ${track.kind} состояние изменилось для ${targetUserId}: enabled ${lastEnabled}->${track.enabled}, muted ${lastMuted}->${track.muted}`);
+                            const wasMuted = lastMuted;
+                            const isNowActive = track.enabled && !track.muted;
                             lastEnabled = track.enabled;
                             lastMuted = track.muted;
                             
@@ -484,9 +494,23 @@ class WebRTCManager {
                                     // Трека нет в потоке - добавляем его
                                     remoteStream.addTrack(track);
                                 }
+                                
+                                // КРИТИЧНО: Если трек стал активным (muted изменился с true на false) - принудительно обновляем UI
+                                if (wasMuted && !track.muted && isNowActive) {
+                                    console.log(`✅ [ontrack] Видео трек стал активным для ${targetUserId}, принудительно обновляем UI`);
+                                    // Сбрасываем кэш состояния для принудительного обновления
+                                    if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                                        this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
+                                    }
+                                }
+                                
                                 // КРИТИЧНО: Обновляем UI при ЛЮБОМ изменении состояния (enabled/muted)
                                 // Это нужно чтобы показывать/скрывать видео или оверлей
                                 this.videoCallManager.uiManager.updateVideoOverlays();
+                                // Еще раз через небольшую задержку для надежности
+                                setTimeout(() => {
+                                    this.videoCallManager.uiManager.updateVideoOverlays();
+                                }, 100);
                             }
                         }
                         
@@ -514,6 +538,8 @@ class WebRTCManager {
                         // Проверяем изменения enabled/muted
                         if (track.enabled !== lastPeriodicEnabled || track.muted !== lastPeriodicMuted) {
                             console.log(`🔄 [periodicCheck] Состояние трека ${track.kind} изменилось для ${targetUserId}: enabled ${lastPeriodicEnabled}->${track.enabled}, muted ${lastPeriodicMuted}->${track.muted}`);
+                            const wasMuted = lastPeriodicMuted;
+                            const isNowActive = track.enabled && !track.muted;
                             lastPeriodicEnabled = track.enabled;
                             lastPeriodicMuted = track.muted;
                             
@@ -522,8 +548,21 @@ class WebRTCManager {
                                 remoteStream.addTrack(track);
                             }
                             
+                            // КРИТИЧНО: Если трек стал активным (muted изменился с true на false) - принудительно обновляем UI
+                            if (track.kind === 'video' && wasMuted && !track.muted && isNowActive) {
+                                console.log(`✅ [periodicCheck] Видео трек стал активным для ${targetUserId}, принудительно обновляем UI`);
+                                // Сбрасываем кэш состояния для принудительного обновления
+                                if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                                    this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
+                                }
+                            }
+                            
                             // Обновляем UI при изменении состояния
                             this.videoCallManager.uiManager.updateVideoOverlays();
+                            // Еще раз через небольшую задержку для надежности
+                            setTimeout(() => {
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                            }, 100);
                         }
                         
                         // Продолжаем проверять пока трек live

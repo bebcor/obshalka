@@ -514,23 +514,43 @@ class UIManager {
             });
             
             // ПРОВЕРКА ИЗМЕНЕНИЯ СОСТОЯНИЯ: обновляем UI только если состояние изменилось
+            // КРИТИЧНО: Проверяем также активность треков в потоке (muted/enabled)
+            const activeVideoTracksInStream = finalVideoTracks.filter(t => 
+                t && t.readyState === 'live' && t.enabled && !t.muted
+            );
             const currentState = {
                 hasActiveVideoTrackInReceivers,
                 finalHasActiveVideo,
                 hasActiveAudio,
                 videoTracksCount: finalVideoTracks.length,
                 audioTracksCount: finalAudioTracks.length,
-                cardDisplay: participantCard.style.display
+                activeVideoTracksCount: activeVideoTracksInStream.length,
+                cardDisplay: participantCard.style.display,
+                // КРИТИЧНО: Сохраняем состояние muted/enabled треков для точной проверки
+                videoTracksMuted: finalVideoTracks.map(t => t ? t.muted : null),
+                videoTracksEnabled: finalVideoTracks.map(t => t ? t.enabled : null)
             };
             const lastState = this._lastVideoOverlaysState.get(userId);
             
             // Если состояние не изменилось, пропускаем обновление UI
+            // НО проверяем также изменение muted/enabled состояния треков
             if (lastState && 
                 lastState.hasActiveVideoTrackInReceivers === currentState.hasActiveVideoTrackInReceivers &&
                 lastState.finalHasActiveVideo === currentState.finalHasActiveVideo &&
+                lastState.activeVideoTracksCount === currentState.activeVideoTracksCount &&
                 lastState.cardDisplay === currentState.cardDisplay) {
-                console.log(`⏭️ [updateVideoOverlays ${userId}] Состояние не изменилось, пропускаем обновление UI`);
-                return; // Выходим, не обновляем UI
+                // Дополнительная проверка: изменилось ли muted/enabled состояние треков
+                const tracksStateChanged = !lastState.videoTracksMuted || 
+                    lastState.videoTracksMuted.length !== currentState.videoTracksMuted.length ||
+                    lastState.videoTracksMuted.some((muted, i) => muted !== currentState.videoTracksMuted[i]) ||
+                    lastState.videoTracksEnabled.some((enabled, i) => enabled !== currentState.videoTracksEnabled[i]);
+                
+                if (!tracksStateChanged) {
+                    console.log(`⏭️ [updateVideoOverlays ${userId}] Состояние не изменилось, пропускаем обновление UI`);
+                    return; // Выходим, не обновляем UI
+                } else {
+                    console.log(`🔄 [updateVideoOverlays ${userId}] Состояние треков изменилось (muted/enabled), обновляем UI`);
+                }
             }
             
             // Сохраняем текущее состояние
