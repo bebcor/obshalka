@@ -478,6 +478,8 @@ class UIManager {
             
             // УПРОЩЕННАЯ ЛОГИКА: Показываем карточку если есть видео трек в receivers (даже если disabled)
             // Внутри карточки показываем видео или оверлей в зависимости от активности
+            // ВАЖНО: Получаем receivers перед использованием
+            const receivers = peerConnection ? peerConnection.getReceivers() : [];
             const hasVideoTrackInReceivers = peerConnection && receivers.some(r => {
                 const track = r.track;
                 return track && track.kind === 'video' && track.readyState === 'live';
