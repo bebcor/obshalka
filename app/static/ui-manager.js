@@ -245,12 +245,17 @@ class UIManager {
                 });
                 
                 // КРИТИЧНО: Проверяем, есть ли receiver с null track (replaceTrack(null) был вызван)
-                const hasNullReceiver = receivers.some(receiver => receiver.track === null);
+                // ВАЖНО: Проверяем как null, так и отсутствие трека вообще
+                const hasNullVideoReceiver = receivers.some(receiver => {
+                    // Проверяем, что это видео receiver и трек null или отсутствует
+                    const track = receiver.track;
+                    return !track || track === null;
+                });
                 
-                // Если есть null receiver И нет активного видео трека - камера выключена
-                if ((hasNullReceiver && !videoReceiver) || !videoReceiver || !videoReceiver.track) {
+                // Если нет videoReceiver или его трек null - камера выключена
+                if (!videoReceiver || !videoReceiver.track || hasNullVideoReceiver) {
                     // Нет активного видео трека в receivers - камера выключена
-                    console.log(`❌ [${userId}] Нет активного видео трека в receivers (hasNullReceiver=${hasNullReceiver}, videoReceiver=${!!videoReceiver})`);
+                    console.log(`❌ [${userId}] Нет активного видео трека в receivers (hasNullVideoReceiver=${hasNullVideoReceiver}, videoReceiver=${!!videoReceiver}, videoReceiverTrack=${!!videoReceiver?.track})`);
                     hasActiveVideo = false;
                 } else {
                     const track = videoReceiver.track;
