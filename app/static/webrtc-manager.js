@@ -4,6 +4,75 @@ class WebRTCManager {
         this.videoCallManager = videoCallManager;
     }
 
+    /**
+     * Проверяет состояние трека в receivers и синхронизирует с потоком
+     * @param {string} targetUserId - ID удаленного пользователя
+     * @param {MediaStreamTrack} track - Трек для проверки
+     * @returns {Object} { hasActiveVideo: boolean, hasActiveAudio: boolean, shouldRemove: boolean }
+     */
+    checkAndSyncTrackWithReceivers(targetUserId, track) {
+        const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
+        const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
+        
+        if (!peerConnection || !remoteStream) {
+            console.log(`⚠️ [checkAndSyncTrackWithReceivers ${targetUserId}] Нет peerConnection или remoteStream`);
+            return { hasActiveVideo: false, hasActiveAudio: false, shouldRemove: false };
+        }
+        
+        const receivers = peerConnection.getReceivers();
+        const receiverTrack = receivers.find(r => r.track && r.track.id === track.id)?.track;
+        
+        // Если трека нет в receivers - это может быть временное состояние, не удаляем сразу
+        if (!receiverTrack) {
+            console.log(`🔍 [checkAndSyncTrackWithReceivers ${targetUserId}] Трек ${track.kind} (${track.id}) не найден в receivers`);
+            return { 
+                hasActiveVideo: track.kind === 'video' && track.enabled && !track.muted && track.readyState === 'live',
+                hasActiveAudio: track.kind === 'audio' && track.enabled && !track.muted && track.readyState === 'live',
+                shouldRemove: false 
+            };
+        }
+        
+        // Проверяем состояние трека в receivers
+        const isActive = receiverTrack.enabled && 
+                        !receiverTrack.muted && 
+                        receiverTrack.readyState === 'live';
+        
+        console.log(`🔍 [checkAndSyncTrackWithReceivers ${targetUserId}] Трек ${track.kind} (${track.id}):`, {
+            receiverEnabled: receiverTrack.enabled,
+            receiverMuted: receiverTrack.muted,
+            receiverReadyState: receiverTrack.readyState,
+            streamEnabled: track.enabled,
+            streamMuted: track.muted,
+            streamReadyState: track.readyState,
+            isActive: isActive
+        });
+        
+        // Для видео треков: если трек неактивен в receivers, удаляем из потока
+        if (track.kind === 'video') {
+            if (!isActive) {
+                // Трек неактивен - удаляем из потока
+                if (remoteStream.getTracks().includes(track)) {
+                    console.log(`🗑️ [checkAndSyncTrackWithReceivers ${targetUserId}] Удаляем неактивный видео трек из потока`);
+                    remoteStream.removeTrack(track);
+                    return { hasActiveVideo: false, hasActiveAudio: false, shouldRemove: true };
+                }
+            }
+            return { hasActiveVideo: isActive, hasActiveAudio: false, shouldRemove: false };
+        }
+        
+        // Для аудио треков
+        if (track.kind === 'audio') {
+            if (!isActive && remoteStream.getTracks().includes(track)) {
+                console.log(`🗑️ [checkAndSyncTrackWithReceivers ${targetUserId}] Удаляем неактивный аудио трек из потока`);
+                remoteStream.removeTrack(track);
+                return { hasActiveVideo: false, hasActiveAudio: false, shouldRemove: true };
+            }
+            return { hasActiveVideo: false, hasActiveAudio: isActive, shouldRemove: false };
+        }
+        
+        return { hasActiveVideo: false, hasActiveAudio: false, shouldRemove: false };
+    }
+
     setupPeerConnection(targetUserId) {
         // Проверяем, нет ли уже соединения с этим пользователем
         if (this.videoCallManager.remoteUsers.has(targetUserId)) {
@@ -223,6 +292,15 @@ class WebRTCManager {
                     console.log(`✅ [ontrack] Добавлен трек ${track.kind} (${track.id}) для ${targetUserId}, enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
                     console.log(`✅ [ontrack] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}`));
                     
+                    // ВАЖНО: Сразу проверяем состояние трека в receivers и синхронизируем
+                    const checkResult = this.checkAndSyncTrackWithReceivers(targetUserId, track);
+                    if (checkResult.shouldRemove) {
+                        // Трек был удален из потока - сразу обновляем UI
+                        console.log(`🔄 [ontrack ${targetUserId}] Трек был удален из потока, обновляем UI`);
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                        this.videoCallManager.checkEmptyState();
+                    }
+                    
                     // Простые обработчики: только добавляют/удаляют треки из потока
                     track.onended = () => {
                         console.log(`🗑️ [ontrack] Трек ${track.kind} завершился для ${targetUserId}`);
@@ -238,6 +316,8 @@ class WebRTCManager {
                         // Для видео треков: удаляем из потока при mute
                         if (track.kind === 'video' && remoteStream.getTracks().includes(track)) {
                             remoteStream.removeTrack(track);
+                            // Проверяем состояние в receivers
+                            this.checkAndSyncTrackWithReceivers(targetUserId, track);
                             this.videoCallManager.uiManager.updateVideoOverlays();
                             this.videoCallManager.checkEmptyState();
                         }
@@ -248,6 +328,8 @@ class WebRTCManager {
                         // Для видео треков: добавляем обратно в поток при unmute, если enabled
                         if (track.kind === 'video' && track.enabled && !remoteStream.getTracks().includes(track)) {
                             remoteStream.addTrack(track);
+                            // Проверяем состояние в receivers
+                            const checkResult = this.checkAndSyncTrackWithReceivers(targetUserId, track);
                             this.videoCallManager.uiManager.updateVideoOverlays();
                             this.videoCallManager.checkEmptyState();
                         }
@@ -255,23 +337,29 @@ class WebRTCManager {
                     
                     // Отслеживаем изменения enabled через периодическую проверку
                     let lastEnabled = track.enabled;
+                    let lastMuted = track.muted;
                     const checkEnabled = () => {
                         if (!remoteStream.getTracks().includes(track)) {
                             return; // Трек уже удален
                         }
                         
-                        if (track.enabled !== lastEnabled) {
-                            console.log(`🔄 [ontrack] Трек ${track.kind} enabled изменился для ${targetUserId}: ${lastEnabled} -> ${track.enabled}`);
+                        // Проверяем изменения enabled и muted
+                        if (track.enabled !== lastEnabled || track.muted !== lastMuted) {
+                            console.log(`🔄 [ontrack] Трек ${track.kind} состояние изменилось для ${targetUserId}: enabled ${lastEnabled}->${track.enabled}, muted ${lastMuted}->${track.muted}`);
                             lastEnabled = track.enabled;
+                            lastMuted = track.muted;
                             
-                            if (!track.enabled) {
-                                // Трек выключен - удаляем из потока
-                                if (track.kind === 'video') {
+                            // Проверяем состояние в receivers и синхронизируем
+                            const checkResult = this.checkAndSyncTrackWithReceivers(targetUserId, track);
+                            
+                            if (!track.enabled || track.muted) {
+                                // Трек выключен или muted - удаляем из потока
+                                if (track.kind === 'video' && remoteStream.getTracks().includes(track)) {
                                     remoteStream.removeTrack(track);
                                     this.videoCallManager.uiManager.updateVideoOverlays();
                                     this.videoCallManager.checkEmptyState();
                                 }
-                            } else if (track.kind === 'video' && !track.muted && !remoteStream.getTracks().includes(track)) {
+                            } else if (track.kind === 'video' && !remoteStream.getTracks().includes(track)) {
                                 // Трек включен и не muted - добавляем обратно
                                 remoteStream.addTrack(track);
                                 this.videoCallManager.uiManager.updateVideoOverlays();
@@ -288,6 +376,29 @@ class WebRTCManager {
                     // Запускаем проверку enabled
                     if (track.readyState === 'live') {
                         setTimeout(checkEnabled, 200);
+                    }
+                    
+                    // ВАЖНО: Периодически проверяем состояние трека в receivers
+                    // Это нужно для синхронизации когда трек становится неактивным на удаленной стороне
+                    const periodicCheck = () => {
+                        if (!remoteStream.getTracks().includes(track)) {
+                            return; // Трек уже удален
+                        }
+                        
+                        const checkResult = this.checkAndSyncTrackWithReceivers(targetUserId, track);
+                        if (checkResult.shouldRemove) {
+                            // Трек был удален - обновляем UI
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.checkEmptyState();
+                        } else if (track.readyState === 'live') {
+                            // Продолжаем проверять
+                            setTimeout(periodicCheck, 500);
+                        }
+                    };
+                    
+                    // Запускаем периодическую проверку
+                    if (track.readyState === 'live') {
+                        setTimeout(periodicCheck, 500);
                     }
                 }
                 
