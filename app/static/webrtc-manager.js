@@ -988,6 +988,11 @@ class WebRTCManager {
             checkReceivers(100);
             checkReceivers(300);
             checkReceivers(500);
+            
+            // КРИТИЧНО: После создания answer также синхронизируем треки
+            setTimeout(() => {
+                this.syncTracksAfterUserJoined(data.sender_id);
+            }, 600);
         
             console.log('📤 [handleWebRTCOffer] Sending answer to:', data.sender_id);
             console.log('Answer transceivers:');
@@ -1127,10 +1132,87 @@ class WebRTCManager {
             checkReceivers(100);
             checkReceivers(300);
             checkReceivers(500);
+            
+            // КРИТИЧНО: После получения answer также синхронизируем треки
+            setTimeout(() => {
+                this.syncTracksAfterUserJoined(data.sender_id);
+            }, 600);
         
         } catch (error) {
             console.error('Error handling WebRTC answer:', error);
         }
+    }
+    
+    // КРИТИЧНО: Синхронизация треков после подключения пользователя
+    // Вызывается при событии user_joined для проверки receivers и обновления треков
+    syncTracksAfterUserJoined(targetUserId) {
+        console.log(`🔄 [syncTracksAfterUserJoined] Синхронизация треков для ${targetUserId}`);
+        
+        const peerConnection = this.remoteUsers.get(targetUserId);
+        if (!peerConnection) {
+            console.warn(`⚠️ [syncTracksAfterUserJoined] Нет peer connection для ${targetUserId}`);
+            return;
+        }
+        
+        // Проверяем receivers с несколькими задержками для надежности
+        const checkAndSync = (delay) => {
+            setTimeout(() => {
+                if (!this.remoteUsers.has(targetUserId)) {
+                    return; // Соединение закрыто
+                }
+                
+                const receivers = peerConnection.getReceivers();
+                console.log(`🔍 [syncTracksAfterUserJoined ${targetUserId}] Проверка receivers (delay=${delay}ms):`, receivers.length);
+                
+                // Убеждаемся что remoteStream существует
+                if (!this.videoCallManager.remoteStreams.has(targetUserId)) {
+                    const remoteStream = new MediaStream();
+                    this.videoCallManager.remoteStreams.set(targetUserId, remoteStream);
+                    this.videoCallManager.uiManager.createRemoteVideoElement(targetUserId, remoteStream);
+                }
+                const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
+                
+                // Проверяем все receivers и добавляем треки в поток
+                receivers.forEach((receiver, index) => {
+                    const track = receiver.track;
+                    if (!track) {
+                        console.log(`⚠️ [syncTracksAfterUserJoined ${targetUserId}] Receiver ${index} имеет null track`);
+                        return;
+                    }
+                    
+                    console.log(`🔍 [syncTracksAfterUserJoined ${targetUserId}] Receiver ${index}: kind=${track.kind}, enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
+                    
+                    // Добавляем треки в поток если они live (даже если disabled или muted)
+                    if (track.readyState === 'live' && !remoteStream.getTracks().some(t => t.id === track.id)) {
+                        remoteStream.addTrack(track);
+                        console.log(`✅ [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} добавлен в поток`);
+                        
+                        // Для видео треков устанавливаем srcObject и обновляем UI
+                        if (track.kind === 'video') {
+                            const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                            if (videoElement && videoElement.srcObject !== remoteStream) {
+                                console.log(`🔄 [syncTracksAfterUserJoined ${targetUserId}] Устанавливаем srcObject для videoElement`);
+                                videoElement.srcObject = remoteStream;
+                                videoElement.play().catch(err => {
+                                    if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
+                                        console.warn(`⚠️ [syncTracksAfterUserJoined ${targetUserId}] Ошибка play:`, err);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                });
+                
+                // Обновляем UI после синхронизации
+                this.videoCallManager.uiManager.updateVideoOverlays();
+            }, delay);
+        };
+        
+        // Проверяем с несколькими задержками для надежности
+        checkAndSync(100);
+        checkAndSync(300);
+        checkAndSync(500);
+        checkAndSync(1000);
     }
 
     async handleICECandidate(data) {

@@ -967,7 +967,11 @@ class VideoCallManager {
                     
                     // Создаем offer только если соединение в стабильном состоянии
                     if (signalingState === 'stable') {
-                        this.webrtcManager.createOffer(data.user_id).catch(err => {
+                        this.webrtcManager.createOffer(data.user_id).then(() => {
+                            // КРИТИЧНО: После создания offer проверяем receivers и синхронизируем треки
+                            console.log(`🔄 [handleUserJoined] Проверяем receivers и синхронизируем треки для ${data.user_id}`);
+                            this.webrtcManager.syncTracksAfterUserJoined(data.user_id);
+                        }).catch(err => {
                             console.error(`❌ Ошибка создания offer для ${data.user_id}:`, err);
                         });
                     } else {
@@ -977,7 +981,11 @@ class VideoCallManager {
                                 const newState = this.remoteUsers.get(data.user_id).signalingState;
                                 if (newState === 'stable') {
                                     console.log(`📤 Создаем offer для ${data.user_id} после ожидания`);
-                                    this.webrtcManager.createOffer(data.user_id).catch(err => {
+                                    this.webrtcManager.createOffer(data.user_id).then(() => {
+                                        // КРИТИЧНО: После создания offer проверяем receivers и синхронизируем треки
+                                        console.log(`🔄 [handleUserJoined] Проверяем receivers и синхронизируем треки для ${data.user_id}`);
+                                        this.webrtcManager.syncTracksAfterUserJoined(data.user_id);
+                                    }).catch(err => {
                                         console.error(`❌ Ошибка создания offer для ${data.user_id}:`, err);
                                     });
                                 }
