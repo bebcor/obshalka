@@ -159,10 +159,12 @@ class WebRTCManager {
                 const streamTracks = remoteStream.getTracks();
                 streamTracks.forEach(streamTrack => {
                     // Ищем соответствующий трек в receivers
-                    const receiverTrack = receivers.find(r => r.track && r.track.id === streamTrack.id)?.track;
+                    const receiver = receivers.find(r => r.track && r.track.id === streamTrack.id);
+                    const receiverTrack = receiver?.track;
                     
                     console.log(`🔍 [checkReceiversForNullTracks ${targetUserId}] Проверка трека ${streamTrack.kind} (${streamTrack.id}):`, {
-                        hasReceiver: !!receiverTrack,
+                        hasReceiver: !!receiver,
+                        receiverTrackIsNull: receiver && !receiverTrack,
                         receiverEnabled: receiverTrack?.enabled,
                         receiverMuted: receiverTrack?.muted,
                         receiverReadyState: receiverTrack?.readyState,
@@ -171,30 +173,42 @@ class WebRTCManager {
                         streamReadyState: streamTrack.readyState
                     });
                     
-                    // ВАЖНО: Для видео треков удаляем ТОЛЬКО если:
-                    // 1. Трек есть в receivers, но неактивен (disabled, muted, или не live)
-                    // 2. Трек в remoteStream показывает активное состояние, но в receivers неактивен
-                    // НЕ удаляем если receiverTrack === null - это может быть временное состояние при инициализации
-                    const shouldRemove = streamTrack.kind === 'video' && receiverTrack && (
-                                        !receiverTrack.enabled || 
-                                        receiverTrack.muted || 
-                                        receiverTrack.readyState !== 'live'
-                                    );
+                    // КРИТИЧНО: Для видео треков удаляем если:
+                    // 1. Receiver существует, но track === null (replaceTrack(null) был вызван)
+                    // 2. Трек есть в receivers, но неактивен (disabled, muted, или не live)
+                    let shouldRemove = false;
+                    let reason = '';
+                    
+                    if (streamTrack.kind === 'video') {
+                        if (receiver && !receiverTrack) {
+                            // КРИТИЧНО: Receiver существует, но track === null - это означает replaceTrack(null)
+                            shouldRemove = true;
+                            reason = 'receiver track is null (replaceTrack(null))';
+                        } else if (receiverTrack) {
+                            // Трек есть, но неактивен
+                            if (!receiverTrack.enabled || receiverTrack.muted || receiverTrack.readyState !== 'live') {
+                                shouldRemove = true;
+                                reason = !receiverTrack.enabled ? 'receiver disabled' :
+                                        receiverTrack.muted ? 'receiver muted' :
+                                        receiverTrack.readyState !== 'live' ? 'receiver not live' : 'unknown';
+                            }
+                        } else {
+                            // Нет receiver для этого трека - возможно трек был удален
+                            shouldRemove = true;
+                            reason = 'no receiver found';
+                        }
+                    }
                     
                     if (shouldRemove) {
-                        console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] УДАЛЯЕМ трек ${streamTrack.kind} (${streamTrack.id}) из потока`, {
-                            hasReceiver: !!receiverTrack,
+                        console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] УДАЛЯЕМ трек ${streamTrack.kind} (${streamTrack.id}) из потока: ${reason}`, {
+                            hasReceiver: !!receiver,
+                            receiverTrackIsNull: receiver && !receiverTrack,
                             receiverEnabled: receiverTrack?.enabled,
                             receiverMuted: receiverTrack?.muted,
                             receiverReadyState: receiverTrack?.readyState,
                             streamEnabled: streamTrack.enabled,
                             streamMuted: streamTrack.muted,
-                            streamReadyState: streamTrack.readyState,
-                            reason: !receiverTrack ? 'no receiver' : 
-                                   !receiverTrack.enabled ? 'receiver disabled' :
-                                   receiverTrack.muted ? 'receiver muted' :
-                                   receiverTrack.readyState !== 'live' ? 'receiver not live' :
-                                   'stream active but receiver inactive'
+                            streamReadyState: streamTrack.readyState
                         });
                         remoteStream.removeTrack(streamTrack);
                         hasChanges = true;
@@ -209,19 +223,31 @@ class WebRTCManager {
                     const currentTrack = receiver.track;
                     const previousTrackId = previousReceiverTracks.get(index);
                     
-                    // ВАЖНО: Если трек БЫЛ (previousTrackId существует), но стал null - это означает replaceTrack(null) был вызван
-                    // Немедленно удаляем соответствующий видео трек из потока
-                    if (previousTrackId && !currentTrack) {
-                        console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] Receiver ${index} трек ${previousTrackId} заменен на null (replaceTrack(null)), удаляем из потока`);
-                        const tracksToRemove = remoteStream.getTracks().filter(t => t.id === previousTrackId && t.kind === 'video');
-                        if (tracksToRemove.length > 0) {
-                            tracksToRemove.forEach(track => {
-                                console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] Удаляем видео трек ${track.id} из потока (replaceTrack(null))`);
-                                remoteStream.removeTrack(track);
-                                hasChanges = true;
-                            });
+                    // КРИТИЧНО: Если receiver.track === null для видео receiver - это означает replaceTrack(null)
+                    // Удаляем все видео треки из потока, которые могут соответствовать этому receiver
+                    if (!currentTrack && receiver.track === null) {
+                        // Проверяем, есть ли видео треки в потоке, которые могут быть от этого receiver
+                        // Если previousTrackId известен - удаляем конкретный трек
+                        if (previousTrackId) {
+                            const tracksToRemove = remoteStream.getTracks().filter(t => t.id === previousTrackId && t.kind === 'video');
+                            if (tracksToRemove.length > 0) {
+                                tracksToRemove.forEach(track => {
+                                    console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] Receiver ${index} трек ${previousTrackId} заменен на null (replaceTrack(null)), удаляем из потока`);
+                                    remoteStream.removeTrack(track);
+                                    hasChanges = true;
+                                });
+                            }
                         } else {
-                            console.log(`⚠️ [checkReceiversForNullTracks ${targetUserId}] Трек ${previousTrackId} был заменен на null, но его нет в remoteStream`);
+                            // Если previousTrackId неизвестен, но receiver.track === null и это видео receiver
+                            // Удаляем все видео треки из потока (более агрессивный подход)
+                            const videoTracks = remoteStream.getVideoTracks();
+                            if (videoTracks.length > 0) {
+                                console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] Receiver ${index} track === null (replaceTrack(null)), удаляем все видео треки из потока`);
+                                videoTracks.forEach(track => {
+                                    remoteStream.removeTrack(track);
+                                    hasChanges = true;
+                                });
+                            }
                         }
                     }
                     
