@@ -524,9 +524,7 @@ class UIManager {
                 cardDisplay: participantCard.style.display,
                 // КРИТИЧНО: Сохраняем состояние muted/enabled треков для точной проверки
                 videoTracksMuted: finalVideoTracks.map(t => t ? t.muted : null),
-                videoTracksEnabled: finalVideoTracks.map(t => t ? t.enabled : null),
-                videoTrackIds,
-                audioTrackIds
+                videoTracksEnabled: finalVideoTracks.map(t => t ? t.enabled : null)
             };
             const lastState = this._lastVideoOverlaysState.get(userId);
             
@@ -543,14 +541,6 @@ class UIManager {
                     lastState.videoTracksMuted.some((muted, i) => muted !== currentState.videoTracksMuted[i]) ||
                     lastState.videoTracksEnabled.some((enabled, i) => enabled !== currentState.videoTracksEnabled[i]);
                 
-                const videoTrackIdsChanged = !lastState.videoTrackIds ||
-                    lastState.videoTrackIds.length !== currentState.videoTrackIds.length ||
-                    lastState.videoTrackIds.some((id, i) => id !== currentState.videoTrackIds[i]);
-                
-                const audioTrackIdsChanged = !lastState.audioTrackIds ||
-                    lastState.audioTrackIds.length !== currentState.audioTrackIds.length ||
-                    lastState.audioTrackIds.some((id, i) => id !== currentState.audioTrackIds[i]);
-                
                 // КРИТИЧНО: Проверяем, стал ли трек активным (muted изменился с true на false)
                 const trackBecameActive = lastState.videoTracksMuted && currentState.videoTracksMuted &&
                     lastState.videoTracksMuted.some((wasMuted, i) => 
@@ -559,14 +549,12 @@ class UIManager {
                         currentState.videoTracksEnabled[i] === true
                     );
                 
-                if (!tracksStateChanged && !trackBecameActive && !videoTrackIdsChanged && !audioTrackIdsChanged) {
+                if (!tracksStateChanged && !trackBecameActive) {
                     console.log(`⏭️ [updateVideoOverlays ${userId}] Состояние не изменилось, пропускаем обновление UI`);
                     return; // Выходим, не обновляем UI
                 } else {
                     if (trackBecameActive) {
                         console.log(`✅ [updateVideoOverlays ${userId}] Трек стал активным (muted: true -> false), принудительно обновляем UI`);
-                    } else if (videoTrackIdsChanged || audioTrackIdsChanged) {
-                        console.log(`🔄 [updateVideoOverlays ${userId}] Изменился набор треков (video/audio), обновляем UI`);
                     } else {
                         console.log(`🔄 [updateVideoOverlays ${userId}] Состояние треков изменилось (muted/enabled), обновляем UI`);
                     }
@@ -903,16 +891,6 @@ class UIManager {
         
         const videoElement = document.getElementById(`remoteVideo-${userId}`);
         if (videoElement) {
-            // ВАЖНО: По умолчанию проигрываем удаленное видео БЕЗ звука, чтобы браузер позволил автозапуск
-            // Пользователь сможет включить звук вручную по кнопке "Нажми для звука"
-            videoElement.muted = true;
-            videoElement.defaultMuted = true;
-            videoElement.volume = 0;
-            videoElement.setAttribute('muted', 'muted');
-            
-            // Показываем кнопку активации звука сразу
-            this.showAudioActivationButton(videoElement, userId);
-            
             // ВАЖНО: НЕ устанавливаем srcObject сразу - это сделает updateVideoOverlays()
             // после проверки состояния треков
             // videoElement.srcObject = stream;
@@ -1065,14 +1043,6 @@ class UIManager {
     showAudioActivationButton(videoElement, userId) {
         const participantCard = document.getElementById(`participant-${userId}`);
         if (!participantCard || !videoElement) return;
-        // Если звук уже активирован, ничего не делаем
-        if (!videoElement.muted) {
-            const oldBtn = participantCard.querySelector('.audio-activation-btn');
-            if (oldBtn) {
-                oldBtn.remove();
-            }
-            return;
-        }
     
         // Удаляем старую кнопку если есть
         const oldBtn = participantCard.querySelector('.audio-activation-btn');
@@ -1096,20 +1066,11 @@ class UIManager {
         `;
     
         activateBtn.addEventListener('click', async () => {
-            activateBtn.disabled = true;
             try {
-                // Включаем звук
-                videoElement.muted = false;
-                videoElement.defaultMuted = false;
-                videoElement.volume = 1;
-                videoElement.removeAttribute('muted');
-                
                 await videoElement.play();
                 activateBtn.remove();
-                console.log('✅ Звук активирован для:', userId);
             } catch (error) {
                 console.error('Ошибка активации звука:', error);
-                activateBtn.disabled = false;
             }
         });
     
