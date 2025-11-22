@@ -906,8 +906,19 @@ class VideoCallManager {
                                 if (peerConnection.signalingState === 'stable') {
                                     this.webrtcManager.createOffer(participant.socket_id).then(() => {
                                         // КРИТИЧНО: После создания offer синхронизируем треки для существующих участников
+                                        // Делаем это несколько раз с разными задержками для надежности
                                         console.log(`🔄 [handleRoomInfo] Синхронизируем треки для ${participant.socket_id}`);
-                                        this.webrtcManager.syncTracksAfterUserJoined(participant.socket_id);
+                                        const syncExisting = (delay) => {
+                                            setTimeout(() => {
+                                                this.webrtcManager.syncTracksAfterUserJoined(participant.socket_id);
+                                            }, delay);
+                                        };
+                                        syncExisting(200);
+                                        syncExisting(500);
+                                        syncExisting(1000);
+                                        syncExisting(2000);
+                                        syncExisting(3000);
+                                        syncExisting(5000);
                                     }).catch(err => {
                                         console.error(`Ошибка создания offer для ${participant.socket_id}:`, err);
                                     });
@@ -969,13 +980,24 @@ class VideoCallManager {
                     const signalingState = peerConnection.signalingState;
                     console.log(`📤 Создаем offer для нового пользователя ${data.user_id}, signalingState: ${signalingState}`);
                     
-                    // Создаем offer только если соединение в стабильном состоянии
-                    if (signalingState === 'stable') {
-                        this.webrtcManager.createOffer(data.user_id).then(() => {
-                            // КРИТИЧНО: После создания offer проверяем receivers и синхронизируем треки
-                            // Это нужно чтобы увидеть видео нового пользователя
-                            console.log(`🔄 [handleUserJoined] Проверяем receivers и синхронизируем треки для ${data.user_id}`);
-                            this.webrtcManager.syncTracksAfterUserJoined(data.user_id);
+                        // Создаем offer только если соединение в стабильном состоянии
+                        if (signalingState === 'stable') {
+                            this.webrtcManager.createOffer(data.user_id).then(() => {
+                                // КРИТИЧНО: После создания offer проверяем receivers и синхронизируем треки
+                                // Это нужно чтобы увидеть видео нового пользователя
+                                // Делаем это несколько раз с разными задержками для надежности
+                                console.log(`🔄 [handleUserJoined] Проверяем receivers и синхронизируем треки для ${data.user_id}`);
+                                const syncNewUser = (delay) => {
+                                    setTimeout(() => {
+                                        this.webrtcManager.syncTracksAfterUserJoined(data.user_id);
+                                    }, delay);
+                                };
+                                syncNewUser(200);
+                                syncNewUser(500);
+                                syncNewUser(1000);
+                                syncNewUser(2000);
+                                syncNewUser(3000);
+                                syncNewUser(5000);
                             
                             // КРИТИЧНО: Также синхронизируем треки для ВСЕХ существующих участников
                             // Это нужно чтобы они увидели видео нового пользователя
@@ -991,6 +1013,8 @@ class VideoCallManager {
                                     });
                                 }, delay);
                             };
+                            // Синхронизируем сразу и с несколькими задержками
+                            syncAllExisting(200);
                             syncAllExisting(500);
                             syncAllExisting(1000);
                             syncAllExisting(2000);
@@ -1009,8 +1033,19 @@ class VideoCallManager {
                                     this.webrtcManager.createOffer(data.user_id).then(() => {
                                         // КРИТИЧНО: После создания offer проверяем receivers и синхронизируем треки
                                         // Это нужно чтобы увидеть видео нового пользователя
+                                        // Делаем это несколько раз с разными задержками для надежности
                                         console.log(`🔄 [handleUserJoined] Проверяем receivers и синхронизируем треки для ${data.user_id}`);
-                                        this.webrtcManager.syncTracksAfterUserJoined(data.user_id);
+                                        const syncNewUser = (delay) => {
+                                            setTimeout(() => {
+                                                this.webrtcManager.syncTracksAfterUserJoined(data.user_id);
+                                            }, delay);
+                                        };
+                                        syncNewUser(200);
+                                        syncNewUser(500);
+                                        syncNewUser(1000);
+                                        syncNewUser(2000);
+                                        syncNewUser(3000);
+                                        syncNewUser(5000);
                                         
                                         // КРИТИЧНО: Также синхронизируем треки для ВСЕХ существующих участников
                                         // Это нужно чтобы они увидели видео нового пользователя
