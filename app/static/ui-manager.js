@@ -232,8 +232,9 @@ class UIManager {
                 }
             });
             
-            // КРИТИЧНО: Проверяем receivers ПЕРЕД проверкой потока - это единственный надежный источник истины
-            // Если в receivers нет активного видео трека (или receiver.track === null), удаляем все видео треки из потока
+            // КРИТИЧНО: Проверяем receivers - это единственный надежный источник истины
+            // ВАЖНО: НЕ удаляем треки из потока здесь - это делает checkReceiversForNullTracks
+            // Здесь только проверяем наличие активного видео и добавляем треки из receivers в поток, если их там нет
             let hasActiveVideo = false;
             if (peerConnection) {
                 const receivers = peerConnection.getReceivers();
@@ -244,18 +245,12 @@ class UIManager {
                 });
                 
                 // КРИТИЧНО: Проверяем, есть ли receiver с null track (replaceTrack(null) был вызван)
-                // Если receiver.track === null, это означает что трек был заменен на null
                 const hasNullReceiver = receivers.some(receiver => receiver.track === null);
                 
                 // Если есть null receiver И нет активного видео трека - камера выключена
                 if ((hasNullReceiver && !videoReceiver) || !videoReceiver || !videoReceiver.track) {
-                    // Нет активного видео трека в receivers - удаляем все видео треки из потока
-                    console.log(`🗑️ [${userId}] Нет активного видео трека в receivers (hasNullReceiver=${hasNullReceiver}, videoReceiver=${!!videoReceiver}), удаляем все видео треки из потока`);
-                    const videoTracks = stream.getVideoTracks();
-                    videoTracks.forEach(track => {
-                        console.log(`🗑️ [${userId}] Удаляем видео трек ${track.id} из потока (нет активного трека в receivers)`);
-                        stream.removeTrack(track);
-                    });
+                    // Нет активного видео трека в receivers - камера выключена
+                    console.log(`❌ [${userId}] Нет активного видео трека в receivers (hasNullReceiver=${hasNullReceiver}, videoReceiver=${!!videoReceiver})`);
                     hasActiveVideo = false;
                 } else {
                     const track = videoReceiver.track;
@@ -264,43 +259,25 @@ class UIManager {
                                    track.enabled && 
                                    !track.muted;
                     
-                    // КРИТИЧНО: Если трек есть, но он disabled или muted - камера выключена, удаляем из потока
-                    if (!hasActiveVideo) {
-                        console.log(`🗑️ [${userId}] Видео трек в receivers неактивен: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}, удаляем из потока`);
-                        const videoTracks = stream.getVideoTracks().filter(t => t.id === track.id);
-                        videoTracks.forEach(t => stream.removeTrack(t));
+                    // ВАЖНО: Если трек активен в receivers, но его нет в потоке - добавляем его
+                    const trackInStream = stream.getTracks().find(t => t.id === track.id);
+                    if (hasActiveVideo && !trackInStream) {
+                        console.log(`✅ [${userId}] Добавляем активный видео трек из receivers в поток`);
+                        stream.addTrack(track);
                     }
                 }
             } else {
-                // Нет peer connection - камера выключена, удаляем все видео треки
-                console.log(`🗑️ [${userId}] Нет peer connection - камера выключена, удаляем все видео треки`);
-                const videoTracks = stream.getVideoTracks();
-                videoTracks.forEach(track => stream.removeTrack(track));
+                // Нет peer connection - камера выключена
+                console.log(`❌ [${userId}] Нет peer connection - камера выключена`);
+                hasActiveVideo = false;
             }
             
-            // Получаем актуальные треки ПОСЛЕ очистки
-            const activeVideoTracks = stream.getVideoTracks();
-            const activeAudioTracks = stream.getAudioTracks();
-            
-            // КРИТИЧНО: Дополнительная проверка - если трек в потоке неактивен, удаляем его
-            // Это нужно для случая, когда трек в receivers еще активен (задержка синхронизации),
-            // но трек в потоке уже неактивен (enabled=false или muted=true)
-            activeVideoTracks.forEach(track => {
-                const isTrackActive = track.readyState === 'live' && 
-                                     track.enabled && 
-                                     !track.muted;
-                
-                if (!isTrackActive) {
-                    console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем неактивный видео трек из потока: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
-                    stream.removeTrack(track);
-                    // Если трек в потоке неактивен, значит камера выключена
-                    hasActiveVideo = false;
-                }
-            });
-            
-            // Получаем актуальные треки ПОСЛЕ дополнительной очистки
+            // Получаем актуальные треки
             const finalVideoTracks = stream.getVideoTracks();
             const finalAudioTracks = stream.getAudioTracks();
+            
+            // ВАЖНО: НЕ удаляем треки из потока здесь - это делает checkReceiversForNullTracks
+            // Здесь только проверяем наличие активных треков для определения hasActiveVideo
             
             // ВАЖНО: Проверяем наличие активного аудио
             const hasActiveAudio = finalAudioTracks.length > 0 && 
