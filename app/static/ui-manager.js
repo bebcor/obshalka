@@ -2,6 +2,9 @@
 class UIManager {
     constructor(videoCallManager) {
         this.videoCallManager = videoCallManager;
+        // Debounce для updateVideoOverlays
+        this._updateVideoOverlaysTimeout = null;
+        this._lastVideoOverlaysState = new Map(); // Сохраняем последнее состояние для каждого userId
     }
 
     getRandomAnimalName() {
@@ -68,6 +71,27 @@ class UIManager {
     }
 
     updateVideoOverlays() {
+        // DEBOUNCE: отменяем предыдущий вызов если он еще не выполнился
+        if (this._updateVideoOverlaysTimeout) {
+            clearTimeout(this._updateVideoOverlaysTimeout);
+        }
+        
+        // ЗАЩИТА ОТ РЕКУРСИИ: если уже выполняется обновление, пропускаем
+        if (this._updatingVideoOverlays) {
+            // Планируем повторный вызов после завершения текущего
+            this._updateVideoOverlaysTimeout = setTimeout(() => {
+                this.updateVideoOverlays();
+            }, 100);
+            return;
+        }
+        
+        // DEBOUNCE: выполняем обновление с небольшой задержкой
+        this._updateVideoOverlaysTimeout = setTimeout(() => {
+            this._updateVideoOverlaysInternal();
+        }, 50);
+    }
+    
+    _updateVideoOverlaysInternal() {
         // ЗАЩИТА ОТ РЕКУРСИИ: если уже выполняется обновление, пропускаем
         if (this._updatingVideoOverlays) {
             return;
@@ -485,6 +509,29 @@ class UIManager {
                 return track && track.kind === 'video' && track.readyState === 'live';
             });
             
+            // ПРОВЕРКА ИЗМЕНЕНИЯ СОСТОЯНИЯ: обновляем UI только если состояние изменилось
+            const currentState = {
+                hasVideoTrackInReceivers,
+                finalHasActiveVideo,
+                hasActiveAudio,
+                videoTracksCount: finalVideoTracks.length,
+                audioTracksCount: finalAudioTracks.length,
+                cardDisplay: participantCard.style.display
+            };
+            const lastState = this._lastVideoOverlaysState.get(userId);
+            
+            // Если состояние не изменилось, пропускаем обновление UI
+            if (lastState && 
+                lastState.hasVideoTrackInReceivers === currentState.hasVideoTrackInReceivers &&
+                lastState.finalHasActiveVideo === currentState.finalHasActiveVideo &&
+                lastState.cardDisplay === currentState.cardDisplay) {
+                console.log(`⏭️ [updateVideoOverlays ${userId}] Состояние не изменилось, пропускаем обновление UI`);
+                return; // Выходим, не обновляем UI
+            }
+            
+            // Сохраняем текущее состояние
+            this._lastVideoOverlaysState.set(userId, currentState);
+            
             console.log(`🔍 [updateVideoOverlays ${userId}] Проверка: hasVideoTrackInReceivers=${hasVideoTrackInReceivers}, finalHasActiveVideo=${finalHasActiveVideo}, audio=${hasActiveAudio}, tracks=${finalVideoTracks.length}v/${finalAudioTracks.length}a`);
             console.log(`🔍 [updateVideoOverlays ${userId}] Stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
             
@@ -583,60 +630,8 @@ class UIManager {
                         }
                     }
                     
-                    // ВАЖНО: Периодически проверяем, что видео действительно активно
-                    // Это нужно для случая, когда трек становится неактивным после показа карточки
-                    // Но проверка уже выполнена выше, поэтому здесь только дополнительная проверка
-                    setTimeout(() => {
-                        // Проверяем, что соединение все еще существует
-                        const peerConnection = this.videoCallManager.remoteUsers.get(userId);
-                        if (!peerConnection) {
-                            return; // Соединение закрыто, не проверяем
-                        }
-                        
-                        // Проверяем состояние треков в потоке
-                        const videoTracks = stream.getVideoTracks();
-                        const hasActiveTracks = videoTracks.some(t => t.enabled && !t.muted && t.readyState === 'live');
-                        
-                        // Проверяем состояние треков в receivers
-                        let hasActiveReceiverVideo = false;
-                        const receivers = peerConnection.getReceivers();
-                        const videoReceiver = receivers.find(r => {
-                            const track = r.track;
-                            return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
-                        });
-                        if (videoReceiver && videoReceiver.track) {
-                            hasActiveReceiverVideo = true;
-                            
-                            // ВАЖНО: Если трек активен в receivers, но его нет в потоке - добавляем его
-                            const track = videoReceiver.track;
-                            if (!videoTracks.some(t => t.id === track.id)) {
-                                console.log(`✅ [updateVideoOverlays ${userId}] Добавляем активный видео трек из receivers в поток (дополнительная проверка)`);
-                                stream.addTrack(track);
-                                // Обновляем UI
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                                return; // Выходим, не скрываем карточку
-                            }
-                        }
-                        
-                        // ВАЖНО: Скрываем карточку ТОЛЬКО если нет активных треков И нет активного видео в receivers
-                        if ((!hasActiveTracks || !hasActiveReceiverVideo) && participantCard.style.display !== 'none') {
-                            console.log(`🗑️ [updateVideoOverlays ${userId}] Видео неактивно (hasActiveTracks=${hasActiveTracks}, hasActiveReceiverVideo=${hasActiveReceiverVideo}), скрываем карточку`);
-                            // Удаляем все видео треки из потока
-                            stream.getVideoTracks().forEach(track => stream.removeTrack(track));
-                            // Скрываем карточку
-                            participantCard.style.setProperty('display', 'none', 'important');
-                            participantCard.style.setProperty('visibility', 'hidden', 'important');
-                            participantCard.style.setProperty('opacity', '0', 'important');
-                            if (videoElement) {
-                                videoElement.pause();
-                                videoElement.srcObject = null;
-                                try {
-                                    videoElement.load();
-                                } catch (e) {}
-                            }
-                            this.videoCallManager.checkEmptyState();
-                        }
-                    }, 300);
+                    // УБРАНО: Периодическая проверка вызывала бесконечные обновления
+                    // Проверка состояния выполняется через checkReceiversForNullTracks в webrtc-manager.js
                 }
                 console.log(`✅ [updateVideoOverlays ${userId}] Удаленная карточка: ПОКАЗЫВАЕМ (есть активное видео)`);
                 return; // Выходим, не переходим к логике скрытия
@@ -659,10 +654,9 @@ class UIManager {
                         console.log(`✅ [updateVideoOverlays ${userId}] НАЙДЕН активный видео трек в receivers при финальной проверке, добавляем в поток`);
                         stream.addTrack(track);
                         foundActiveTrackInReceivers = true;
-                        // Обновляем UI и выходим - карточка будет показана
-                        setTimeout(() => {
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                        }, 50);
+                        // НЕ вызываем updateVideoOverlays здесь - это вызовет бесконечный цикл
+                        // Сбрасываем состояние для следующего обновления
+                        this._lastVideoOverlaysState.delete(userId);
                         return; // Выходим, не скрываем карточку
                     }
                 }

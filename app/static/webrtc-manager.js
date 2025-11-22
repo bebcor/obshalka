@@ -389,13 +389,8 @@ class WebRTCManager {
                                 });
                             }
                             
-                            // Обновляем UI с задержками для надежности
-                            setTimeout(() => {
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                            }, 50);
-                            setTimeout(() => {
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                            }, 200);
+                            // Обновляем UI один раз (debounce уже есть в updateVideoOverlays)
+                            this.videoCallManager.uiManager.updateVideoOverlays();
                         } else {
                             console.log(`⚠️ [ontrack] Видео трек ${track.id} для ${targetUserId} не live (readyState=${track.readyState}), не добавляем в поток`);
                         }
