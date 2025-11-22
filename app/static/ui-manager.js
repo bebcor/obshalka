@@ -447,7 +447,7 @@ class UIManager {
                         }
                     } else {
                         // Трек уже в потоке - проверяем его активность
-                        const isTrackActive = trackInStream.readyState === 'live' && trackInStream.enabled && !trackInStream.muted;
+                        const isTrackActive = trackInStream.readyState === 'live' && trackInStream.enabled;
                         hasActiveVideo = isTrackActive;
                     }
                 } else {
@@ -605,8 +605,7 @@ class UIManager {
                     const activeVideoTracks = stream.getVideoTracks().filter(t => 
                         t && 
                         t.readyState === 'live' && 
-                        t.enabled && 
-                        !t.muted
+                        t.enabled
                     );
                     
                     if (activeVideoTracks.length === 0) {
