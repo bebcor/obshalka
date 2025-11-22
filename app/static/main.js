@@ -976,6 +976,19 @@ class VideoCallManager {
                             // Это нужно чтобы увидеть видео нового пользователя
                             console.log(`🔄 [handleUserJoined] Проверяем receivers и синхронизируем треки для ${data.user_id}`);
                             this.webrtcManager.syncTracksAfterUserJoined(data.user_id);
+                            
+                            // КРИТИЧНО: Также синхронизируем треки для ВСЕХ существующих участников
+                            // Это нужно чтобы они увидели видео нового пользователя
+                            console.log(`🔄 [handleUserJoined] Синхронизируем треки для всех существующих участников`);
+                            this.remoteUsers.forEach((peerConnection, existingUserId) => {
+                                if (existingUserId !== data.user_id) {
+                                    console.log(`🔄 [handleUserJoined] Синхронизируем треки для существующего участника ${existingUserId}`);
+                                    // Синхронизируем с задержкой чтобы треки успели прийти
+                                    setTimeout(() => {
+                                        this.webrtcManager.syncTracksAfterUserJoined(existingUserId);
+                                    }, 1000);
+                                }
+                            });
                         }).catch(err => {
                             console.error(`❌ Ошибка создания offer для ${data.user_id}:`, err);
                         });
@@ -991,6 +1004,19 @@ class VideoCallManager {
                                         // Это нужно чтобы увидеть видео нового пользователя
                                         console.log(`🔄 [handleUserJoined] Проверяем receivers и синхронизируем треки для ${data.user_id}`);
                                         this.webrtcManager.syncTracksAfterUserJoined(data.user_id);
+                                        
+                                        // КРИТИЧНО: Также синхронизируем треки для ВСЕХ существующих участников
+                                        // Это нужно чтобы они увидели видео нового пользователя
+                                        console.log(`🔄 [handleUserJoined] Синхронизируем треки для всех существующих участников`);
+                                        this.remoteUsers.forEach((peerConnection, existingUserId) => {
+                                            if (existingUserId !== data.user_id) {
+                                                console.log(`🔄 [handleUserJoined] Синхронизируем треки для существующего участника ${existingUserId}`);
+                                                // Синхронизируем с задержкой чтобы треки успели прийти
+                                                setTimeout(() => {
+                                                    this.webrtcManager.syncTracksAfterUserJoined(existingUserId);
+                                                }, 1000);
+                                            }
+                                        });
                                     }).catch(err => {
                                         console.error(`❌ Ошибка создания offer для ${data.user_id}:`, err);
                                     });

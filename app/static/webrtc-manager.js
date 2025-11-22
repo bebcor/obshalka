@@ -392,12 +392,45 @@ class WebRTCManager {
                                 });
                             }
                             
+                            // КРИТИЧНО: Сбрасываем кэш состояния для принудительного обновления UI
+                            // Это нужно чтобы UI обновился даже если трек пришел с muted=true
+                            if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                                this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
+                            }
+                            
                             // Обновляем UI сразу и через небольшую задержку для надежности
                             // Это нужно чтобы зафиксировать изменение состояния трека
                             this.videoCallManager.uiManager.updateVideoOverlays();
                             setTimeout(() => {
                                 this.videoCallManager.uiManager.updateVideoOverlays();
                             }, 300);
+                            
+                            // КРИТИЧНО: Если трек пришел с muted=true, проверяем его периодически
+                            // Когда он станет активным (muted=false), обновим UI
+                            if (track.muted) {
+                                console.log(`⏳ [ontrack] Видео трек пришел с muted=true для ${targetUserId}, будет проверяться периодически`);
+                                const checkMutedState = () => {
+                                    if (track.readyState === 'ended') {
+                                        return; // Трек завершился
+                                    }
+                                    if (!track.muted && track.enabled) {
+                                        // Трек стал активным - принудительно обновляем UI
+                                        console.log(`✅ [ontrack] Видео трек стал активным для ${targetUserId}, обновляем UI`);
+                                        if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                                            this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
+                                        }
+                                        this.videoCallManager.uiManager.updateVideoOverlays();
+                                        setTimeout(() => {
+                                            this.videoCallManager.uiManager.updateVideoOverlays();
+                                        }, 100);
+                                    } else if (track.readyState === 'live') {
+                                        // Продолжаем проверять пока трек live
+                                        setTimeout(checkMutedState, 500);
+                                    }
+                                };
+                                // Начинаем проверку через небольшую задержку
+                                setTimeout(checkMutedState, 500);
+                            }
                         } else {
                             console.log(`⚠️ [ontrack] Видео трек ${track.id} для ${targetUserId} не live (readyState=${track.readyState}), не добавляем в поток`);
                         }
@@ -619,9 +652,16 @@ class WebRTCManager {
                     console.log('✅ WebRTC connection established!');
                     // КРИТИЧНО: После установки соединения синхронизируем треки
                     // Это нужно чтобы увидеть видео другого пользователя
+                    // Делаем это несколько раз с разными задержками для надежности
                     setTimeout(() => {
                         this.syncTracksAfterUserJoined(targetUserId);
                     }, 200);
+                    setTimeout(() => {
+                        this.syncTracksAfterUserJoined(targetUserId);
+                    }, 1000);
+                    setTimeout(() => {
+                        this.syncTracksAfterUserJoined(targetUserId);
+                    }, 3000);
                 } else if (state === 'disconnected') {
                     this.videoCallManager.notificationManager.show('Звонок отключен', 'warning');
                 } else if (state === 'failed') {
@@ -648,9 +688,16 @@ class WebRTCManager {
                     console.log('✅ ICE connection successful!');
                     // КРИТИЧНО: После установки ICE соединения синхронизируем треки
                     // Это нужно чтобы увидеть видео другого пользователя
+                    // Делаем это несколько раз с разными задержками для надежности
                     setTimeout(() => {
                         this.syncTracksAfterUserJoined(targetUserId);
                     }, 200);
+                    setTimeout(() => {
+                        this.syncTracksAfterUserJoined(targetUserId);
+                    }, 1000);
+                    setTimeout(() => {
+                        this.syncTracksAfterUserJoined(targetUserId);
+                    }, 3000);
                 } else if (iceState === 'disconnected') {
                     console.warn('⚠️ ICE connection disconnected');
                 } else if (iceState === 'failed') {
@@ -1200,6 +1247,28 @@ class WebRTCManager {
         const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
         if (!peerConnection) {
             console.warn(`⚠️ [syncTracksAfterUserJoined] Нет peer connection для ${targetUserId}`);
+            return;
+        }
+        
+        // КРИТИЧНО: Проверяем connectionState - если соединение не установлено, ждем
+        const connectionState = peerConnection.connectionState;
+        if (connectionState !== 'connected' && connectionState !== 'completed') {
+            console.log(`⏳ [syncTracksAfterUserJoined] Соединение для ${targetUserId} еще не установлено (${connectionState}), ждем...`);
+            // Ждем установления соединения и пробуем снова
+            const checkConnection = () => {
+                if (!this.videoCallManager.remoteUsers.has(targetUserId)) {
+                    return; // Соединение закрыто
+                }
+                const newState = this.videoCallManager.remoteUsers.get(targetUserId).connectionState;
+                if (newState === 'connected' || newState === 'completed') {
+                    console.log(`✅ [syncTracksAfterUserJoined] Соединение для ${targetUserId} установлено, синхронизируем треки`);
+                    this.syncTracksAfterUserJoined(targetUserId);
+                } else if (newState !== 'disconnected' && newState !== 'failed') {
+                    // Продолжаем ждать если соединение еще устанавливается
+                    setTimeout(checkConnection, 500);
+                }
+            };
+            setTimeout(checkConnection, 500);
             return;
         }
         
