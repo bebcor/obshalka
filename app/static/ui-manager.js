@@ -113,7 +113,7 @@ class UIManager {
             const isSharingScreen = this.videoCallManager.isSharingScreen || false;
             
             // Карточка показывается ТОЛЬКО если есть активное видео
-            const hasActiveVideo = (videoTrack && videoTrack.enabled && videoTrack.readyState === 'live' && !videoTrack.muted) || isSharingScreen;
+            const hasActiveVideo = (videoTrack && videoTrack.enabled && videoTrack.readyState === 'live') || isSharingScreen;
             
             // Логирование для отладки
             if (videoTrack && !hasActiveVideo) {
@@ -166,7 +166,7 @@ class UIManager {
                 // Это предотвращает показ черного экрана
                 if (localVideo && localVideo.srcObject) {
                     const currentStream = localVideo.srcObject;
-                    const hasVideoTracks = currentStream.getVideoTracks().some(t => t.enabled && !t.muted && t.readyState === 'live');
+                    const hasVideoTracks = currentStream.getVideoTracks().some(t => t.enabled && t.readyState === 'live');
                     if (!hasVideoTracks) {
                         console.log('🔄 Очищаем srcObject для локального видео (нет активного видео)');
                         localVideo.srcObject = null;
@@ -512,6 +512,8 @@ class UIManager {
             const activeVideoTracksInStream = finalVideoTracks.filter(t => 
                 t && t.readyState === 'live' && t.enabled
             );
+            const videoTrackIds = finalVideoTracks.map(t => t ? t.id : null);
+            const audioTrackIds = finalAudioTracks.map(t => t ? t.id : null);
             const currentState = {
                 hasActiveVideoTrackInReceivers,
                 finalHasActiveVideo,
@@ -522,7 +524,9 @@ class UIManager {
                 cardDisplay: participantCard.style.display,
                 // КРИТИЧНО: Сохраняем состояние muted/enabled треков для точной проверки
                 videoTracksMuted: finalVideoTracks.map(t => t ? t.muted : null),
-                videoTracksEnabled: finalVideoTracks.map(t => t ? t.enabled : null)
+                videoTracksEnabled: finalVideoTracks.map(t => t ? t.enabled : null),
+                videoTrackIds,
+                audioTrackIds
             };
             const lastState = this._lastVideoOverlaysState.get(userId);
             
@@ -539,6 +543,14 @@ class UIManager {
                     lastState.videoTracksMuted.some((muted, i) => muted !== currentState.videoTracksMuted[i]) ||
                     lastState.videoTracksEnabled.some((enabled, i) => enabled !== currentState.videoTracksEnabled[i]);
                 
+                const videoTrackIdsChanged = !lastState.videoTrackIds ||
+                    lastState.videoTrackIds.length !== currentState.videoTrackIds.length ||
+                    lastState.videoTrackIds.some((id, i) => id !== currentState.videoTrackIds[i]);
+                
+                const audioTrackIdsChanged = !lastState.audioTrackIds ||
+                    lastState.audioTrackIds.length !== currentState.audioTrackIds.length ||
+                    lastState.audioTrackIds.some((id, i) => id !== currentState.audioTrackIds[i]);
+                
                 // КРИТИЧНО: Проверяем, стал ли трек активным (muted изменился с true на false)
                 const trackBecameActive = lastState.videoTracksMuted && currentState.videoTracksMuted &&
                     lastState.videoTracksMuted.some((wasMuted, i) => 
@@ -547,12 +559,14 @@ class UIManager {
                         currentState.videoTracksEnabled[i] === true
                     );
                 
-                if (!tracksStateChanged && !trackBecameActive) {
+                if (!tracksStateChanged && !trackBecameActive && !videoTrackIdsChanged && !audioTrackIdsChanged) {
                     console.log(`⏭️ [updateVideoOverlays ${userId}] Состояние не изменилось, пропускаем обновление UI`);
                     return; // Выходим, не обновляем UI
                 } else {
                     if (trackBecameActive) {
                         console.log(`✅ [updateVideoOverlays ${userId}] Трек стал активным (muted: true -> false), принудительно обновляем UI`);
+                    } else if (videoTrackIdsChanged || audioTrackIdsChanged) {
+                        console.log(`🔄 [updateVideoOverlays ${userId}] Изменился набор треков (video/audio), обновляем UI`);
                     } else {
                         console.log(`🔄 [updateVideoOverlays ${userId}] Состояние треков изменилось (muted/enabled), обновляем UI`);
                     }
