@@ -232,37 +232,50 @@ class UIManager {
                 }
             });
             
-            // ПРОСТАЯ ПРОВЕРКА: есть ли активный видео трек в receivers?
-            // Если нет - камера выключена, скрываем карточку
             // КРИТИЧНО: Проверяем receivers ПЕРЕД проверкой потока - это единственный надежный источник истины
+            // Если в receivers нет активного видео трека (или receiver.track === null), удаляем все видео треки из потока
             let hasActiveVideo = false;
             if (peerConnection) {
                 const receivers = peerConnection.getReceivers();
                 // Ищем активный видео трек в receivers
-                // Трек активен ТОЛЬКО если он есть, это видео, live, enabled И не muted
                 const videoReceiver = receivers.find(receiver => {
                     const track = receiver.track;
                     return track && track.kind === 'video';
                 });
                 
-                if (videoReceiver && videoReceiver.track) {
+                // КРИТИЧНО: Проверяем, есть ли receiver с null track (replaceTrack(null) был вызван)
+                // Если receiver.track === null, это означает что трек был заменен на null
+                const hasNullReceiver = receivers.some(receiver => receiver.track === null);
+                
+                // Если есть null receiver И нет активного видео трека - камера выключена
+                if ((hasNullReceiver && !videoReceiver) || !videoReceiver || !videoReceiver.track) {
+                    // Нет активного видео трека в receivers - удаляем все видео треки из потока
+                    console.log(`🗑️ [${userId}] Нет активного видео трека в receivers (hasNullReceiver=${hasNullReceiver}, videoReceiver=${!!videoReceiver}), удаляем все видео треки из потока`);
+                    const videoTracks = stream.getVideoTracks();
+                    videoTracks.forEach(track => {
+                        console.log(`🗑️ [${userId}] Удаляем видео трек ${track.id} из потока (нет активного трека в receivers)`);
+                        stream.removeTrack(track);
+                    });
+                    hasActiveVideo = false;
+                } else {
                     const track = videoReceiver.track;
                     // Проверяем все условия - трек должен быть live, enabled и не muted
                     hasActiveVideo = track.readyState === 'live' && 
                                    track.enabled && 
                                    !track.muted;
                     
-                    // КРИТИЧНО: Если трек есть, но он disabled или muted - камера выключена
+                    // КРИТИЧНО: Если трек есть, но он disabled или muted - камера выключена, удаляем из потока
                     if (!hasActiveVideo) {
-                        console.log(`❌ [${userId}] Видео трек в receivers неактивен: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
+                        console.log(`🗑️ [${userId}] Видео трек в receivers неактивен: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}, удаляем из потока`);
+                        const videoTracks = stream.getVideoTracks().filter(t => t.id === track.id);
+                        videoTracks.forEach(t => stream.removeTrack(t));
                     }
-                } else {
-                    // Нет видео трека в receivers - камера выключена
-                    console.log(`❌ [${userId}] Нет видео трека в receivers - камера выключена`);
                 }
             } else {
-                // Нет peer connection - камера выключена
-                console.log(`❌ [${userId}] Нет peer connection - камера выключена`);
+                // Нет peer connection - камера выключена, удаляем все видео треки
+                console.log(`🗑️ [${userId}] Нет peer connection - камера выключена, удаляем все видео треки`);
+                const videoTracks = stream.getVideoTracks();
+                videoTracks.forEach(track => stream.removeTrack(track));
             }
             
             // Получаем актуальные треки ПОСЛЕ очистки
