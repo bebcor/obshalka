@@ -297,6 +297,26 @@ class UIManager {
                                               !track.muted
                                           );
             
+            // ВАЖНО: Если трек активен в receivers, но его нет в потоке - добавляем его
+            // Это критично для случая, когда трек приходит через ontrack, но еще не добавлен в поток
+            if (hasActiveVideo && !hasActiveVideoInStream && peerConnection) {
+                const receivers = peerConnection.getReceivers();
+                const videoReceiver = receivers.find(receiver => {
+                    const track = receiver.track;
+                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
+                });
+                if (videoReceiver && videoReceiver.track) {
+                    const track = videoReceiver.track;
+                    const trackInStream = stream.getTracks().find(t => t.id === track.id);
+                    if (!trackInStream) {
+                        console.log(`✅ [${userId}] Добавляем активный видео трек из receivers в поток (финальная проверка)`);
+                        stream.addTrack(track);
+                        // Обновляем hasActiveVideoInStream после добавления
+                        hasActiveVideoInStream = true;
+                    }
+                }
+            }
+            
             // Видео активно ТОЛЬКО если оно активно И в receivers И в потоке
             hasActiveVideo = hasActiveVideo && hasActiveVideoInStream;
             
@@ -367,25 +387,33 @@ class UIManager {
                         
                         // ВАЖНО: Скрываем карточку ТОЛЬКО если нет активных треков И нет активного видео в receivers
                         // И проверяем, что карточка все еще показывается (не была скрыта ранее)
-                        // И только после нескольких проверок (чтобы дать треку время активироваться)
-                        if (checkCount >= 2 && (!hasActiveTracks || !hasActiveReceiverVideo) && participantCard.style.display !== 'none') {
-                            console.log(`🗑️ [updateVideoOverlays ${userId}] Видео неактивно после проверки ${checkCount} (hasActiveTracks=${hasActiveTracks}, hasActiveReceiverVideo=${hasActiveReceiverVideo}), скрываем карточку`);
-                            // Удаляем все видео треки из потока
-                            stream.getVideoTracks().forEach(track => stream.removeTrack(track));
-                            // Скрываем карточку
-                            participantCard.style.setProperty('display', 'none', 'important');
-                            participantCard.style.setProperty('visibility', 'hidden', 'important');
-                            participantCard.style.setProperty('opacity', '0', 'important');
-                            if (videoElement) {
-                                videoElement.pause();
-                                videoElement.srcObject = null;
-                                try {
-                                    videoElement.load();
-                                } catch (e) {}
+                        // Проверяем сразу и после задержки (чтобы дать треку время активироваться при первом подключении)
+                        if ((!hasActiveTracks || !hasActiveReceiverVideo) && participantCard.style.display !== 'none') {
+                            // Если это первая проверка (checkCount === 1), даем еще одну попытку
+                            // Это нужно для случая, когда трек только что пришел и еще не активировался
+                            if (checkCount === 1) {
+                                console.log(`⏳ [updateVideoOverlays ${userId}] Видео неактивно на первой проверке, ждем еще...`);
+                                setTimeout(checkVideoActive, 500);
+                            } else {
+                                // После второй проверки скрываем карточку
+                                console.log(`🗑️ [updateVideoOverlays ${userId}] Видео неактивно после проверки ${checkCount} (hasActiveTracks=${hasActiveTracks}, hasActiveReceiverVideo=${hasActiveReceiverVideo}), скрываем карточку`);
+                                // Удаляем все видео треки из потока
+                                stream.getVideoTracks().forEach(track => stream.removeTrack(track));
+                                // Скрываем карточку
+                                participantCard.style.setProperty('display', 'none', 'important');
+                                participantCard.style.setProperty('visibility', 'hidden', 'important');
+                                participantCard.style.setProperty('opacity', '0', 'important');
+                                if (videoElement) {
+                                    videoElement.pause();
+                                    videoElement.srcObject = null;
+                                    try {
+                                        videoElement.load();
+                                    } catch (e) {}
+                                }
+                                this.videoCallManager.checkEmptyState();
                             }
-                            this.videoCallManager.checkEmptyState();
                         } else if (checkCount < maxChecks) {
-                            // Продолжаем проверять
+                            // Если видео активно, но еще не все проверки выполнены - продолжаем проверять
                             setTimeout(checkVideoActive, 500);
                         }
                     };

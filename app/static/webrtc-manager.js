@@ -256,6 +256,23 @@ class WebRTCManager {
                         }
                     }
                     
+                    // ВАЖНО: Также проверяем, если receiver.track есть, но он неактивен (enabled=false или muted=true)
+                    // Это может означать, что камера выключена
+                    if (currentTrack && currentTrack.kind === 'video') {
+                        const isTrackActive = currentTrack.readyState === 'live' && currentTrack.enabled && !currentTrack.muted;
+                        if (!isTrackActive) {
+                            // Трек неактивен - удаляем его из потока
+                            const tracksToRemove = remoteStream.getTracks().filter(t => t.id === currentTrack.id && t.kind === 'video');
+                            if (tracksToRemove.length > 0) {
+                                tracksToRemove.forEach(track => {
+                                    console.log(`🗑️ [checkReceiversForNullTracks ${targetUserId}] Receiver ${index} трек ${currentTrack.id} неактивен (enabled=${currentTrack.enabled}, muted=${currentTrack.muted}), удаляем из потока`);
+                                    remoteStream.removeTrack(track);
+                                    hasChanges = true;
+                                });
+                            }
+                        }
+                    }
+                    
                     // Обновляем предыдущее состояние (сохраняем trackId, а не сам трек)
                     previousReceiverTracks.set(index, currentTrack ? currentTrack.id : null);
                 });
