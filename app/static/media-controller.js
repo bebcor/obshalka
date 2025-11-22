@@ -71,24 +71,31 @@ class MediaController {
                     this.videoCallManager.cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
                     
                     // ЕСЛИ уже есть локальный поток (от экрана), добавляем в него камеру
-                    if (this.videoCallManager.localStream) {
-                        // Удаляем старые видео треки перед добавлением камеры
-                        const oldVideoTracks = this.videoCallManager.localStream.getVideoTracks();
-                        oldVideoTracks.forEach(track => {
-                            this.videoCallManager.localStream.removeTrack(track);
-                            if (!track.label.includes('screen') && !track.label.includes('window') && !track.label.includes('display')) {
-                                track.stop();
-                            }
-                        });
-                        
-                        // Добавляем треки камеры
-                        this.videoCallManager.cameraStream.getTracks().forEach(track => {
-                            this.videoCallManager.localStream.addTrack(track);
-                        });
-                    } else {
-                        // ЕСЛИ нет локального потока - создаем из камеры
-                        this.videoCallManager.localStream = this.videoCallManager.cameraStream;
+            const cameraVideoTracks = this.videoCallManager.cameraStream.getVideoTracks();
+            const cameraAudioTracks = this.videoCallManager.cameraStream.getAudioTracks();
+            
+            if (this.videoCallManager.localStream) {
+                const localStream = this.videoCallManager.localStream;
+                // Удаляем только существующие видео треки
+                const oldVideoTracks = localStream.getVideoTracks();
+                oldVideoTracks.forEach(track => {
+                    localStream.removeTrack(track);
+                    if (!track.label.includes('screen') && !track.label.includes('window') && !track.label.includes('display')) {
+                        track.stop();
                     }
+                });
+                
+                // Добавляем новые видео треки камеры в существующий поток (аудио сохраняем из localStream)
+                cameraVideoTracks.forEach(track => {
+                    localStream.addTrack(track);
+                });
+                
+                // Аудио из cameraStream нам не нужно, выключаем его чтобы не было дубликатов
+                cameraAudioTracks.forEach(track => track.stop());
+            } else {
+                // ЕСЛИ нет локального потока - используем полный поток камеры (аудио+видео)
+                this.videoCallManager.localStream = this.videoCallManager.cameraStream;
+            }
                     
                     const localVideo = document.getElementById('localVideo');
                     
@@ -233,6 +240,10 @@ class MediaController {
                 this.videoCallManager.checkEmptyState();
             }, 300);
             this.videoCallManager.notificationManager.show(enabled ? 'Камера включена' : 'Камера выключена', 'info');
+        } else {
+            // В потоке нет видео треков, значит камера не была включена — включаем ее
+            await this.startVideo();
+            return;
         }
     }
 

@@ -888,9 +888,9 @@ class VideoCallManager {
         // ПОКАЗЫВАЕМ уведомление о присоединении
         this.notificationManager.show(`Присоединились к комнате ${this.roomId} как ${this.userName}`, 'success');
         
-        // АВТОМАТИЧЕСКИ включаем камеру и микрофон без модального окна
+        // АВТОМАТИЧЕСКИ включаем ТОЛЬКО микрофон, камеру пользователь включает вручную
         try {
-            await this.mediaController.startVideo();
+            await this.mediaController.startAudioOnly();
             // ВАЖНО: После запуска медиа добавляем треки в существующие peer connections
             // и отправляем offers для всех существующих участников
             if (this.localStream) {
