@@ -424,8 +424,9 @@ class WebRTCManager {
                 // Управление отображением через enabled/muted, а не через удаление треков
                 if (!remoteStream.getTracks().some(t => t.id === track.id)) {
                     if (track.kind === 'video') {
-                        // Для видео: добавляем ВСЕГДА если live (даже если disabled!)
-                        if (track.readyState === 'live') {
+                        // КРИТИЧНО: Добавляем ТОЛЬКО если enabled=true (камера включена)
+                        // Если enabled=false, камера выключена пользователем - не добавляем
+                        if (track.readyState === 'live' && track.enabled) {
                             remoteStream.addTrack(track);
                             console.log(`✅ [ontrack] Видео трек ${track.id} для ${targetUserId} добавлен в поток (enabled=${track.enabled}, muted=${track.muted})`);
                             console.log(`✅ [ontrack] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
@@ -603,10 +604,20 @@ class WebRTCManager {
                                     this.videoCallManager.checkEmptyState();
                                 }
                             } else if (track.kind === 'video' && track.readyState === 'live') {
-                                // Трек live - убеждаемся что он в потоке
-                                if (!remoteStream.getTracks().includes(track)) {
-                                    // Трека нет в потоке - добавляем его
-                                    remoteStream.addTrack(track);
+                                // Трек live - проверяем enabled
+                                if (track.enabled) {
+                                    // Трек enabled - убеждаемся что он в потоке
+                                    if (!remoteStream.getTracks().includes(track)) {
+                                        // Трека нет в потоке - добавляем его
+                                        remoteStream.addTrack(track);
+                                    }
+                                } else {
+                                    // Трек disabled - удаляем из потока (камера выключена)
+                                    if (remoteStream.getTracks().includes(track)) {
+                                        remoteStream.removeTrack(track);
+                                        console.log(`🗑️ [ontrack checkEnabled] Видео трек удален из потока для ${targetUserId} - камера выключена (enabled=false)`);
+                                        this.videoCallManager.uiManager.updateVideoOverlays();
+                                    }
                                 }
                                 
                                 // КРИТИЧНО: Если трек стал активным (muted изменился с true на false) - принудительно обновляем UI
@@ -683,9 +694,16 @@ class WebRTCManager {
                             lastPeriodicEnabled = track.enabled;
                             lastPeriodicMuted = track.muted;
                             
-                            // Убеждаемся что трек в потоке (если live)
-                            if (track.kind === 'video' && track.readyState === 'live' && !remoteStream.getTracks().includes(track)) {
-                                remoteStream.addTrack(track);
+                            // Убеждаемся что трек в потоке (если live и enabled)
+                            if (track.kind === 'video' && track.readyState === 'live') {
+                                if (track.enabled && !remoteStream.getTracks().includes(track)) {
+                                    remoteStream.addTrack(track);
+                                } else if (!track.enabled && remoteStream.getTracks().includes(track)) {
+                                    // Трек disabled - удаляем из потока (камера выключена)
+                                    remoteStream.removeTrack(track);
+                                    console.log(`🗑️ [periodicCheck] Видео трек удален из потока для ${targetUserId} - камера выключена (enabled=false)`);
+                                    this.videoCallManager.uiManager.updateVideoOverlays();
+                                }
                             }
                             
                             // КРИТИЧНО: Если трек стал активным (muted изменился с true на false) - принудительно обновляем UI
@@ -1175,11 +1193,11 @@ class WebRTCManager {
                             return;
                         }
                         
-                        // УПРОЩЕННАЯ ЛОГИКА: Для видео треков добавляем ВСЕГДА если live (даже если disabled!)
-                        // Для аудио треков добавляем всегда если live
+                        // КРИТИЧНО: Добавляем треки ТОЛЬКО если enabled=true (камера/микрофон включены)
+                        // Если enabled=false, устройство выключено пользователем - не добавляем
                         if (track.kind === 'video') {
-                            // Для видео: добавляем ВСЕГДА если live (даже если disabled!)
-                            if (track.readyState === 'live') {
+                            // Для видео: добавляем ТОЛЬКО если enabled=true и live
+                            if (track.readyState === 'live' && track.enabled) {
                                 const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
                                 if (!existingTrack) {
                                     remoteStream.addTrack(track);
@@ -1350,11 +1368,11 @@ class WebRTCManager {
                             return;
                         }
                         
-                        // УПРОЩЕННАЯ ЛОГИКА: Для видео треков добавляем ВСЕГДА если live (даже если disabled!)
-                        // Для аудио треков добавляем всегда если live
+                        // КРИТИЧНО: Добавляем треки ТОЛЬКО если enabled=true (камера/микрофон включены)
+                        // Если enabled=false, устройство выключено пользователем - не добавляем
                         if (track.kind === 'video') {
-                            // Для видео: добавляем ВСЕГДА если live (даже если disabled!)
-                            if (track.readyState === 'live') {
+                            // Для видео: добавляем ТОЛЬКО если enabled=true и live
+                            if (track.readyState === 'live' && track.enabled) {
                                 const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
                                 if (!existingTrack) {
                                     remoteStream.addTrack(track);
@@ -1504,8 +1522,9 @@ class WebRTCManager {
                     
                     console.log(`🔍 [syncTracksAfterUserJoined ${targetUserId}] Receiver ${index}: kind=${track.kind}, enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
                     
-                    // Добавляем треки в поток если они live (даже если disabled или muted)
-                    if (track.readyState === 'live') {
+                    // КРИТИЧНО: Добавляем треки ТОЛЬКО если enabled=true (камера/микрофон включены)
+                    // Если enabled=false, устройство выключено пользователем - не добавляем
+                    if (track.readyState === 'live' && track.enabled) {
                         const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
                         if (!existingTrack) {
                             remoteStream.addTrack(track);
