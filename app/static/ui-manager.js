@@ -199,7 +199,7 @@ class UIManager {
                 const activeReceiverTrackIds = new Set();
                 receivers.forEach(receiver => {
                     const track = receiver.track;
-                    if (track && track.enabled && !track.muted && track.readyState === 'live') {
+                    if (track && track.enabled && track.readyState === 'live') {
                         activeReceiverTrackIds.add(track.id);
                     }
                 });
@@ -379,7 +379,7 @@ class UIManager {
                 } else {
                     const track = videoReceiver.track;
                     // Есть видео трек - проверяем активность
-                    const isActive = track.enabled && !track.muted;
+                    const isActive = track.enabled;
                     hasActiveVideo = isActive; // hasActiveVideo = true только если трек активен
                     
                     // ВАЖНО: Если трек есть в receivers, но его нет в потоке - добавляем его (даже если disabled!)
@@ -404,8 +404,7 @@ class UIManager {
                                   finalAudioTracks.some(track => 
                                       track && 
                                       track.readyState === 'live' && 
-                                      track.enabled && 
-                                      !track.muted
+                                      track.enabled
                                   );
             
                 // КРИТИЧНО: Финальная проверка - если в потоке нет активных видео треков, камера выключена
@@ -413,8 +412,7 @@ class UIManager {
                                           finalVideoTracks.some(track => 
                                               track && 
                                               track.readyState === 'live' && 
-                                              track.enabled && 
-                                              !track.muted
+                                              track.enabled
                                           );
             
             // ВАЖНО: Если трек активен в receivers, но его нет в потоке - добавляем его
@@ -424,7 +422,7 @@ class UIManager {
                 const receivers = peerConnection.getReceivers();
                 const videoReceiver = receivers.find(receiver => {
                     const track = receiver.track;
-                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
+                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
                 });
                 if (videoReceiver && videoReceiver.track) {
                     const track = videoReceiver.track;
@@ -440,8 +438,7 @@ class UIManager {
                                                               updatedVideoTracks.some(t => 
                                                                   t && 
                                                                   t.readyState === 'live' && 
-                                                                  t.enabled && 
-                                                                  !t.muted
+                                                                  t.enabled
                                                               );
                         if (updatedHasActiveVideoInStream) {
                             hasActiveVideo = true;
@@ -463,7 +460,7 @@ class UIManager {
                     const receivers = peerConnection.getReceivers();
                     const videoReceiver = receivers.find(receiver => {
                         const track = receiver.track;
-                        return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
+                        return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
                     });
                     if (videoReceiver && videoReceiver.track) {
                         // Есть активный receiver, но его нет в потоке - добавляем
@@ -495,8 +492,7 @@ class UIManager {
             const finalHasActiveVideo = hasActiveVideoInStream && finalVideoTracks.some(track => 
                 track && 
                 track.readyState === 'live' && 
-                track.enabled && 
-                !track.muted
+                                      track.enabled
             );
             
             // КРИТИЧНО: Показываем карточку ТОЛЬКО если есть АКТИВНЫЙ видео трек
@@ -508,14 +504,13 @@ class UIManager {
                 return track && 
                        track.kind === 'video' && 
                        track.readyState === 'live' && 
-                       track.enabled && 
-                       !track.muted;
+                       track.enabled;
             });
             
             // ПРОВЕРКА ИЗМЕНЕНИЯ СОСТОЯНИЯ: обновляем UI только если состояние изменилось
             // КРИТИЧНО: Проверяем также активность треков в потоке (muted/enabled)
             const activeVideoTracksInStream = finalVideoTracks.filter(t => 
-                t && t.readyState === 'live' && t.enabled && !t.muted
+                t && t.readyState === 'live' && t.enabled
             );
             const currentState = {
                 hasActiveVideoTrackInReceivers,
@@ -678,7 +673,7 @@ class UIManager {
                 const receivers = peerConnection.getReceivers();
                 const videoReceiver = receivers.find(receiver => {
                     const track = receiver.track;
-                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
+                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
                 });
                 if (videoReceiver && videoReceiver.track) {
                     const track = videoReceiver.track;
