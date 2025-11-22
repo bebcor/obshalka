@@ -889,6 +889,16 @@ class UIManager {
         
         const videoElement = document.getElementById(`remoteVideo-${userId}`);
         if (videoElement) {
+            // ВАЖНО: По умолчанию проигрываем удаленное видео БЕЗ звука, чтобы браузер позволил автозапуск
+            // Пользователь сможет включить звук вручную по кнопке "Нажми для звука"
+            videoElement.muted = true;
+            videoElement.defaultMuted = true;
+            videoElement.volume = 0;
+            videoElement.setAttribute('muted', 'muted');
+            
+            // Показываем кнопку активации звука сразу
+            this.showAudioActivationButton(videoElement, userId);
+            
             // ВАЖНО: НЕ устанавливаем srcObject сразу - это сделает updateVideoOverlays()
             // после проверки состояния треков
             // videoElement.srcObject = stream;
@@ -1013,11 +1023,6 @@ class UIManager {
             
             this.trackCheckIntervals.set(userId, checkInterval);
             
-            videoElement.play().catch(error => {
-                console.log('Автовоспроизведение звука заблокировано:', error);
-                this.showAudioActivationButton(videoElement, userId);
-            });
-            
             // ВАЖНО: Обновляем состояние после создания видео элемента
             setTimeout(() => {
                 this.videoCallManager.checkEmptyState();
@@ -1045,7 +1050,15 @@ class UIManager {
 
     showAudioActivationButton(videoElement, userId) {
         const participantCard = document.getElementById(`participant-${userId}`);
-        if (!participantCard) return;
+        if (!participantCard || !videoElement) return;
+        // Если звук уже активирован, ничего не делаем
+        if (!videoElement.muted) {
+            const oldBtn = participantCard.querySelector('.audio-activation-btn');
+            if (oldBtn) {
+                oldBtn.remove();
+            }
+            return;
+        }
     
         // Удаляем старую кнопку если есть
         const oldBtn = participantCard.querySelector('.audio-activation-btn');
@@ -1069,12 +1082,20 @@ class UIManager {
         `;
     
         activateBtn.addEventListener('click', async () => {
+            activateBtn.disabled = true;
             try {
+                // Включаем звук
+                videoElement.muted = false;
+                videoElement.defaultMuted = false;
+                videoElement.volume = 1;
+                videoElement.removeAttribute('muted');
+                
                 await videoElement.play();
                 activateBtn.remove();
                 console.log('✅ Звук активирован для:', userId);
             } catch (error) {
                 console.error('Ошибка активации звука:', error);
+                activateBtn.disabled = false;
             }
         });
     
