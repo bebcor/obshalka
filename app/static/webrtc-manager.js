@@ -518,6 +518,46 @@ class WebRTCManager {
                         }
                     };
                     
+                    // КРИТИЧНО: Периодическая проверка для треков с muted=true
+                    // Это нужно на случай если onunmute не сработает сразу
+                    if (track.kind === 'video' && track.muted && track.readyState === 'live') {
+                        console.log(`⏳ [ontrack] Видео трек пришел с muted=true для ${targetUserId}, запускаем периодическую проверку`);
+                        let checkCount = 0;
+                        const maxChecks = 20; // Проверяем 20 раз (10 секунд)
+                        const checkMutedState = () => {
+                            if (track.readyState === 'ended') {
+                                return; // Трек завершился
+                            }
+                            if (checkCount >= maxChecks) {
+                                return; // Прекращаем проверку
+                            }
+                            checkCount++;
+                            
+                            // Если трек стал активным (unmuted)
+                            if (!track.muted && track.enabled) {
+                                console.log(`✅ [ontrack periodic] Видео трек стал активным для ${targetUserId}, обновляем UI`);
+                                // Убеждаемся что трек в потоке
+                                if (!remoteStream.getTracks().includes(track)) {
+                                    remoteStream.addTrack(track);
+                                }
+                                // Сбрасываем кэш и обновляем UI
+                                if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                                    this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
+                                }
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                                setTimeout(() => {
+                                    this.videoCallManager.uiManager.updateVideoOverlays();
+                                }, 100);
+                                return; // Прекращаем проверку
+                            }
+                            
+                            // Продолжаем проверять
+                            setTimeout(checkMutedState, 500);
+                        };
+                        // Начинаем проверку через небольшую задержку
+                        setTimeout(checkMutedState, 500);
+                    }
+                    
                     // Отслеживаем изменения enabled через периодическую проверку
                     // ВАЖНО: Работает для всех треков, даже если они не были добавлены в поток
                     let lastEnabled = track.enabled;
@@ -1329,6 +1369,7 @@ class WebRTCManager {
                 
                 // Проверяем все receivers и добавляем треки в поток
                 let tracksAdded = false;
+                let hasMutedVideoTracks = false;
                 receivers.forEach((receiver, index) => {
                     const track = receiver.track;
                     if (!track) {
@@ -1358,9 +1399,64 @@ class WebRTCManager {
                                     }
                                 });
                             }
+                            
+                            // Отмечаем если есть muted видео треки
+                            if (track.muted) {
+                                hasMutedVideoTracks = true;
+                            }
                         }
+                    } else if (track.kind === 'video' && track.readyState === 'live' && track.muted) {
+                        // Трек уже в потоке, но muted - отмечаем для периодической проверки
+                        hasMutedVideoTracks = true;
                     }
                 });
+                
+                // КРИТИЧНО: Если есть muted видео треки, запускаем периодическую проверку
+                if (hasMutedVideoTracks) {
+                    console.log(`⏳ [syncTracksAfterUserJoined ${targetUserId}] Есть muted видео треки, запускаем периодическую проверку`);
+                    let checkCount = 0;
+                    const maxChecks = 20; // Проверяем 20 раз (10 секунд)
+                    const checkMutedTracks = () => {
+                        if (!this.videoCallManager.remoteUsers.has(targetUserId)) {
+                            return; // Соединение закрыто
+                        }
+                        if (checkCount >= maxChecks) {
+                            return; // Прекращаем проверку
+                        }
+                        checkCount++;
+                        
+                        const currentReceivers = peerConnection.getReceivers();
+                        let foundActiveVideo = false;
+                        currentReceivers.forEach(receiver => {
+                            const track = receiver.track;
+                            if (track && track.kind === 'video' && track.readyState === 'live' && !track.muted && track.enabled) {
+                                foundActiveVideo = true;
+                                // Убеждаемся что трек в потоке
+                                if (!remoteStream.getTracks().some(t => t.id === track.id)) {
+                                    remoteStream.addTrack(track);
+                                }
+                            }
+                        });
+                        
+                        if (foundActiveVideo) {
+                            console.log(`✅ [syncTracksAfterUserJoined periodic] Видео трек стал активным для ${targetUserId}, обновляем UI`);
+                            // Сбрасываем кэш и обновляем UI
+                            if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                                this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
+                            }
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                            setTimeout(() => {
+                                this.videoCallManager.uiManager.updateVideoOverlays();
+                            }, 100);
+                            return; // Прекращаем проверку
+                        }
+                        
+                        // Продолжаем проверять
+                        setTimeout(checkMutedTracks, 500);
+                    };
+                    // Начинаем проверку через небольшую задержку
+                    setTimeout(checkMutedTracks, 500);
+                }
                 
                 // КРИТИЧНО: Если треки были добавлены, сбрасываем кэш состояния и обновляем UI
                 if (tracksAdded) {

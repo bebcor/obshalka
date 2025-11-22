@@ -681,6 +681,20 @@ class MediaController {
             console.error('❌ Ошибка обновления видеотреков:', error);
         }
         
+        // КРИТИЧНО: Принудительно обновляем UI для всех удаленных участников
+        // Это нужно чтобы они увидели новый видео трек
+        if (videoTrack && videoTrack.enabled) {
+            console.log('🔄 Принудительно обновляем UI для всех участников после включения камеры');
+            this.videoCallManager.remoteUsers.forEach((peerConnection, userId) => {
+                // Сбрасываем кэш состояния для каждого участника
+                if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
+                    this.videoCallManager.uiManager._lastVideoOverlaysState.delete(userId);
+                }
+                // Запускаем синхронизацию треков для каждого участника
+                this.videoCallManager.webrtcManager.syncTracksAfterUserJoined(userId);
+            });
+        }
+        
         // Ждем немного перед созданием offer, чтобы треки успели добавиться
         if (offerPromises.length > 0) {
             // ВАЖНО: Создаем offer сразу, но с небольшой задержкой чтобы трек успел добавиться
