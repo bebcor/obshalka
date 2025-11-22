@@ -197,7 +197,11 @@ class MediaController {
         }
 
         let createdVideoTrack = false;
-        if (!this.videoCallManager.localStream) {
+        const needToCreateVideoTrack = 
+            !this.videoCallManager.localStream || 
+            this.videoCallManager.localStream.getVideoTracks().length === 0;
+
+        if (needToCreateVideoTrack) {
             try {
                 await this.startVideo();
                 createdVideoTrack = true;
