@@ -246,8 +246,14 @@ class UIManager {
                     if (!track || track === null) {
                         const transceivers = peerConnection.getTransceivers();
                         const transceiver = transceivers.find(t => t.receiver === receiver);
-                        // Если transceiver существует и receiver.track === null, это может быть видео receiver
-                        return transceiver !== undefined;
+                        // Если transceiver существует и receiver.track === null, проверяем что это видео transceiver
+                        if (transceiver) {
+                            // Проверяем, что это видео transceiver (по mid или по sender track)
+                            const isVideoTransceiver = transceiver.receiver.track === null && 
+                                                      (transceiver.mid === '1' || // Обычно видео имеет mid='1'
+                                                       (transceiver.sender && transceiver.sender.track && transceiver.sender.track.kind === 'video'));
+                            return isVideoTransceiver;
+                        }
                     }
                     return false;
                 });
@@ -290,6 +296,50 @@ class UIManager {
                         
                         if (shouldRemove && stream.getTracks().includes(streamTrack)) {
                             stream.removeTrack(streamTrack);
+                        }
+                    });
+                }
+                
+                // КРИТИЧНО: Если в потоке нет треков, но есть receivers - проверяем все receivers
+                // Это важно для случая первого подключения, когда ontrack может не сработать
+                const streamTracksCount = stream.getTracks().length;
+                if (streamTracksCount === 0 && receivers.length > 0) {
+                    console.log(`🔍 [updateVideoOverlays ${userId}] Поток пустой, но есть ${receivers.length} receivers - проверяем все receivers`);
+                    receivers.forEach((receiver, index) => {
+                        const track = receiver.track;
+                        console.log(`🔍 [updateVideoOverlays ${userId}] Receiver ${index}: kind=${track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
+                        if (track && track.readyState === 'live') {
+                            // Для видео: добавляем только если активен
+                            if (track.kind === 'video') {
+                                const isActive = track.enabled && !track.muted;
+                                if (isActive) {
+                                    console.log(`✅ [updateVideoOverlays ${userId}] Добавляем активный видео трек ${track.id} из receiver ${index} в поток (поток был пустой)`);
+                                    stream.addTrack(track);
+                                    // КРИТИЧНО: Устанавливаем srcObject и вызываем play() сразу
+                                    const videoElement = document.getElementById(`remoteVideo-${userId}`);
+                                    if (videoElement) {
+                                        if (videoElement.srcObject !== stream) {
+                                            console.log(`🔄 [updateVideoOverlays ${userId}] Устанавливаем srcObject для videoElement (трек добавлен из receivers)`);
+                                            videoElement.srcObject = stream;
+                                        }
+                                        videoElement.play().catch(err => {
+                                            if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
+                                                console.warn(`⚠️ [updateVideoOverlays ${userId}] Ошибка play после добавления трека:`, err);
+                                            }
+                                        });
+                                    }
+                                } else {
+                                    console.log(`⚠️ [updateVideoOverlays ${userId}] Видео трек в receiver ${index} неактивен (enabled=${track.enabled}, muted=${track.muted}), не добавляем`);
+                                }
+                            } else if (track.kind === 'audio') {
+                                // Для аудио: добавляем если live
+                                console.log(`✅ [updateVideoOverlays ${userId}] Добавляем аудио трек ${track.id} из receiver ${index} в поток (поток был пустой)`);
+                                stream.addTrack(track);
+                            }
+                        } else if (!track) {
+                            console.log(`⚠️ [updateVideoOverlays ${userId}] Receiver ${index} имеет null track`);
+                        } else {
+                            console.log(`⚠️ [updateVideoOverlays ${userId}] Трек в receiver ${index} не live (readyState=${track.readyState})`);
                         }
                     });
                 }
