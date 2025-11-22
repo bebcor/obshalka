@@ -317,8 +317,11 @@ class WebRTCManager {
                             'Streams count:', event.streams.length);
             
                 // Создаем или получаем удаленный поток для этого пользователя
+                // КРИТИЧНО: remoteStream должен быть ОТДЕЛЬНЫМ потоком, НЕ localStream
                 if (!this.videoCallManager.remoteStreams.has(targetUserId)) {
                     const remoteStream = new MediaStream();
+                    // ВАЖНО: Проверяем, что remoteStream не содержит треков из localStream
+                    console.log(`✅ [ontrack] Создан новый remoteStream для ${targetUserId}`);
                     this.videoCallManager.remoteStreams.set(targetUserId, remoteStream);
                     this.videoCallManager.uiManager.createRemoteVideoElement(targetUserId, remoteStream);
                 }
@@ -326,6 +329,20 @@ class WebRTCManager {
                 // УПРОЩЕННАЯ ЛОГИКА: ontrack только добавляет трек в поток
                 // Вся логика скрытия/показа карточек и управления srcObject - в updateVideoOverlays()
                 const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
+                
+                // КРИТИЧНО: Проверяем, что remoteStream НЕ является localStream
+                if (remoteStream === this.videoCallManager.localStream) {
+                    console.error(`❌ [ontrack] КРИТИЧЕСКАЯ ОШИБКА: remoteStream это localStream для ${targetUserId}!`);
+                    // Создаем новый правильный remoteStream
+                    const newRemoteStream = new MediaStream();
+                    this.videoCallManager.remoteStreams.set(targetUserId, newRemoteStream);
+                    // Обновляем videoElement
+                    const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                    if (videoElement) {
+                        videoElement.srcObject = newRemoteStream;
+                    }
+                    return; // Выходим, не обрабатываем трек с неправильным потоком
+                }
                 const track = event.track;
                 
                 // Если трек null (replaceTrack(null) был вызван), удаляем все видео треки из потока

@@ -445,9 +445,34 @@ class UIManager {
                 if (overlay) overlay.style.display = 'none';
                 if (videoElement) {
                     videoElement.style.setProperty('display', 'block', 'important');
+                    // КРИТИЧНО: Устанавливаем srcObject ТОЛЬКО на remoteStream, НЕ на localStream
+                    // Проверяем, что stream это именно remoteStream для этого пользователя
+                    const expectedRemoteStream = this.videoCallManager.remoteStreams.get(userId);
+                    if (expectedRemoteStream && expectedRemoteStream !== stream) {
+                        console.error(`❌ [updateVideoOverlays ${userId}] КРИТИЧЕСКАЯ ОШИБКА: stream не совпадает с remoteStreams!`);
+                        console.error(`❌ [updateVideoOverlays ${userId}] stream:`, stream, 'expectedRemoteStream:', expectedRemoteStream);
+                        // Используем правильный поток
+                        stream = expectedRemoteStream;
+                    }
+                    
+                    // ВАЖНО: Проверяем, что stream НЕ является localStream
+                    if (stream === this.videoCallManager.localStream) {
+                        console.error(`❌ [updateVideoOverlays ${userId}] КРИТИЧЕСКАЯ ОШИБКА: stream это localStream! Используем remoteStream`);
+                        const correctRemoteStream = this.videoCallManager.remoteStreams.get(userId);
+                        if (correctRemoteStream) {
+                            stream = correctRemoteStream;
+                        } else {
+                            console.error(`❌ [updateVideoOverlays ${userId}] Нет remoteStream для ${userId}, создаем новый`);
+                            const newRemoteStream = new MediaStream();
+                            this.videoCallManager.remoteStreams.set(userId, newRemoteStream);
+                            stream = newRemoteStream;
+                        }
+                    }
+                    
                     // ВАЖНО: Устанавливаем srcObject если он еще не установлен или отличается
                     if (videoElement.srcObject !== stream) {
-                        console.log(`🔄 [updateVideoOverlays ${userId}] Устанавливаем srcObject для videoElement`);
+                        console.log(`🔄 [updateVideoOverlays ${userId}] Устанавливаем srcObject для videoElement (remoteStream)`);
+                        console.log(`🔍 [updateVideoOverlays ${userId}] Stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}`));
                         videoElement.srcObject = stream;
                     }
                     // ВАЖНО: Убеждаемся что видео воспроизводится
