@@ -344,8 +344,8 @@ class UIManager {
                                       !track.muted
                                   );
             
-            // КРИТИЧНО: Финальная проверка - если в потоке нет активных видео треков, камера выключена
-            const hasActiveVideoInStream = finalVideoTracks.length > 0 && 
+                // КРИТИЧНО: Финальная проверка - если в потоке нет активных видео треков, камера выключена
+                const hasActiveVideoInStream = finalVideoTracks.length > 0 && 
                                           finalVideoTracks.some(track => 
                                               track && 
                                               track.readyState === 'live' && 
@@ -355,6 +355,7 @@ class UIManager {
             
             // ВАЖНО: Если трек активен в receivers, но его нет в потоке - добавляем его
             // Это критично для случая, когда трек приходит через ontrack, но еще не добавлен в поток
+            // ИЛИ когда трек становится активным после того как был неактивен
             if (hasActiveVideo && !hasActiveVideoInStream && peerConnection) {
                 const receivers = peerConnection.getReceivers();
                 const videoReceiver = receivers.find(receiver => {
@@ -365,27 +366,63 @@ class UIManager {
                     const track = videoReceiver.track;
                     const trackInStream = stream.getTracks().find(t => t.id === track.id);
                     if (!trackInStream) {
-                        console.log(`✅ [${userId}] Добавляем активный видео трек из receivers в поток (финальная проверка)`);
+                        console.log(`✅ [updateVideoOverlays ${userId}] Добавляем активный видео трек из receivers в поток (финальная проверка)`);
                         stream.addTrack(track);
                         // Обновляем hasActiveVideoInStream после добавления
                         hasActiveVideo = true; // Трек добавлен, видео активно
+                        // Обновляем finalVideoTracks для дальнейшей проверки
+                        const updatedVideoTracks = stream.getVideoTracks();
+                        const updatedHasActiveVideoInStream = updatedVideoTracks.length > 0 && 
+                                                              updatedVideoTracks.some(t => 
+                                                                  t && 
+                                                                  t.readyState === 'live' && 
+                                                                  t.enabled && 
+                                                                  !t.muted
+                                                              );
+                        if (updatedHasActiveVideoInStream) {
+                            hasActiveVideo = true;
+                        } else {
+                            hasActiveVideo = false;
+                        }
                     } else {
-                        // Трек уже в потоке, но неактивен - это странно, но оставляем hasActiveVideo как есть
-                        hasActiveVideo = false;
+                        // Трек уже в потоке - проверяем его активность
+                        const isTrackActive = trackInStream.readyState === 'live' && trackInStream.enabled && !trackInStream.muted;
+                        hasActiveVideo = isTrackActive;
                     }
                 } else {
                     // Нет активного видео receiver - камера выключена
                     hasActiveVideo = false;
                 }
             } else if (!hasActiveVideoInStream) {
-                // В потоке нет активных видео треков - камера выключена
-                hasActiveVideo = false;
+                // В потоке нет активных видео треков - проверяем receivers еще раз
+                if (peerConnection) {
+                    const receivers = peerConnection.getReceivers();
+                    const videoReceiver = receivers.find(receiver => {
+                        const track = receiver.track;
+                        return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
+                    });
+                    if (videoReceiver && videoReceiver.track) {
+                        // Есть активный receiver, но его нет в потоке - добавляем
+                        const track = videoReceiver.track;
+                        console.log(`✅ [updateVideoOverlays ${userId}] Добавляем активный видео трек из receivers в поток (нет в потоке)`);
+                        stream.addTrack(track);
+                        hasActiveVideo = true;
+                    } else {
+                        // Нет активного видео - камера выключена
+                        hasActiveVideo = false;
+                    }
+                } else {
+                    // Нет peer connection - камера выключена
+                    hasActiveVideo = false;
+                }
             }
             
             // КРИТИЧНО: Финальная проверка - видео активно ТОЛЬКО если оно активно И в receivers И в потоке
             // Если в потоке нет активных треков, видео неактивно, независимо от receivers
-            if (!hasActiveVideoInStream) {
-                hasActiveVideo = false;
+            // НО если в receivers есть активный трек, который еще не добавлен в поток - добавляем его
+            if (!hasActiveVideoInStream && hasActiveVideo) {
+                // hasActiveVideo уже установлен выше если трек был добавлен
+                // Если трек не был добавлен, hasActiveVideo = false
             }
             
             console.log(`🔍 [updateVideoOverlays ${userId}] Проверка: video=${hasActiveVideo}, audio=${hasActiveAudio}, tracks=${finalVideoTracks.length}v/${finalAudioTracks.length}a`);
