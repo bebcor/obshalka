@@ -113,7 +113,7 @@ class UIManager {
             const isSharingScreen = this.videoCallManager.isSharingScreen || false;
             
             // Карточка показывается ТОЛЬКО если есть активное видео
-            const hasActiveVideo = (videoTrack && videoTrack.enabled && videoTrack.readyState === 'live') || isSharingScreen;
+            const hasActiveVideo = (videoTrack && videoTrack.enabled && videoTrack.readyState === 'live' && !videoTrack.muted) || isSharingScreen;
             
             // Логирование для отладки
             if (videoTrack && !hasActiveVideo) {
@@ -166,7 +166,7 @@ class UIManager {
                 // Это предотвращает показ черного экрана
                 if (localVideo && localVideo.srcObject) {
                     const currentStream = localVideo.srcObject;
-                    const hasVideoTracks = currentStream.getVideoTracks().some(t => t.enabled && t.readyState === 'live');
+                    const hasVideoTracks = currentStream.getVideoTracks().some(t => t.enabled && t.readyState === 'live' && !t.muted);
                     if (!hasVideoTracks) {
                         console.log('🔄 Очищаем srcObject для локального видео (нет активного видео)');
                         localVideo.srcObject = null;
@@ -379,7 +379,7 @@ class UIManager {
                 } else {
                     const track = videoReceiver.track;
                     // Есть видео трек - проверяем активность
-                    const isActive = track.enabled;
+                    const isActive = track.enabled && !track.muted;
                     hasActiveVideo = isActive; // hasActiveVideo = true только если трек активен
                     
                     // ВАЖНО: Если трек есть в receivers, но его нет в потоке - добавляем его (даже если disabled!)
@@ -404,7 +404,8 @@ class UIManager {
                                   finalAudioTracks.some(track => 
                                       track && 
                                       track.readyState === 'live' && 
-                                      track.enabled
+                                      track.enabled && 
+                                      !track.muted
                                   );
             
                 // КРИТИЧНО: Финальная проверка - если в потоке нет активных видео треков, камера выключена
@@ -412,7 +413,8 @@ class UIManager {
                                           finalVideoTracks.some(track => 
                                               track && 
                                               track.readyState === 'live' && 
-                                              track.enabled
+                                              track.enabled && 
+                                              !track.muted
                                           );
             
             // ВАЖНО: Если трек активен в receivers, но его нет в потоке - добавляем его
@@ -422,7 +424,7 @@ class UIManager {
                 const receivers = peerConnection.getReceivers();
                 const videoReceiver = receivers.find(receiver => {
                     const track = receiver.track;
-                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
+                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
                 });
                 if (videoReceiver && videoReceiver.track) {
                     const track = videoReceiver.track;
@@ -438,7 +440,8 @@ class UIManager {
                                                               updatedVideoTracks.some(t => 
                                                                   t && 
                                                                   t.readyState === 'live' && 
-                                                                  t.enabled
+                                                                  t.enabled && 
+                                                                  !t.muted
                                                               );
                         if (updatedHasActiveVideoInStream) {
                             hasActiveVideo = true;
@@ -458,10 +461,10 @@ class UIManager {
                 // В потоке нет активных видео треков - проверяем receivers еще раз
                 if (peerConnection) {
                     const receivers = peerConnection.getReceivers();
-                    const videoReceiver = receivers.find(receiver => {
-                        const track = receiver.track;
-                        return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
-                    });
+                        const videoReceiver = receivers.find(receiver => {
+                            const track = receiver.track;
+                            return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
+                        });
                     if (videoReceiver && videoReceiver.track) {
                         // Есть активный receiver, но его нет в потоке - добавляем
                         const track = videoReceiver.track;
@@ -492,7 +495,8 @@ class UIManager {
             const finalHasActiveVideo = hasActiveVideoInStream && finalVideoTracks.some(track => 
                 track && 
                 track.readyState === 'live' && 
-                                      track.enabled
+                                      track.enabled && 
+                                      !track.muted
             );
             
             // КРИТИЧНО: Показываем карточку ТОЛЬКО если есть АКТИВНЫЙ видео трек
@@ -504,16 +508,15 @@ class UIManager {
                 return track && 
                        track.kind === 'video' && 
                        track.readyState === 'live' && 
-                       track.enabled;
+                       track.enabled && 
+                       !track.muted;
             });
             
             // ПРОВЕРКА ИЗМЕНЕНИЯ СОСТОЯНИЯ: обновляем UI только если состояние изменилось
             // КРИТИЧНО: Проверяем также активность треков в потоке (muted/enabled)
             const activeVideoTracksInStream = finalVideoTracks.filter(t => 
-                t && t.readyState === 'live' && t.enabled
+                t && t.readyState === 'live' && t.enabled && !t.muted
             );
-            const videoTrackIds = finalVideoTracks.map(t => t ? t.id : null);
-            const audioTrackIds = finalAudioTracks.map(t => t ? t.id : null);
             const currentState = {
                 hasActiveVideoTrackInReceivers,
                 finalHasActiveVideo,

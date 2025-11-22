@@ -193,9 +193,11 @@ class MediaController {
             return;
         }
 
+        let createdVideoTrack = false;
         if (!this.videoCallManager.localStream) {
             try {
                 await this.startVideo();
+                createdVideoTrack = true;
             } catch (error) {
                 this.videoCallManager.notificationManager.show('Не удалось включить камеру без доступа к медиа', 'error');
                 return;
@@ -203,6 +205,21 @@ class MediaController {
         }
         
         const videoTracks = this.videoCallManager.localStream.getVideoTracks();
+        if (videoTracks.length === 0) {
+            // Не удалось получить видео-трек даже после startVideo
+            this.videoCallManager.notificationManager.show('Видео недоступно', 'warning');
+            return;
+        }
+
+        if (createdVideoTrack) {
+            // Камера только что включена — оставляем трек активным
+            this.videoCallManager.hasVideoTrack = true;
+            this.videoCallManager.uiManager.updateControlButtons();
+            this.videoCallManager.uiManager.updateVideoOverlays();
+            this.videoCallManager.notificationManager.show('Камера включена', 'info');
+            return;
+        }
+
         if (videoTracks.length > 0) {
             const enabled = !videoTracks[0].enabled;
             videoTracks[0].enabled = enabled;
@@ -240,10 +257,6 @@ class MediaController {
                 this.videoCallManager.checkEmptyState();
             }, 300);
             this.videoCallManager.notificationManager.show(enabled ? 'Камера включена' : 'Камера выключена', 'info');
-        } else {
-            // В потоке нет видео треков, значит камера не была включена — включаем ее
-            await this.startVideo();
-            return;
         }
     }
 
