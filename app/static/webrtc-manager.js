@@ -865,6 +865,19 @@ class WebRTCManager {
                 }
             }
         
+            // Перед созданием offer убеждаемся, что transceiver'ы имеют корректное направление
+            let transceiversAdjusted = false;
+            peerConnection.getTransceivers().forEach((transceiver, index) => {
+                if (transceiver.sender.track) {
+                    // Если есть отправляемый трек, должно быть sendrecv или sendonly
+                    if (transceiver.direction === 'inactive' || transceiver.direction === 'recvonly') {
+                        transceiver.direction = 'sendrecv';
+                        transceiversAdjusted = true;
+                        console.log(`🔄 Fixed transceiver ${index} direction to sendrecv BEFORE offer`);
+                    }
+                }
+            });
+            
             // Используем стандартные опции, но с правильными настройками для медиа
             const offerOptions = {
                 offerToReceiveAudio: true,
@@ -874,16 +887,9 @@ class WebRTCManager {
             console.log(`📤 Creating offer for ${targetUserId}...`);
             const offer = await peerConnection.createOffer(offerOptions);
         
-            // Убеждаемся, что все transceivers правильно настроены
-            peerConnection.getTransceivers().forEach((transceiver, index) => {
-                if (transceiver.sender.track) {
-                    // Если есть отправляемый трек, должно быть sendrecv или sendonly
-                    if (transceiver.direction === 'inactive' || transceiver.direction === 'recvonly') {
-                        transceiver.direction = 'sendrecv';
-                        console.log(`🔄 Fixed transceiver ${index} direction to sendrecv`);
-                    }
-                }
-            });
+            if (transceiversAdjusted) {
+                console.log('♻️ Transceiver directions were updated prior to offer generation');
+            }
         
             await peerConnection.setLocalDescription(offer);
             console.log(`✅ Local description set for ${targetUserId}`);
