@@ -4,6 +4,8 @@ class UIManager {
         this.videoCallManager = videoCallManager;
         // Debounce для updateVideoOverlays
         this._updateVideoOverlaysTimeout = null;
+        // Скрытые audio элементы для воспроизведения аудио без карточек
+        this._hiddenAudioElements = new Map();
     }
 
     getRandomAnimalName() {
@@ -184,12 +186,48 @@ class UIManager {
             let participantCard = document.getElementById(`participant-${userId}`);
             const overlay = participantCard?.querySelector('.video-overlay');
             
-            // ПРОВЕРКА: Есть ли видео треки (не проверяем enabled - это для UI, трек может быть live но disabled)
+            // ПРОВЕРКА: Есть ли активные видео треки (readyState === 'live' И enabled === true)
             const videoTracks = stream.getVideoTracks();
-            const hasVideo = videoTracks.length > 0 && videoTracks[0].readyState === 'live';
+            const hasActiveVideo = videoTracks.length > 0 && 
+                                   videoTracks[0].readyState === 'live' && 
+                                   videoTracks[0].enabled;
             
-            if (hasVideo) {
-                // ЕСТЬ ВИДЕО - создаем карточку если нет, показываем видео
+            // ОБРАБОТКА АУДИО: создаем скрытый audio элемент если есть аудио треки
+            const audioTracks = stream.getAudioTracks();
+            const hasAudio = audioTracks.length > 0 && audioTracks[0].readyState === 'live';
+            
+            if (hasAudio) {
+                // Есть аудио - создаем/обновляем скрытый audio элемент
+                let hiddenAudio = this._hiddenAudioElements.get(userId);
+                if (!hiddenAudio) {
+                    hiddenAudio = document.createElement('audio');
+                    hiddenAudio.autoplay = true;
+                    hiddenAudio.playsInline = true;
+                    hiddenAudio.style.display = 'none';
+                    document.body.appendChild(hiddenAudio);
+                    this._hiddenAudioElements.set(userId, hiddenAudio);
+                }
+                if (hiddenAudio.srcObject !== stream) {
+                    hiddenAudio.srcObject = stream;
+                    hiddenAudio.play().catch(error => {
+                        if (error.name !== 'AbortError') {
+                            console.warn(`⚠️ Ошибка play для скрытого audio ${userId}:`, error);
+                        }
+                    });
+                }
+            } else {
+                // Нет аудио - удаляем скрытый audio элемент
+                const hiddenAudio = this._hiddenAudioElements.get(userId);
+                if (hiddenAudio) {
+                    hiddenAudio.pause();
+                    hiddenAudio.srcObject = null;
+                    hiddenAudio.remove();
+                    this._hiddenAudioElements.delete(userId);
+                }
+            }
+            
+            if (hasActiveVideo) {
+                // ЕСТЬ АКТИВНОЕ ВИДЕО - создаем карточку если нет, показываем видео
                 if (!participantCard) {
                     this.createRemoteVideoElement(userId, stream);
                     participantCard = document.getElementById(`participant-${userId}`);
@@ -210,30 +248,24 @@ class UIManager {
                         videoElement.srcObject = stream;
                     }
                     
-                    // Проверяем enabled для показа видео или overlay
-                    const videoTrack = videoTracks[0];
-                    if (videoTrack && videoTrack.enabled) {
-                        // Видео включено - показываем видео
-                        overlay.style.display = 'none';
-                        videoElement.style.setProperty('display', 'block', 'important');
-                        videoElement.setAttribute('playsinline', 'true');
-                        videoElement.play().catch(error => {
-                            if (error.name !== 'AbortError') {
-                                console.warn(`⚠️ Ошибка play для ${userId}:`, error);
-                            }
-                        });
-                    } else {
-                        // Видео выключено - показываем overlay
-                        overlay.style.display = 'flex';
-                        videoElement.style.setProperty('display', 'none', 'important');
-                    }
+                    // Видео включено - показываем видео
+                    overlay.style.display = 'none';
+                    videoElement.style.setProperty('display', 'block', 'important');
+                    videoElement.setAttribute('playsinline', 'true');
+                    videoElement.play().catch(error => {
+                        if (error.name !== 'AbortError') {
+                            console.warn(`⚠️ Ошибка play для ${userId}:`, error);
+                        }
+                    });
                 }
             } else {
-                // НЕТ ВИДЕО - удаляем карточку полностью
+                // НЕТ АКТИВНОГО ВИДЕО - удаляем карточку полностью
                 if (videoElement) {
                     videoElement.style.setProperty('display', 'none', 'important');
                     videoElement.pause();
                     videoElement.srcObject = null;
+                    // Полная очистка видео элемента
+                    videoElement.load();
                 }
                 if (participantCard && participantCard.parentNode) {
                     participantCard.remove();
