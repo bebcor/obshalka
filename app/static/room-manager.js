@@ -221,7 +221,7 @@ class RoomManager {
                 // КРИТИЧНО: 1. СНАЧАЛА создай локальный поток
                 if (!this.videoCallManager.localStream) {
                     console.log('🔄 Создаем локальный поток перед присоединением к комнате...');
-                    await this.videoCallManager.mediaController.startAudioOnly();
+                    await this.videoCallManager.mediaController.startVideo();
                 }
                 
                 // 2. ПОТОМ присоединяйся к комнате

@@ -888,9 +888,9 @@ class VideoCallManager {
         // ПОКАЗЫВАЕМ уведомление о присоединении
         this.notificationManager.show(`Присоединились к комнате ${this.roomId} как ${this.userName}`, 'success');
         
-        // АВТОМАТИЧЕСКИ включаем ТОЛЬКО микрофон, камеру пользователь включает вручную
+        // АВТОМАТИЧЕСКИ включаем видео и микрофон
         try {
-            await this.mediaController.startAudioOnly();
+            await this.mediaController.startVideo();
             // ВАЖНО: После запуска медиа добавляем треки в существующие peer connections
             // и отправляем offers для всех существующих участников
             if (this.localStream) {
@@ -963,7 +963,7 @@ class VideoCallManager {
             // КРИТИЧНО: 1. СНАЧАЛА убедись что локальный поток есть
             if (!this.localStream) {
                 console.log('🔄 Сначала запускаем локальный поток...');
-                await this.mediaController.startAudioOnly();
+                await this.mediaController.startVideo();
             }
             
             // 2. ПОТОМ создавай peer connection

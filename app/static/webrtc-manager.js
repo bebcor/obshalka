@@ -383,7 +383,7 @@ class WebRTCManager {
             // КРИТИЧНО: ЕСЛИ нет локального потока - сначала создай его
             if (!this.videoCallManager.localStream) {
                 console.log('🔄 Нет локального потока, создаем перед обработкой offer...');
-                await this.videoCallManager.mediaController.startAudioOnly();
+                await this.videoCallManager.mediaController.startVideo();
                 
                 // ПЕРЕСОЗДАЙ соединение с правильными треками
                 if (this.videoCallManager.remoteUsers.has(data.sender_id)) {
