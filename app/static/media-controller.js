@@ -360,6 +360,16 @@ class MediaController {
             await this.updateVideoTracksInConnections(screenVideoTrack);
             
             this.videoCallManager.isSharingScreen = true;
+            
+            // КРИТИЧНО: Обновляем локальное состояние камеры (демонстрация экрана = есть видео)
+            this.videoCallManager.localCameraEnabled = true;
+            this.videoCallManager.cameraStates.set('local', { cameraEnabled: true });
+            
+            // КРИТИЧНО: Отправляем сигнал о состоянии камеры всем участникам
+            // Демонстрация экрана = есть видео, поэтому cameraEnabled = true
+            console.log(`📤 [shareScreen] Отправляем сигнал camera_state: true (демонстрация экрана)`);
+            this.videoCallManager.sendCameraState(true);
+            
             this.videoCallManager.uiManager.updateControlButtons();
             
             this.videoCallManager.notificationManager.show('Демонстрация экрана начата', 'success');
@@ -421,6 +431,17 @@ class MediaController {
         await this.updateVideoTracksInConnections(videoTrack);
         
         this.videoCallManager.isSharingScreen = false;
+        
+        // КРИТИЧНО: Обновляем локальное состояние камеры после остановки демонстрации экрана
+        // Проверяем, есть ли активная камера в восстановленном потоке
+        const hasActiveCamera = !!(videoTrack && videoTrack.enabled);
+        this.videoCallManager.localCameraEnabled = hasActiveCamera;
+        this.videoCallManager.cameraStates.set('local', { cameraEnabled: hasActiveCamera });
+        
+        // КРИТИЧНО: Отправляем сигнал о состоянии камеры всем участникам
+        console.log(`📤 [stopScreenShare] Отправляем сигнал camera_state: ${hasActiveCamera} (после остановки демонстрации экрана)`);
+        this.videoCallManager.sendCameraState(hasActiveCamera);
+        
         this.videoCallManager.uiManager.updateControlButtons();
         
         this.videoCallManager.notificationManager.show('Демонстрация экрана завершена', 'info');
