@@ -187,30 +187,52 @@ class UIManager {
             
             // ПРОСТАЯ ПРОВЕРКА: Есть ли активные видео треки в потоке?
             const videoTracks = stream.getVideoTracks();
+            console.log(`🔍 [updateVideoOverlays] Проверка для ${userId}:`, {
+                videoTracksCount: videoTracks.length,
+                videoTracks: videoTracks.map(t => ({
+                    id: t.id,
+                    enabled: t.enabled,
+                    muted: t.muted,
+                    readyState: t.readyState
+                }))
+            });
+            
             const hasActiveVideo = videoTracks.some(track => 
                 track && 
                 track.readyState === 'live' && 
                 track.enabled
             );
             
+            console.log(`🔍 [updateVideoOverlays] ${userId}: hasActiveVideo=${hasActiveVideo}, participantCard=${!!participantCard}, videoElement=${!!videoElement}`);
+            
             if (hasActiveVideo) {
                 // Есть активное видео - показываем карточку
                 if (!participantCard) {
+                    console.log(`✅ [updateVideoOverlays] Создаем карточку для ${userId} - есть активное видео`);
                     this.createRemoteVideoElement(userId, stream);
                     participantCard = document.getElementById(`participant-${userId}`);
-                    if (!participantCard) return;
+                    if (!participantCard) {
+                        console.error(`❌ [updateVideoOverlays] Не удалось создать карточку для ${userId}`);
+                        return;
+                    }
                 }
                 
+                console.log(`✅ [updateVideoOverlays] Показываем карточку для ${userId}`);
                 participantCard.style.setProperty('display', 'block', 'important');
                 participantCard.style.removeProperty('visibility');
                 participantCard.style.removeProperty('opacity');
                 
                 if (videoElement) {
                     if (videoElement.srcObject !== stream) {
+                        console.log(`🔄 [updateVideoOverlays] Устанавливаем srcObject для ${userId}`);
                         videoElement.srcObject = stream;
                     }
                     videoElement.style.setProperty('display', 'block', 'important');
-                    videoElement.play().catch(() => {});
+                    videoElement.play().catch(err => {
+                        console.warn(`⚠️ [updateVideoOverlays] Ошибка play для ${userId}:`, err);
+                    });
+                } else {
+                    console.warn(`⚠️ [updateVideoOverlays] videoElement не найден для ${userId}`);
                 }
             } else {
                 // Нет активного видео - скрываем/удаляем карточку

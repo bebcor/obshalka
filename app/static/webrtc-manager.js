@@ -1163,13 +1163,15 @@ class WebRTCManager {
                             if (!existingTrack) {
                                 remoteStream.addTrack(track);
                                 tracksUpdated = true;
-                                console.log(`✅ [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} добавлен в поток`);
+                                console.log(`✅ [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} добавлен в поток (enabled=${track.enabled}, muted=${track.muted})`);
                             } else if (existingTrack !== track) {
                                 // Трек заменен - обновляем
                                 remoteStream.removeTrack(existingTrack);
                                 remoteStream.addTrack(track);
                                 tracksUpdated = true;
                                 console.log(`🔄 [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} заменен в потоке`);
+                            } else {
+                                console.log(`✅ [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} уже в потоке (enabled=${track.enabled}, muted=${track.muted})`);
                             }
                         } else {
                             // Для аудио просто добавляем в поток
@@ -1219,6 +1221,20 @@ class WebRTCManager {
                 if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
                     this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
                 }
+                
+                // Логируем состояние потока перед обновлением UI
+                const streamTracks = remoteStream.getTracks();
+                console.log(`🔍 [syncTracksAfterUserJoined ${targetUserId}] Состояние потока перед обновлением UI:`, {
+                    tracksCount: streamTracks.length,
+                    tracks: streamTracks.map(t => ({
+                        kind: t.kind,
+                        id: t.id,
+                        enabled: t.enabled,
+                        muted: t.muted,
+                        readyState: t.readyState
+                    })),
+                    tracksUpdated: tracksUpdated
+                });
                 
                 // Обновляем UI принудительно
                 this.videoCallManager.uiManager.updateVideoOverlays();
