@@ -387,6 +387,32 @@ class WebRTCManager {
                     }
                 }
                 
+                // КРИТИЧНО: Добавляем обработчики событий для треков
+                // Когда трек станет unmuted, обновляем UI
+                if (track.kind === 'video') {
+                    // Обработчик для unmute события - когда трек станет unmuted, обновляем UI
+                    const onunmute = () => {
+                        console.log(`✅ [ontrack] Видео трек ${track.id} для ${targetUserId} стал unmuted, обновляем UI`);
+                        this.videoCallManager.uiManager.updateVideoOverlays();
+                    };
+                    
+                    // Обработчик для mute события - когда трек станет muted, обновляем UI
+                    const onmute = () => {
+                        console.log(`⚠️ [ontrack] Видео трек ${track.id} для ${targetUserId} стал muted`);
+                        // Не обновляем UI сразу - muted может быть временным
+                    };
+                    
+                    // Добавляем обработчики только если их еще нет
+                    if (!track._onunmuteHandler) {
+                        track.addEventListener('unmute', onunmute);
+                        track._onunmuteHandler = onunmute;
+                    }
+                    if (!track._onmuteHandler) {
+                        track.addEventListener('mute', onmute);
+                        track._onmuteHandler = onmute;
+                    }
+                }
+                
                 // WebRTC САМ управляет треками в потоке!
                 // Просто обновляем UI - WebRTC автоматически добавит/удалит треки
                 this.videoCallManager.uiManager.updateVideoOverlays();

@@ -269,9 +269,11 @@ class UIManager {
                     // КРИТИЧНО: Проверяем, есть ли данные в потоке перед вызовом play()
                     const videoTracksInSrcObject = videoElement.srcObject?.getVideoTracks() || [];
                     const hasMutedTracks = videoTracksInSrcObject.some(t => t.muted);
+                    const allTracksMuted = videoTracksInSrcObject.length > 0 && videoTracksInSrcObject.every(t => t.muted);
                     console.log(`🔍 [updateVideoOverlays] Проверка треков в srcObject для ${userId}:`, {
                         videoTracksCount: videoTracksInSrcObject.length,
                         hasMutedTracks: hasMutedTracks,
+                        allTracksMuted: allTracksMuted,
                         tracks: videoTracksInSrcObject.map(t => ({
                             id: t.id,
                             enabled: t.enabled,
@@ -279,6 +281,25 @@ class UIManager {
                             readyState: t.readyState
                         }))
                     });
+                    
+                    // КРИТИЧНО: Если все треки muted, не пытаемся воспроизвести
+                    // Muted треки не передают данные, поэтому play() будет отклонен с AbortError
+                    if (allTracksMuted) {
+                        console.log(`⚠️ [updateVideoOverlays] Все видео треки muted для ${userId}, не пытаемся воспроизвести (ждем unmute)`);
+                        // Не вызываем play() - дождемся пока трек станет unmuted
+                        // Добавляем обработчик для unmute события
+                        videoTracksInSrcObject.forEach(track => {
+                            if (!track._unmuteHandlerAdded) {
+                                const onunmute = () => {
+                                    console.log(`✅ [updateVideoOverlays] Трек ${track.id} для ${userId} стал unmuted, обновляем UI`);
+                                    this.updateVideoOverlays();
+                                };
+                                track.addEventListener('unmute', onunmute);
+                                track._unmuteHandlerAdded = true;
+                            }
+                        });
+                        return;
+                    }
                     
                     // КРИТИЧНО: Пробуем воспроизвести видео и логируем результат
                     // ВАЖНО: play() может вернуть Promise или undefined
@@ -338,6 +359,18 @@ class UIManager {
                                     .catch(err => {
                                         promiseHandled = true;
                                         clearTimeout(timeoutId);
+                                        
+                                        // КРИТИЧНО: AbortError - это нормально, если трек muted и не передает данные
+                                        // Не логируем как ошибку, если это AbortError и трек muted
+                                        const isAbortError = err?.name === 'AbortError';
+                                        const hasMutedTracks = videoTracksInSrcObject.some(t => t.muted);
+                                        
+                                        if (isAbortError && hasMutedTracks) {
+                                            console.log(`ℹ️ [updateVideoOverlays] AbortError для ${userId} - трек muted, ждем пока трек станет unmuted`);
+                                            // Не пытаемся воспроизвести снова - дождемся пока трек станет unmuted
+                                            return;
+                                        }
+                                        
                                         console.error(`❌ [updateVideoOverlays] Ошибка play для ${userId}:`, err);
                                         console.error(`❌ [updateVideoOverlays] Детали ошибки:`, {
                                             name: err?.name || 'Unknown',
