@@ -620,6 +620,14 @@ class UIManager {
                                 // Проверяем что видео действительно загрузилось И соединение готово
                                 // КРИТИЧНО: Проверяем isConnectionReady перед показом видео
                                 const checkConnectionReady = () => {
+                                    // Проверяем что все объекты существуют
+                                    if (!this.videoCallManager || 
+                                        !this.videoCallManager.webrtcManager || 
+                                        !this.videoCallManager.webrtcManager.peerConnections) {
+                                        console.warn(`⚠️ [${userId}] webrtcManager или peerConnections не доступны`);
+                                        return false;
+                                    }
+                                    
                                     const peerConn = this.videoCallManager.webrtcManager.peerConnections.get(userId);
                                     if (peerConn) {
                                         const iceState = peerConn.iceConnectionState;
@@ -652,13 +660,21 @@ class UIManager {
                                 console.log(`   - videoElement.readyState: ${videoElement.readyState}`);
                                 
                                 // КРИТИЧНО: Проверяем isConnectionReady перед показом видео
-                                const peerConn = this.videoCallManager.webrtcManager.peerConnections.get(userId);
                                 let connectionReady = false;
-                                if (peerConn) {
-                                    const iceState = peerConn.iceConnectionState;
-                                    const connState = peerConn.connectionState;
-                                    connectionReady = (iceState === 'connected' || iceState === 'completed') && 
-                                                     (connState === 'connected');
+                                
+                                // Проверяем что все объекты существуют
+                                if (this.videoCallManager && 
+                                    this.videoCallManager.webrtcManager && 
+                                    this.videoCallManager.webrtcManager.peerConnections) {
+                                    const peerConn = this.videoCallManager.webrtcManager.peerConnections.get(userId);
+                                    if (peerConn) {
+                                        const iceState = peerConn.iceConnectionState;
+                                        const connState = peerConn.connectionState;
+                                        connectionReady = (iceState === 'connected' || iceState === 'completed') && 
+                                                         (connState === 'connected');
+                                    }
+                                } else {
+                                    console.warn(`⚠️ [${userId}] webrtcManager или peerConnections не доступны в handleCanPlay`);
                                 }
                                 
                                 if (connectionReady) {
