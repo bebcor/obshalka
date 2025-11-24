@@ -627,7 +627,26 @@ class UIManager {
             console.log(`🔍 [updateVideoOverlays ${userId}] Проверка: hasActiveVideoTrackInReceivers=${hasActiveVideoTrackInReceivers}, finalHasActiveVideo=${finalHasActiveVideo}, audio=${hasActiveAudio}, tracks=${finalVideoTracks.length}v/${finalAudioTracks.length}a`);
             console.log(`🔍 [updateVideoOverlays ${userId}] Stream tracks:`, stream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
             
-            // КРИТИЧНО: Показываем карточку ТОЛЬКО если есть АКТИВНЫЙ видео трек
+            // КРИТИЧНО: Показываем карточку ТОЛЬКО если есть АКТИВНЫЙ видео трек (enabled=true И !muted)
+            // ВАЖНО: Если в потоке есть только muted треки, удаляем карточку
+            const hasMutedVideoInStream = finalVideoTracks.some(t => t && t.muted);
+            if (hasMutedVideoInStream && !finalHasActiveVideo) {
+                // В потоке есть только muted треки - удаляем карточку
+                console.log(`❌ [updateVideoOverlays ${userId}] В потоке есть только muted треки - удаляем карточку`);
+                if (videoElement) {
+                    videoElement.style.setProperty('display', 'none', 'important');
+                    videoElement.pause();
+                    videoElement.srcObject = null;
+                    try {
+                        videoElement.load();
+                    } catch (e) {}
+                }
+                if (participantCard && participantCard.parentNode) {
+                    participantCard.remove();
+                }
+                return;
+            }
+            
             if (hasActiveVideoTrackInReceivers && finalHasActiveVideo) {
                 // ВАЖНО: Если карточка не существует, создаем ее
                 if (!participantCard) {
@@ -679,11 +698,12 @@ class UIManager {
                         }
                     }
                     
-                    // КРИТИЧНО: Проверяем, что в потоке есть АКТИВНЫЕ видео треки
+                    // КРИТИЧНО: Проверяем, что в потоке есть АКТИВНЫЕ видео треки (enabled=true И !muted)
                     const activeVideoTracks = stream.getVideoTracks().filter(t => 
                         t && 
                         t.readyState === 'live' && 
-                        t.enabled
+                        t.enabled &&
+                        !t.muted
                     );
                     
                     if (activeVideoTracks.length === 0) {
@@ -750,7 +770,8 @@ class UIManager {
                 const receivers = peerConnection.getReceivers();
                 const videoReceiver = receivers.find(receiver => {
                     const track = receiver.track;
-                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
+                    // ВАЖНО: Если muted=true, камера выключена - не показываем карточку
+                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
                 });
                 if (videoReceiver && videoReceiver.track) {
                     const track = videoReceiver.track;

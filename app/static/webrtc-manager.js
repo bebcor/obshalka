@@ -340,6 +340,20 @@ class WebRTCManager {
                             const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
                             if (!remoteStream) return;
                             
+                            // КРИТИЧНО: Для видео треков проверяем что трек не muted
+                            // Если muted=true, камера выключена - не добавляем трек
+                            if (track.kind === 'video' && track.muted) {
+                                console.log(`❌ [ontrack] НЕ добавляем видео трек ${track.id} для ${targetUserId} - muted (камера выключена)`);
+                                // Удаляем трек из потока если он там есть
+                                const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
+                                if (existingTrack) {
+                                    console.log(`🗑️ [ontrack] Удаляем muted видео трек ${track.id} из потока для ${targetUserId}`);
+                                    remoteStream.removeTrack(existingTrack);
+                                    tracksUpdated = true;
+                                }
+                                return; // Пропускаем этот трек
+                            }
+                            
                             const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
                             if (!existingTrack) {
                                 console.log(`✅ [ontrack] Добавляем пропущенный трек ${track.kind} ${track.id} для ${targetUserId}`);
