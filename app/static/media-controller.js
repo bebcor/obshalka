@@ -695,9 +695,6 @@ class MediaController {
                     
                     if (tracksUpdated) {
                         // Сбрасываем кэш и обновляем UI
-                        if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
-                            this.videoCallManager.uiManager._lastVideoOverlaysState.delete(userId);
-                        }
                         this.videoCallManager.uiManager.updateVideoOverlays();
                     }
                 }

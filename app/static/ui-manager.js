@@ -4,7 +4,6 @@ class UIManager {
         this.videoCallManager = videoCallManager;
         // Debounce для updateVideoOverlays
         this._updateVideoOverlaysTimeout = null;
-        this._lastVideoOverlaysState = new Map(); // Сохраняем последнее состояние для каждого userId
     }
 
     getRandomAnimalName() {
@@ -179,264 +178,44 @@ class UIManager {
             }
         }
         
-        // Remote video overlays для всех пользователей
-        // УПРОЩЕННАЯ ЛОГИКА: Просто проверяем наличие активных видео треков в потоке
+        // УПРОЩЕННАЯ обработка удаленных видео
         this.videoCallManager.remoteStreams.forEach((stream, userId) => {
             const videoElement = document.getElementById(`remoteVideo-${userId}`);
             let participantCard = document.getElementById(`participant-${userId}`);
             
-            // ПРОСТАЯ ПРОВЕРКА: Есть ли активные видео треки в потоке?
+            // ПРОСТАЯ ПРОВЕРКА: Есть ли активные видео треки?
             const videoTracks = stream.getVideoTracks();
-            console.log(`🔍 [updateVideoOverlays] Проверка для ${userId}:`, {
-                videoTracksCount: videoTracks.length,
-                videoTracks: videoTracks.map(t => ({
-                    id: t.id,
-                    enabled: t.enabled,
-                    muted: t.muted,
-                    readyState: t.readyState,
-                    label: t.label,
-                    kind: t.kind
-                })),
-                streamId: stream.id,
-                streamActive: stream.active
-            });
-            
             const hasActiveVideo = videoTracks.some(track => 
-                track && 
-                track.readyState === 'live' && 
-                track.enabled
+                track && track.readyState === 'live' && track.enabled
             );
-            
-            console.log(`🔍 [updateVideoOverlays] ${userId}: hasActiveVideo=${hasActiveVideo}, participantCard=${!!participantCard}, videoElement=${!!videoElement}`);
             
             if (hasActiveVideo) {
                 // Есть активное видео - показываем карточку
                 if (!participantCard) {
-                    console.log(`✅ [updateVideoOverlays] Создаем карточку для ${userId} - есть активное видео`);
                     this.createRemoteVideoElement(userId, stream);
                     participantCard = document.getElementById(`participant-${userId}`);
-                    if (!participantCard) {
-                        console.error(`❌ [updateVideoOverlays] Не удалось создать карточку для ${userId}`);
-                        return;
-                    }
                 }
                 
-                console.log(`✅ [updateVideoOverlays] Показываем карточку для ${userId}`);
-                participantCard.style.setProperty('display', 'block', 'important');
-                participantCard.style.removeProperty('visibility');
-                participantCard.style.removeProperty('opacity');
+                if (participantCard) {
+                    participantCard.style.setProperty('display', 'block', 'important');
+                    participantCard.style.removeProperty('visibility');
+                    participantCard.style.removeProperty('opacity');
+                }
                 
                 if (videoElement) {
                     if (videoElement.srcObject !== stream) {
-                        console.log(`🔄 [updateVideoOverlays] Устанавливаем srcObject для ${userId}`, {
-                            oldSrcObject: videoElement.srcObject?.id || 'null',
-                            newSrcObject: stream.id,
-                            streamTracks: stream.getTracks().map(t => ({ kind: t.kind, id: t.id, enabled: t.enabled, muted: t.muted }))
-                        });
                         videoElement.srcObject = stream;
-                    } else {
-                        console.log(`✅ [updateVideoOverlays] srcObject уже установлен для ${userId}`);
                     }
                     videoElement.style.setProperty('display', 'block', 'important');
-                    
-                    // КРИТИЧНО: Устанавливаем playsInline для мобильных устройств
-                    if (videoElement.playsInline === undefined) {
-                        videoElement.setAttribute('playsinline', 'true');
-                        videoElement.setAttribute('webkit-playsinline', 'true');
-                    }
-                    
-                    // КРИТИЧНО: Проверяем состояние видео элемента ПЕРЕД вызовом play()
-                    console.log(`🔍 [updateVideoOverlays] Состояние videoElement ДО play() для ${userId}:`, {
-                        paused: videoElement.paused,
-                        ended: videoElement.ended,
-                        readyState: videoElement.readyState,
-                        videoWidth: videoElement.videoWidth,
-                        videoHeight: videoElement.videoHeight,
-                        srcObject: videoElement.srcObject?.id || 'null',
-                        srcObjectTracks: videoElement.srcObject?.getTracks().map(t => ({ 
-                            kind: t.kind, 
-                            id: t.id, 
-                            enabled: t.enabled, 
-                            muted: t.muted,
-                            readyState: t.readyState
-                        })) || [],
-                        autoplay: videoElement.autoplay,
-                        playsInline: videoElement.playsInline,
-                        networkState: videoElement.networkState,
-                        error: videoElement.error
-                    });
-                    
-                    // КРИТИЧНО: Проверяем, есть ли данные в потоке перед вызовом play()
-                    const videoTracksInSrcObject = videoElement.srcObject?.getVideoTracks() || [];
-                    const hasMutedTracks = videoTracksInSrcObject.some(t => t.muted);
-                    const allTracksMuted = videoTracksInSrcObject.length > 0 && videoTracksInSrcObject.every(t => t.muted);
-                    console.log(`🔍 [updateVideoOverlays] Проверка треков в srcObject для ${userId}:`, {
-                        videoTracksCount: videoTracksInSrcObject.length,
-                        hasMutedTracks: hasMutedTracks,
-                        allTracksMuted: allTracksMuted,
-                        tracks: videoTracksInSrcObject.map(t => ({
-                            id: t.id,
-                            enabled: t.enabled,
-                            muted: t.muted,
-                            readyState: t.readyState
-                        }))
-                    });
-                    
-                    // КРИТИЧНО: Если все треки muted, не пытаемся воспроизвести
-                    // Muted треки не передают данные, поэтому play() будет отклонен с AbortError
-                    if (allTracksMuted) {
-                        console.log(`⚠️ [updateVideoOverlays] Все видео треки muted для ${userId}, не пытаемся воспроизвести (ждем unmute)`);
-                        // Не вызываем play() - дождемся пока трек станет unmuted
-                        // Добавляем обработчик для unmute события
-                        videoTracksInSrcObject.forEach(track => {
-                            if (!track._unmuteHandlerAdded) {
-                                const onunmute = () => {
-                                    console.log(`✅ [updateVideoOverlays] Трек ${track.id} для ${userId} стал unmuted, обновляем UI`);
-                                    this.updateVideoOverlays();
-                                };
-                                track.addEventListener('unmute', onunmute);
-                                track._unmuteHandlerAdded = true;
-                            }
-                        });
-                        return;
-                    }
-                    
-                    // КРИТИЧНО: Пробуем воспроизвести видео и логируем результат
-                    // ВАЖНО: play() может вернуть Promise или undefined
-                    try {
-                        console.log(`🎬 [updateVideoOverlays] Вызываем play() для ${userId}`);
-                        const playPromise = videoElement.play();
-                        console.log(`🔍 [updateVideoOverlays] play() вернул для ${userId}:`, {
-                            type: typeof playPromise,
-                            isPromise: playPromise instanceof Promise,
-                            value: playPromise
-                        });
-                        
-                        // Обрабатываем Promise если он есть
-                        if (playPromise !== undefined && playPromise !== null) {
-                            // КРИТИЧНО: Проверяем состояние Promise сразу
-                            // Если Promise уже rejected, нужно обработать ошибку немедленно
-                            if (playPromise instanceof Promise) {
-                                // КРИТИЧНО: Проверяем состояние Promise синхронно
-                                // Если Promise уже rejected, catch может не сработать
-                                let promiseHandled = false;
-                                
-                                // Добавляем таймаут для Promise - если он не разрешится за 5 секунд, логируем
-                                const timeoutId = setTimeout(() => {
-                                    if (!promiseHandled) {
-                                        console.warn(`⚠️ [updateVideoOverlays] Promise от play() не разрешился за 5 секунд для ${userId}`);
-                                    }
-                                }, 5000);
-                                
-                                // КРИТИЧНО: Обрабатываем Promise с немедленной проверкой состояния
-                                // Используем setTimeout(0) чтобы убедиться, что catch сработает даже для уже rejected Promise
-                                Promise.resolve(playPromise)
-                                    .then(() => {
-                                        promiseHandled = true;
-                                        clearTimeout(timeoutId);
-                                        console.log(`✅ [updateVideoOverlays] Видео успешно воспроизведено для ${userId}`);
-                                        // Проверяем состояние видео элемента ПОСЛЕ play()
-                                        setTimeout(() => {
-                                            console.log(`🔍 [updateVideoOverlays] Состояние videoElement ПОСЛЕ play() для ${userId}:`, {
-                                                paused: videoElement.paused,
-                                                ended: videoElement.ended,
-                                                readyState: videoElement.readyState,
-                                                videoWidth: videoElement.videoWidth,
-                                                videoHeight: videoElement.videoHeight,
-                                                srcObject: videoElement.srcObject?.id || 'null',
-                                                srcObjectTracks: videoElement.srcObject?.getTracks().map(t => ({ 
-                                                    kind: t.kind, 
-                                                    id: t.id, 
-                                                    enabled: t.enabled, 
-                                                    muted: t.muted,
-                                                    readyState: t.readyState
-                                                })) || [],
-                                                networkState: videoElement.networkState,
-                                                error: videoElement.error
-                                            });
-                                        }, 100);
-                                    })
-                                    .catch(err => {
-                                        promiseHandled = true;
-                                        clearTimeout(timeoutId);
-                                        
-                                        // КРИТИЧНО: AbortError - это нормально, если трек muted и не передает данные
-                                        // Не логируем как ошибку, если это AbortError и трек muted
-                                        const isAbortError = err?.name === 'AbortError';
-                                        const hasMutedTracks = videoTracksInSrcObject.some(t => t.muted);
-                                        
-                                        if (isAbortError && hasMutedTracks) {
-                                            console.log(`ℹ️ [updateVideoOverlays] AbortError для ${userId} - трек muted, ждем пока трек станет unmuted`);
-                                            // Не пытаемся воспроизвести снова - дождемся пока трек станет unmuted
-                                            return;
-                                        }
-                                        
-                                        console.error(`❌ [updateVideoOverlays] Ошибка play для ${userId}:`, err);
-                                        console.error(`❌ [updateVideoOverlays] Детали ошибки:`, {
-                                            name: err?.name || 'Unknown',
-                                            message: err?.message || 'Unknown error',
-                                            stack: err?.stack || 'No stack',
-                                            code: err?.code,
-                                            videoElement: {
-                                                paused: videoElement.paused,
-                                                ended: videoElement.ended,
-                                                readyState: videoElement.readyState,
-                                                srcObject: videoElement.srcObject?.id || 'null',
-                                                networkState: videoElement.networkState,
-                                                error: videoElement.error,
-                                                errorCode: videoElement.error?.code,
-                                                errorMessage: videoElement.error?.message
-                                            }
-                                        });
-                                        
-                                        // КРИТИЧНО: Если ошибка связана с отсутствием данных, проверяем треки
-                                        if (err?.name === 'NotAllowedError' || err?.message?.includes('play')) {
-                                            console.warn(`⚠️ [updateVideoOverlays] Ошибка воспроизведения может быть связана с muted треками для ${userId}`);
-                                        }
-                                    });
-                                
-                                // КРИТИЧНО: Также проверяем состояние Promise через небольшую задержку
-                                // на случай если он уже rejected, но catch не сработал
-                                setTimeout(() => {
-                                    // Проверяем состояние видео элемента
-                                    if (videoElement.error) {
-                                        console.error(`❌ [updateVideoOverlays] videoElement.error обнаружен для ${userId}:`, {
-                                            code: videoElement.error.code,
-                                            message: videoElement.error.message,
-                                            networkState: videoElement.networkState,
-                                            readyState: videoElement.readyState
-                                        });
-                                    }
-                                    
-                                    // КРИТИЧНО: Если Promise все еще не обработан, проверяем его состояние
-                                    if (!promiseHandled) {
-                                        // Пытаемся получить результат Promise
-                                        playPromise.catch(() => {}).then(() => {
-                                            if (!promiseHandled) {
-                                                console.warn(`⚠️ [updateVideoOverlays] Promise от play() все еще не обработан для ${userId}`);
-                                            }
-                                        });
-                                    }
-                                }, 50);
-                            } else {
-                                console.warn(`⚠️ [updateVideoOverlays] play() вернул не Promise для ${userId}:`, typeof playPromise, playPromise);
-                            }
-                        } else {
-                            console.warn(`⚠️ [updateVideoOverlays] play() вернул ${playPromise} для ${userId}, возможно уже воспроизводится`);
-                        }
-                    } catch (err) {
-                        console.error(`❌ [updateVideoOverlays] Исключение при вызове play() для ${userId}:`, err);
-                        console.error(`❌ [updateVideoOverlays] Стек ошибки:`, err.stack);
-                    }
-                } else {
-                    console.warn(`⚠️ [updateVideoOverlays] videoElement не найден для ${userId}`);
+                    videoElement.setAttribute('playsinline', 'true');
+                    videoElement.play().catch(() => {}); // Игнорируем ошибки play
                 }
             } else {
-                // Нет активного видео - скрываем/удаляем карточку
-            if (videoElement) {
-                videoElement.style.setProperty('display', 'none', 'important');
-                videoElement.pause();
-                videoElement.srcObject = null;
+                // Нет активного видео - удаляем карточку
+                if (videoElement) {
+                    videoElement.style.setProperty('display', 'none', 'important');
+                    videoElement.pause();
+                    videoElement.srcObject = null;
                 }
                 if (participantCard && participantCard.parentNode) {
                     participantCard.remove();
@@ -598,54 +377,10 @@ class UIManager {
         
         const videoElement = document.getElementById(`remoteVideo-${userId}`);
         if (videoElement) {
-            // ВАЖНО: НЕ устанавливаем srcObject сразу - это сделает updateVideoOverlays()
-            // после проверки состояния треков
-            // videoElement.srcObject = stream;
-            // Скрываем видео элемент тоже
+            // УПРОЩЕНО: Скрываем видео элемент по умолчанию
             videoElement.style.setProperty('display', 'none', 'important');
             videoElement.srcObject = null;
             
-            // КРИТИЧНО: Добавляем обработчики событий для отладки
-            videoElement.addEventListener('loadedmetadata', () => {
-                console.log(`✅ [videoElement ${userId}] loadedmetadata:`, {
-                    videoWidth: videoElement.videoWidth,
-                    videoHeight: videoElement.videoHeight,
-                    readyState: videoElement.readyState,
-                    duration: videoElement.duration
-                });
-            });
-            
-            videoElement.addEventListener('loadeddata', () => {
-                console.log(`✅ [videoElement ${userId}] loadeddata:`, {
-                    videoWidth: videoElement.videoWidth,
-                    videoHeight: videoElement.videoHeight,
-                    readyState: videoElement.readyState
-                });
-            });
-            
-            videoElement.addEventListener('canplay', () => {
-                console.log(`✅ [videoElement ${userId}] canplay:`, {
-                    videoWidth: videoElement.videoWidth,
-                    videoHeight: videoElement.videoHeight,
-                    readyState: videoElement.readyState
-                });
-            });
-            
-            videoElement.addEventListener('error', (e) => {
-                console.error(`❌ [videoElement ${userId}] error:`, e, {
-                    error: videoElement.error,
-                    networkState: videoElement.networkState,
-                    readyState: videoElement.readyState
-                });
-            });
-            
-            videoElement.addEventListener('stalled', () => {
-                console.warn(`⚠️ [videoElement ${userId}] stalled`);
-            });
-            
-            videoElement.addEventListener('waiting', () => {
-                console.warn(`⚠️ [videoElement ${userId}] waiting`);
-            });
         }
     }
 
