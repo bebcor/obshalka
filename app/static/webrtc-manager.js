@@ -170,102 +170,35 @@ class WebRTCManager {
             
             // УПРОЩЕННАЯ обработка ontrack - используем только event.streams[0]
             peerConnection.ontrack = (event) => {
-                console.log(`\n🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥`);
-                console.log(`🎥 ========== ONTRACK СОБЫТИЕ ДЛЯ ${targetUserId} ==========`);
-                console.log(`📅 Время: ${new Date().toISOString()}`);
-                console.log(`🟣 [ontrack] ========== ПОЛУЧЕН ТРЕК от ${targetUserId} ==========`);
-                const track = event.track;
-                console.log(`🎥 [ontrack] Remote track received от ${targetUserId}:`);
-                console.log(`   - kind: ${track.kind}`);
-                console.log(`   - id: ${track.id}`);
-                console.log(`   - enabled: ${track.enabled}`);
-                console.log(`   - muted: ${track.muted}`);
-                console.log(`   - readyState: ${track.readyState}`);
-                console.log(`   - label: ${track.label}`);
-                console.log(`📊 [ontrack] Event streams count: ${event.streams.length}`);
-                event.streams.forEach((stream, idx) => {
-                    console.log(`   Stream ${idx}: id=${stream.id}, tracks=${stream.getTracks().length}`);
-                });
-            
-                // УПРОЩЕНО: Используем поток из event.streams[0] - WebRTC уже создал его
-                const remoteStream = event.streams[0];
+                console.log(`🎥 [ontrack] Получен трек от ${targetUserId}:`, event.track.kind);
+                
+                // УПРОЩЕНО: Используем поток из event.streams[0] или создаем новый
+                let remoteStream = event.streams[0];
                 if (!remoteStream) {
-                    console.error(`❌ [ontrack] Нет потока в event.streams[0] для ${targetUserId}`);
-                    console.log(`🟣 [ontrack] ========== КОНЕЦ (нет потока) ==========`);
-                    return;
+                    console.log(`⚠️ [ontrack] Нет потока в event.streams[0], создаем новый для ${targetUserId}`);
+                    remoteStream = new MediaStream();
                 }
                 
-                console.log(`📊 [ontrack] Используем поток ${remoteStream.id} для ${targetUserId}`);
-                console.log(`   - Треков в потоке до добавления: ${remoteStream.getTracks().length}`);
+                // Добавляем трек в поток если его там еще нет
+                if (event.track && !remoteStream.getTracks().includes(event.track)) {
+                    remoteStream.addTrack(event.track);
+                    console.log(`✅ [ontrack] Трек ${event.track.kind} добавлен в поток для ${targetUserId}`);
+                }
                 
                 // Сохраняем поток
-                const hadStream = this.videoCallManager.remoteStreams.has(targetUserId);
-                    this.videoCallManager.remoteStreams.set(targetUserId, remoteStream);
-                console.log(`💾 [ontrack] Поток ${hadStream ? 'обновлен' : 'создан'} для ${targetUserId}`);
+                this.videoCallManager.remoteStreams.set(targetUserId, remoteStream);
                 
-                // ВАЖНО: добавляем трек сразу, даже если muted
+                // Обработчики событий трека
                 const incomingTrack = event.track;
-                const trackAlreadyInStream = remoteStream.getTracks().includes(incomingTrack);
-                console.log(`🔍 [ontrack] Трек уже в потоке: ${trackAlreadyInStream}`);
-                
-                if (!trackAlreadyInStream) {
-                    remoteStream.addTrack(incomingTrack);
-                    console.log(`✅ [ontrack] Трек ${incomingTrack.kind} добавлен в поток для ${targetUserId}`);
-                        } else {
-                    console.log(`ℹ️ [ontrack] Трек ${incomingTrack.kind} уже в потоке для ${targetUserId}`);
-                }
-                
-                console.log(`   - Треков в потоке после добавления: ${remoteStream.getTracks().length}`);
-                
-                // КРИТИЧЕСКИ ВАЖНО: обработчики событий
-                incomingTrack.onunmute = () => {
-                    console.log(`✅ [ontrack] Трек ${incomingTrack.kind} UNMUTED для ${targetUserId}`);
-                    console.log(`   - enabled: ${incomingTrack.enabled}`);
-                    console.log(`   - muted: ${incomingTrack.muted}`);
-                    console.log(`   - readyState: ${incomingTrack.readyState}`);
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                };
                 
                 incomingTrack.onmute = () => {
-                    console.log(`\n🔇🔇🔇 [ontrack] ТРЕК ${incomingTrack.kind} MUTED ДЛЯ ${targetUserId} 🔇🔇🔇`);
-                    console.log(`   - enabled: ${incomingTrack.enabled}`);
-                    console.log(`   - muted: ${incomingTrack.muted}`);
-                    console.log(`   - readyState: ${incomingTrack.readyState}`);
-                    console.log(`   - track.id: ${incomingTrack.id}`);
-                    
-                    // КРИТИЧНО: Если видео трек стал muted - немедленно очищаем srcObject и удаляем карточку
-                    if (incomingTrack.kind === 'video') {
-                        console.log(`🗑️ [ontrack] ВИДЕО ТРЕК MUTED - НЕМЕДЛЕННАЯ ОЧИСТКА ДЛЯ ${targetUserId}`);
-                        
-                        // 1. Очищаем srcObject у videoElement
-                        const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                        if (videoElement && videoElement.srcObject) {
-                            console.log(`   🔄 Очищаем srcObject у videoElement...`);
-                            videoElement.pause();
-                            videoElement.srcObject = null;
-                            videoElement.load();
-                            console.log(`   ✅ srcObject очищен`);
-                        }
-                        
-                        // 2. Удаляем трек из потока
-                        if (remoteStream.getTracks().includes(incomingTrack)) {
-                            console.log(`   🔄 Удаляем muted видео трек из потока...`);
-                            remoteStream.removeTrack(incomingTrack);
-                            console.log(`   ✅ Трек удален из потока`);
-                        }
-                        
-                        // 3. Удаляем карточку из DOM
-                        const participantCard = document.getElementById(`participant-${targetUserId}`);
-                        if (participantCard && participantCard.parentNode) {
-                            console.log(`   🔄 Удаляем карточку из DOM...`);
-                            participantCard.remove();
-                            console.log(`   ✅ Карточка удалена из DOM`);
-                        }
-                    }
-                    
-                    console.log(`🔄 [ontrack] Вызываем updateVideoOverlays() после mute...`);
+                    console.log(`🔇 [ontrack] Трек ${incomingTrack.kind} MUTED для ${targetUserId}`);
                     this.videoCallManager.uiManager.updateVideoOverlays();
-                    console.log(`✅ [ontrack] updateVideoOverlays() вызван после mute`);
+                };
+                
+                incomingTrack.onunmute = () => {
+                    console.log(`✅ [ontrack] Трек ${incomingTrack.kind} UNMUTED для ${targetUserId}`);
+                    this.videoCallManager.uiManager.updateVideoOverlays();
                 };
                 
                 incomingTrack.onended = () => {
@@ -341,22 +274,38 @@ class WebRTCManager {
             };
         
             // Обработчик изменения состояния ICE-соединения
+            let iceConnectionTimeout = null;
             peerConnection.oniceconnectionstatechange = () => {
                 const iceState = peerConnection.iceConnectionState;
                 console.log(`🔄 [ICEConnectionState] Изменение ICE состояния для ${targetUserId}: ${iceState}`);
-                console.log(`📊 [ICEConnectionState] Полное состояние для ${targetUserId}:`);
-                console.log(`   - iceConnectionState: ${peerConnection.iceConnectionState}`);
-                console.log(`   - connectionState: ${peerConnection.connectionState}`);
-                console.log(`   - signalingState: ${peerConnection.signalingState}`);
-                console.log(`   - iceGatheringState: ${peerConnection.iceGatheringState}`);
+            
+                // Очищаем предыдущий таймаут если есть
+                if (iceConnectionTimeout) {
+                    clearTimeout(iceConnectionTimeout);
+                    iceConnectionTimeout = null;
+                }
             
                 if (iceState === 'connected' || iceState === 'completed') {
                     console.log(`✅ [ICEConnectionState] ICE connection successful для ${targetUserId}!`);
                     // КРИТИЧНО: После установки ICE соединения синхронизируем треки
-                    // Это нужно чтобы увидеть видео другого пользователя
-                        this.syncTracksAfterUserJoined(targetUserId);
+                    this.syncTracksAfterUserJoined(targetUserId);
+                } else if (iceState === 'checking') {
+                    // Таймаут для зависших соединений в состоянии checking
+                    iceConnectionTimeout = setTimeout(() => {
+                        if (peerConnection.iceConnectionState === 'checking') {
+                            console.warn(`⚠️ [ICEConnectionState] Таймаут: соединение зависло в checking для ${targetUserId}`);
+                            console.warn(`   Попытка переподключения...`);
+                            // Можно попробовать переподключиться или закрыть соединение
+                            // peerConnection.restartIce();
+                        }
+                    }, 30000); // 30 секунд таймаут
                 } else if (iceState === 'disconnected' || iceState === 'failed') {
                     console.log(`❌ [ICEConnectionState] ICE connection lost для ${targetUserId}`);
+                    // Очищаем ресурсы при разрыве соединения
+                    this.cleanupConnection(targetUserId);
+                } else if (iceState === 'closed') {
+                    console.log(`🔒 [ICEConnectionState] ICE connection closed для ${targetUserId}`);
+                    this.cleanupConnection(targetUserId);
                 }
             };
         
@@ -365,14 +314,6 @@ class WebRTCManager {
                 // Не запускаем автоматически, чтобы избежать конфликтов
                 // Будем запускать вручную когда нужно
             };
-        
-            // Обработчик изменения состояния ICE gathering
-            peerConnection.onicegatheringstatechange = () => {
-                console.log('ICE gathering state for', targetUserId, ':', 
-                            peerConnection.iceGatheringState);
-            };
-        
-            // Сохраняем соединение в Map
         
             // Обработчик изменения состояния ICE gathering
             peerConnection.onicegatheringstatechange = () => {
@@ -1020,6 +961,56 @@ class WebRTCManager {
         } catch (error) {
             console.error('TURN test failed:', error);
         }
+    }
+
+    cleanupConnection(userId) {
+        console.log(`🧹 [cleanupConnection] Очистка соединения для ${userId}`);
+        
+        // Закрываем peer connection
+        if (this.videoCallManager.remoteUsers.has(userId)) {
+            const peerConnection = this.videoCallManager.remoteUsers.get(userId);
+            
+            // Останавливаем все треки
+            peerConnection.getReceivers().forEach(receiver => {
+                if (receiver.track) {
+                    receiver.track.stop();
+                }
+            });
+            
+            // Закрываем соединение
+            try {
+                peerConnection.close();
+            } catch (error) {
+                console.error(`❌ [cleanupConnection] Ошибка закрытия соединения:`, error);
+            }
+            
+            this.videoCallManager.remoteUsers.delete(userId);
+            console.log(`✅ [cleanupConnection] PeerConnection закрыт для ${userId}`);
+        }
+        
+        // Удаляем поток
+        if (this.videoCallManager.remoteStreams.has(userId)) {
+            const stream = this.videoCallManager.remoteStreams.get(userId);
+            stream.getTracks().forEach(track => track.stop());
+            this.videoCallManager.remoteStreams.delete(userId);
+            console.log(`✅ [cleanupConnection] RemoteStream удален для ${userId}`);
+        }
+        
+        // Удаляем карточку
+        const participantCard = document.getElementById(`participant-${userId}`);
+        if (participantCard) {
+            const videoElement = document.getElementById(`remoteVideo-${userId}`);
+            if (videoElement) {
+                videoElement.pause();
+                videoElement.srcObject = null;
+                videoElement.load();
+            }
+            participantCard.remove();
+            console.log(`✅ [cleanupConnection] Карточка удалена для ${userId}`);
+        }
+        
+        // Обновляем UI
+        this.videoCallManager.uiManager.updateVideoOverlays();
     }
 }
 

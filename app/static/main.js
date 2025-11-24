@@ -1153,20 +1153,51 @@ class VideoCallManager {
             this.usedAnimalNames.delete(data.user_name);
         }
         
+        // КРИТИЧНО: Полная очистка соединения и ресурсов
         if (this.remoteUsers.has(data.user_id)) {
-            this.remoteUsers.get(data.user_id).close();
+            const peerConnection = this.remoteUsers.get(data.user_id);
+            
+            // Закрываем все треки
+            peerConnection.getReceivers().forEach(receiver => {
+                if (receiver.track) {
+                    receiver.track.stop();
+                }
+            });
+            
+            // Закрываем соединение
+            peerConnection.close();
             this.remoteUsers.delete(data.user_id);
+            console.log('✅ PeerConnection закрыт и удален для:', data.user_id);
         }
         
-        // Удаляем видео элемент и поток этого пользователя
+        // Удаляем поток
         if (this.remoteStreams.has(data.user_id)) {
+            const stream = this.remoteStreams.get(data.user_id);
+            stream.getTracks().forEach(track => track.stop());
             this.remoteStreams.delete(data.user_id);
+            console.log('✅ RemoteStream удален для:', data.user_id);
         }
         
+        // Удаляем карточку и видео элемент
         const participantCard = document.getElementById(`participant-${data.user_id}`);
         if (participantCard) {
+            const videoElement = document.getElementById(`remoteVideo-${data.user_id}`);
+            if (videoElement) {
+                videoElement.pause();
+                videoElement.srcObject = null;
+                videoElement.load();
+            }
             participantCard.remove();
-            console.log('✅ Удалена карточка участника:', data.user_id);
+            console.log('✅ Карточка участника удалена:', data.user_id);
+        }
+        
+        // Удаляем скрытый audio элемент если есть
+        if (this.uiManager._hiddenAudioElements && this.uiManager._hiddenAudioElements.has(data.user_id)) {
+            const hiddenAudio = this.uiManager._hiddenAudioElements.get(data.user_id);
+            hiddenAudio.pause();
+            hiddenAudio.srcObject = null;
+            hiddenAudio.remove();
+            this.uiManager._hiddenAudioElements.delete(data.user_id);
         }
         
         // Обновляем grid layout
