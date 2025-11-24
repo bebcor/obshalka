@@ -1575,21 +1575,43 @@ class WebRTCManager {
                                     console.log(`✅ [syncTracksAfterUserJoined] Создаем карточку для ${targetUserId} - появился активный видео трек (enabled=true, muted=false)`);
                                     this.videoCallManager.uiManager.createRemoteVideoElement(targetUserId, remoteStream);
                                 }
+                                // Добавляем трек в поток только если не muted
+                                const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
+                                if (!existingTrack) {
+                                    remoteStream.addTrack(track);
+                                    tracksUpdated = true;
+                                    console.log(`✅ [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} добавлен в поток`);
+                                } else if (existingTrack !== track) {
+                                    // Трек заменен - обновляем
+                                    remoteStream.removeTrack(existingTrack);
+                                    remoteStream.addTrack(track);
+                                    tracksUpdated = true;
+                                    console.log(`🔄 [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} заменен в потоке`);
+                                }
                             } else {
-                                console.log(`❌ [syncTracksAfterUserJoined] НЕ создаем карточку для ${targetUserId} - видео трек muted (камера выключена)`);
+                                console.log(`❌ [syncTracksAfterUserJoined] НЕ создаем карточку и НЕ добавляем трек для ${targetUserId} - видео трек muted (камера выключена)`);
+                                // Удаляем трек из потока если он там есть
+                                const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
+                                if (existingTrack) {
+                                    remoteStream.removeTrack(existingTrack);
+                                    tracksUpdated = true;
+                                    console.log(`🗑️ [syncTracksAfterUserJoined ${targetUserId}] Удаляем muted видео трек ${track.id} из потока`);
+                                }
                             }
-                        }
-                        const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
-                        if (!existingTrack) {
-                            remoteStream.addTrack(track);
-                            tracksUpdated = true;
-                            console.log(`✅ [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} добавлен в поток`);
-                        } else if (existingTrack !== track) {
-                            // Трек заменен - обновляем
-                            remoteStream.removeTrack(existingTrack);
-                            remoteStream.addTrack(track);
-                            tracksUpdated = true;
-                            console.log(`🔄 [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} заменен в потоке`);
+                        } else {
+                            // Для аудио просто добавляем в поток
+                            const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
+                            if (!existingTrack) {
+                                remoteStream.addTrack(track);
+                                tracksUpdated = true;
+                                console.log(`✅ [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} добавлен в поток`);
+                            } else if (existingTrack !== track) {
+                                // Трек заменен - обновляем
+                                remoteStream.removeTrack(existingTrack);
+                                remoteStream.addTrack(track);
+                                tracksUpdated = true;
+                                console.log(`🔄 [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} заменен в потоке`);
+                            }
                         }
                         
                         // Для видео треков устанавливаем srcObject
@@ -1664,6 +1686,13 @@ class WebRTCManager {
                 let tracksAdded = false;
                 receiverTracks.forEach(track => {
                     if (!streamTracks.some(t => t.id === track.id)) {
+                        // КРИТИЧНО: Для видео треков проверяем что трек не muted
+                        // Если muted=true, камера выключена - не добавляем трек
+                        if (track.kind === 'video' && track.muted) {
+                            console.log(`❌ [syncTracksAfterUserJoined periodic] НЕ добавляем видео трек ${track.id} для ${targetUserId} - muted (камера выключена)`);
+                            return; // Пропускаем этот трек
+                        }
+                        
                         console.log(`🔄 [syncTracksAfterUserJoined periodic] Добавляем трек ${track.kind} ${track.id} для ${targetUserId}`);
                         remoteStream.addTrack(track);
                         tracksAdded = true;

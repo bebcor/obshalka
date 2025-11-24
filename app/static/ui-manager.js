@@ -664,6 +664,28 @@ class UIManager {
                     videoElement = newVideoElement;
                 }
                 
+                // КРИТИЧНО: Перед показом карточки проверяем, что в потоке нет muted треков
+                // Если есть muted треки, удаляем их и карточку
+                const mutedVideoTracksInStream = stream.getVideoTracks().filter(t => t && t.muted);
+                if (mutedVideoTracksInStream.length > 0) {
+                    console.log(`❌ [updateVideoOverlays ${userId}] В потоке есть muted треки - удаляем их и карточку`);
+                    mutedVideoTracksInStream.forEach(track => {
+                        stream.removeTrack(track);
+                    });
+                    if (videoElement) {
+                        videoElement.style.setProperty('display', 'none', 'important');
+                        videoElement.pause();
+                        videoElement.srcObject = null;
+                        try {
+                            videoElement.load();
+                        } catch (e) {}
+                    }
+                    if (participantCard && participantCard.parentNode) {
+                        participantCard.remove();
+                    }
+                    return;
+                }
+                
                 // Есть видео трек в receivers - показываем карточку
                 participantCard.style.setProperty('display', 'block', 'important');
                 participantCard.style.removeProperty('visibility');
