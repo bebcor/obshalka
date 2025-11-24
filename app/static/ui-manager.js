@@ -348,7 +348,9 @@ class UIManager {
                 }
             } else {
                 // НЕТ АКТИВНОГО ВИДЕО - удаляем карточку полностью
-                console.log(`\n❌ [${userId}] НЕТ АКТИВНОГО ВИДЕО - УДАЛЯЕМ КАРТОЧКУ`);
+                console.log(`\n❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌`);
+                console.log(`❌ ========== НЕТ АКТИВНОГО ВИДЕО - УДАЛЯЕМ КАРТОЧКУ [${userId}] ==========`);
+                console.log(`📅 Время: ${new Date().toISOString()}`);
                 console.log(`   📊 Детали проверки:`);
                 console.log(`   - videoTracks.length: ${videoTracks.length}`);
                 if (videoTracks.length > 0) {
@@ -412,11 +414,13 @@ class UIManager {
                     }
                 }
                 
-                console.log(`\n🔵 ========== КОНЕЦ ОБРАБОТКИ ${userId} ==========\n`);
+                console.log(`❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌`);
+                console.log(`🔵 ========== КОНЕЦ ОБРАБОТКИ ${userId} ==========\n`);
             }
         });
         
         console.log(`\n🟡 ========== КОНЕЦ updateVideoOverlays ==========\n`);
+        console.log(`📅 Время завершения: ${new Date().toISOString()}\n`);
         } finally {
             // Сбрасываем флаг после завершения обновления
             this._updatingVideoOverlays = false;

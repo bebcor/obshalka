@@ -521,7 +521,16 @@ class VideoCallManager {
         }
 
         if (toggleVideoBtn) {
-            toggleVideoBtn.addEventListener('click', () => this.mediaController.toggleVideo());
+            toggleVideoBtn.addEventListener('click', () => {
+                console.log(`\n🖱️🖱️🖱️ ========== КЛИК ПО КНОПКЕ TOGGLE VIDEO ========== 🖱️🖱️🖱️`);
+                console.log(`📅 Время: ${new Date().toISOString()}`);
+                console.log(`🔄 Вызываем mediaController.toggleVideo()...`);
+                this.mediaController.toggleVideo().then(() => {
+                    console.log(`✅ toggleVideo() завершен`);
+                }).catch(err => {
+                    console.error(`❌ Ошибка в toggleVideo():`, err);
+                });
+            });
         }
 
         if (shareScreenBtn) {

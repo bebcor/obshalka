@@ -190,6 +190,23 @@ class MediaController {
     }
 
     async toggleVideo() {
+        console.log(`\n🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥`);
+        console.log(`🎥 ========== TOGGLE VIDEO ВЫЗВАН ==========`);
+        console.log(`📅 Время: ${new Date().toISOString()}`);
+        console.log(`📊 Текущее состояние:`);
+        console.log(`   - isSharingScreen: ${this.videoCallManager.isSharingScreen}`);
+        console.log(`   - localStream: ${this.videoCallManager.localStream ? 'есть' : 'нет'}`);
+        if (this.videoCallManager.localStream) {
+            const videoTracks = this.videoCallManager.localStream.getVideoTracks();
+            console.log(`   - videoTracks.length: ${videoTracks.length}`);
+            if (videoTracks.length > 0) {
+                console.log(`   - videoTrack.enabled: ${videoTracks[0].enabled}`);
+                console.log(`   - videoTrack.muted: ${videoTracks[0].muted}`);
+                console.log(`   - videoTrack.readyState: ${videoTracks[0].readyState}`);
+            }
+        }
+        console.log(`🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥\n`);
+        
         // ЕСЛИ демонстрируем экран - не выключаем видео, а переключаем между камерой и экраном
         if (this.videoCallManager.isSharingScreen) {
             this.videoCallManager.notificationManager.show('Остановите демонстрацию экрана чтобы выключить камеру', 'warning');
@@ -623,8 +640,12 @@ class MediaController {
     }
 
     async updateVideoTracksInConnections(newVideoTrack = null) {
-        console.log('🔄 Обновляем видеотреки в соединениях...');
-        console.log(`🔍 Количество соединений: ${this.videoCallManager.remoteUsers.size}`);
+        console.log(`\n🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄🔄`);
+        console.log(`🔄 ========== updateVideoTracksInConnections ВЫЗВАН ==========`);
+        console.log(`📅 Время: ${new Date().toISOString()}`);
+        console.log(`🔍 Параметры:`);
+        console.log(`   - newVideoTrack: ${newVideoTrack ? `есть (enabled: ${newVideoTrack.enabled}, muted: ${newVideoTrack.muted})` : 'null (УДАЛЯЕМ ВИДЕО)'}`);
+        console.log(`   - Количество соединений: ${this.videoCallManager.remoteUsers.size}`);
         
         const videoTrack = newVideoTrack || (this.videoCallManager.localStream ? this.videoCallManager.localStream.getVideoTracks()[0] : null);
         console.log(`🔍 Видео трек для обновления: ${videoTrack ? `есть (enabled: ${videoTrack.enabled})` : 'нет'}`);

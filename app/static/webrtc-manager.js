@@ -170,6 +170,9 @@ class WebRTCManager {
             
             // УПРОЩЕННАЯ обработка ontrack - используем только event.streams[0]
             peerConnection.ontrack = (event) => {
+                console.log(`\n🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥`);
+                console.log(`🎥 ========== ONTRACK СОБЫТИЕ ДЛЯ ${targetUserId} ==========`);
+                console.log(`📅 Время: ${new Date().toISOString()}`);
                 console.log(`🟣 [ontrack] ========== ПОЛУЧЕН ТРЕК от ${targetUserId} ==========`);
                 const track = event.track;
                 console.log(`🎥 [ontrack] Remote track received от ${targetUserId}:`);
@@ -278,8 +281,10 @@ class WebRTCManager {
                 
                 // Обновляем UI - карточка создастся только если есть видео
                 console.log(`🔄 [ontrack] Обновляем UI для ${targetUserId}`);
-                        this.videoCallManager.uiManager.updateVideoOverlays();
+                this.videoCallManager.uiManager.updateVideoOverlays();
                 console.log(`🟣 [ontrack] ========== КОНЕЦ ОБРАБОТКИ ТРЕКА ==========`);
+                console.log(`📅 Время завершения ontrack: ${new Date().toISOString()}`);
+                console.log(`🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥\n`);
             };
         
             // Обработчик изменения состояния соединения
