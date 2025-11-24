@@ -211,24 +211,55 @@ class UIManager {
                 console.log(`   - participantCard.parentNode: ${participantCard.parentNode ? participantCard.parentNode.id || 'exists' : 'NULL'}`);
             }
             
-            // ПРОВЕРКА: Есть ли активные видео треки (readyState === 'live' И enabled === true)
+            // ПРОВЕРКА: Есть ли активные видео треки (readyState === 'live' И enabled === true И НЕ muted)
+            // КРИТИЧНО: Проверяем трек напрямую из receiver, а не из потока, чтобы получить актуальное muted состояние
+            const peerConnection = this.videoCallManager.remoteUsers.get(userId);
+            let hasActiveVideo = false;
+            let trackFromStream = null;
+            let trackFromReceiver = null;
+            
             const videoTracks = stream.getVideoTracks();
             console.log(`📹 [${userId}] Проверка видео треков:`);
             console.log(`   - videoTracks.length: ${videoTracks.length}`);
             
-            let hasActiveVideo = false;
             if (videoTracks.length > 0) {
-                const track = videoTracks[0];
-                console.log(`   - track.id: ${track.id}`);
-                console.log(`   - track.enabled: ${track.enabled}`);
-                console.log(`   - track.readyState: ${track.readyState}`);
-                console.log(`   - track.muted: ${track.muted}`);
-                console.log(`   - track.label: ${track.label}`);
+                trackFromStream = videoTracks[0];
+                console.log(`   - track.id: ${trackFromStream.id}`);
+                console.log(`   - track.enabled: ${trackFromStream.enabled}`);
+                console.log(`   - track.readyState: ${trackFromStream.readyState}`);
+                console.log(`   - track.muted (из потока): ${trackFromStream.muted}`);
+                console.log(`   - track.label: ${trackFromStream.label}`);
                 
-                // КРИТИЧНО: muted=true означает что данные не приходят (камера выключена на удаленной стороне)
-                hasActiveVideo = track.readyState === 'live' && track.enabled && !track.muted;
-                console.log(`   - hasActiveVideo: ${hasActiveVideo} (readyState='live': ${track.readyState === 'live'}, enabled: ${track.enabled}, !muted: ${!track.muted})`);
+                // КРИТИЧНО: Проверяем трек напрямую из receiver для получения актуального muted состояния
+                if (peerConnection) {
+                    const receivers = peerConnection.getReceivers();
+                    const videoReceiver = receivers.find(r => r.track && r.track.kind === 'video' && r.track.id === trackFromStream.id);
+                    if (videoReceiver && videoReceiver.track) {
+                        trackFromReceiver = videoReceiver.track;
+                        console.log(`   - track.muted (из receiver): ${trackFromReceiver.muted}`);
+                        console.log(`   - track.enabled (из receiver): ${trackFromReceiver.enabled}`);
+                        console.log(`   - track.readyState (из receiver): ${trackFromReceiver.readyState}`);
+                        
+                        // Используем состояние из receiver - оно более актуальное
+                        hasActiveVideo = trackFromReceiver.readyState === 'live' && 
+                                        trackFromReceiver.enabled && 
+                                        !trackFromReceiver.muted;
+                        console.log(`   - hasActiveVideo (из receiver): ${hasActiveVideo}`);
+                    } else {
+                        console.log(`   ⚠️ Receiver для видео трека не найден, используем состояние из потока`);
+                        hasActiveVideo = trackFromStream.readyState === 'live' && 
+                                       trackFromStream.enabled && 
+                                       !trackFromStream.muted;
+                    }
                 } else {
+                    console.log(`   ⚠️ PeerConnection не найден, используем состояние из потока`);
+                    hasActiveVideo = trackFromStream.readyState === 'live' && 
+                                   trackFromStream.enabled && 
+                                   !trackFromStream.muted;
+                }
+                
+                console.log(`   - hasActiveVideo: ${hasActiveVideo} (readyState='live': ${trackFromReceiver ? trackFromReceiver.readyState === 'live' : trackFromStream.readyState === 'live'}, enabled: ${trackFromReceiver ? trackFromReceiver.enabled : trackFromStream.enabled}, !muted: ${trackFromReceiver ? !trackFromReceiver.muted : !trackFromStream.muted})`);
+            } else {
                 console.log(`   - НЕТ видео треков`);
             }
             
@@ -635,6 +666,14 @@ class UIManager {
                     console.log(`   - track.enabled: ${track.enabled}`);
                     console.log(`   - track.readyState: ${track.readyState}`);
                     console.log(`   - track.muted: ${track.muted}`);
+                    
+                    // КРИТИЧНО: Если видео трек стал muted - удаляем его из потока
+                    if (track.kind === 'video' && stream.getTracks().includes(track)) {
+                        console.log(`🗑️ [${userId}] Удаляем muted видео трек из потока`);
+                        stream.removeTrack(track);
+                        console.log(`✅ [${userId}] Muted видео трек удален из потока`);
+                    }
+                    
                     console.log(`🔄 [${userId}] Вызываем updateVideoOverlays() после mute...`);
                     this.updateVideoOverlays();
                     console.log(`✅ [${userId}] updateVideoOverlays() вызван после mute`);

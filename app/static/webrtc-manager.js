@@ -232,6 +232,14 @@ class WebRTCManager {
                     console.log(`   - muted: ${incomingTrack.muted}`);
                     console.log(`   - readyState: ${incomingTrack.readyState}`);
                     console.log(`   - track.id: ${incomingTrack.id}`);
+                    
+                    // КРИТИЧНО: Если видео трек стал muted - удаляем его из потока
+                    if (incomingTrack.kind === 'video' && remoteStream.getTracks().includes(incomingTrack)) {
+                        console.log(`🗑️ [ontrack] Удаляем muted видео трек из потока для ${targetUserId}`);
+                        remoteStream.removeTrack(incomingTrack);
+                        console.log(`✅ [ontrack] Muted видео трек удален из потока`);
+                    }
+                    
                     console.log(`🔄 [ontrack] Вызываем updateVideoOverlays() после mute...`);
                     this.videoCallManager.uiManager.updateVideoOverlays();
                     console.log(`✅ [ontrack] updateVideoOverlays() вызван после mute`);
