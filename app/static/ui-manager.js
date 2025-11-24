@@ -382,19 +382,33 @@ class UIManager {
                     // Если трек muted - данные не приходят, srcObject не устанавливаем чтобы не было черной плашки
                     const trackToCheck = trackFromReceiver || trackFromStream;
                     const isTrackMuted = trackToCheck ? trackToCheck.muted : false;
+                    const isTrackLive = trackToCheck ? trackToCheck.readyState === 'live' : false;
+                    const isTrackEnabled = trackToCheck ? trackToCheck.enabled : false;
                     
-                    if (isTrackMuted) {
-                        console.log(`⚠️ [${userId}] ТРЕК MUTED - НЕ УСТАНАВЛИВАЕМ srcObject (чтобы избежать черной плашки)`);
-                        // Если srcObject уже установлен - очищаем его
+                    console.log(`🔍 [${userId}] Проверка состояния трека перед установкой srcObject:`);
+                    console.log(`   - track.muted: ${isTrackMuted}`);
+                    console.log(`   - track.readyState: ${trackToCheck ? trackToCheck.readyState : 'N/A'}`);
+                    console.log(`   - track.enabled: ${isTrackEnabled}`);
+                    console.log(`   - videoElement.srcObject: ${videoElement.srcObject ? 'SET' : 'NULL'}`);
+                    
+                    // ЕСЛИ трек muted ИЛИ не live ИЛИ не enabled - НЕ устанавливаем srcObject
+                    if (isTrackMuted || !isTrackLive || !isTrackEnabled) {
+                        console.log(`⚠️ [${userId}] ТРЕК НЕ АКТИВЕН (muted=${isTrackMuted}, live=${isTrackLive}, enabled=${isTrackEnabled}) - НЕ УСТАНАВЛИВАЕМ srcObject`);
+                        // Если srcObject уже установлен - ОБЯЗАТЕЛЬНО очищаем его
                         if (videoElement.srcObject) {
-                            console.log(`   🔄 Очищаем srcObject так как трек muted...`);
+                            console.log(`   🔄 ОЧИЩАЕМ srcObject так как трек не активен...`);
                             videoElement.pause();
                             videoElement.srcObject = null;
                             videoElement.load();
-                            console.log(`   ✅ srcObject очищен`);
+                            // Дополнительно очищаем все атрибуты
+                            videoElement.removeAttribute('src');
+                            videoElement.removeAttribute('srcObject');
+                            console.log(`   ✅ srcObject ОЧИЩЕН`);
+                        } else {
+                            console.log(`   ℹ️ srcObject уже NULL, пропускаем очистку`);
                         }
                     } else {
-                        // Трек не muted - устанавливаем srcObject
+                        // Трек активен - устанавливаем srcObject
                         const hadSrcObject = !!videoElement.srcObject;
                         if (videoElement.srcObject !== stream) {
                             console.log(`🔄 [${userId}] Устанавливаем srcObject (было: ${hadSrcObject ? 'SET' : 'NULL'})`);
@@ -711,6 +725,36 @@ class UIManager {
                     console.log(`   - track.id: ${track.id}`);
                     console.log(`   - track.enabled: ${track.enabled}`);
                     console.log(`   - track.readyState: ${track.readyState}`);
+                    console.log(`   - track.muted: ${track.muted}`);
+                    
+                    // КРИТИЧНО: Если видео трек стал muted - НЕМЕДЛЕННО очищаем srcObject и удаляем карточку
+                    if (track.kind === 'video') {
+                        console.log(`🗑️ [${userId}] ВИДЕО ТРЕК MUTED - НЕМЕДЛЕННАЯ ОЧИСТКА`);
+                        
+                        const videoElement = document.getElementById(`remoteVideo-${userId}`);
+                        if (videoElement) {
+                            console.log(`   🔄 Очищаем srcObject у videoElement...`);
+                            videoElement.pause();
+                            videoElement.srcObject = null;
+                            videoElement.load();
+                            // Дополнительно очищаем все атрибуты
+                            videoElement.removeAttribute('src');
+                            videoElement.removeAttribute('srcObject');
+                            console.log(`   ✅ srcObject очищен`);
+                        }
+                        
+                        // Удаляем карточку из DOM
+                        const participantCard = document.getElementById(`participant-${userId}`);
+                        if (participantCard && participantCard.parentNode) {
+                            console.log(`   🔄 Удаляем карточку из DOM...`);
+                            participantCard.remove();
+                            console.log(`   ✅ Карточка удалена из DOM`);
+                        }
+                        
+                        // Вызываем updateVideoOverlays для обновления состояния
+                        console.log(`   🔄 Вызываем updateVideoOverlays для обновления состояния...`);
+                        this.updateVideoOverlays();
+                    }
                     console.log(`   - track.muted: ${track.muted}`);
                     
                     // КРИТИЧНО: Если видео трек стал muted - немедленно очищаем srcObject и удаляем карточку
