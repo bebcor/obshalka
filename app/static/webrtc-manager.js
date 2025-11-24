@@ -193,11 +193,40 @@ class WebRTCManager {
                 
                 incomingTrack.onmute = () => {
                     console.log(`🔇 [ontrack] Трек ${incomingTrack.kind} MUTED для ${targetUserId}`);
+                    // КРИТИЧНО: При onmute проверяем состояние receiver
+                    // replaceTrack(null) вызывает onmute, но enabled может остаться true
+                    const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
+                    if (peerConnection && incomingTrack.kind === 'video') {
+                        const receivers = peerConnection.getReceivers();
+                        const receiver = receivers.find(r => r.track && r.track.id === incomingTrack.id);
+                        if (receiver && receiver.track) {
+                            console.log(`🔍 [ontrack onmute] Состояние receiver трека для ${targetUserId}:`);
+                            console.log(`   - enabled: ${receiver.track.enabled}`);
+                            console.log(`   - muted: ${receiver.track.muted}`);
+                            console.log(`   - readyState: ${receiver.track.readyState}`);
+                        }
+                    }
+                    // НЕМЕДЛЕННО обновляем UI при onmute
+                    console.log(`🔄 [ontrack onmute] Вызываем updateVideoOverlays() для ${targetUserId}`);
                     this.videoCallManager.uiManager.updateVideoOverlays();
                 };
                 
                 incomingTrack.onunmute = () => {
                     console.log(`✅ [ontrack] Трек ${incomingTrack.kind} UNMUTED для ${targetUserId}`);
+                    // КРИТИЧНО: При onunmute проверяем состояние receiver
+                    const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
+                    if (peerConnection && incomingTrack.kind === 'video') {
+                        const receivers = peerConnection.getReceivers();
+                        const receiver = receivers.find(r => r.track && r.track.id === incomingTrack.id);
+                        if (receiver && receiver.track) {
+                            console.log(`🔍 [ontrack onunmute] Состояние receiver трека для ${targetUserId}:`);
+                            console.log(`   - enabled: ${receiver.track.enabled}`);
+                            console.log(`   - muted: ${receiver.track.muted}`);
+                            console.log(`   - readyState: ${receiver.track.readyState}`);
+                        }
+                    }
+                    // НЕМЕДЛЕННО обновляем UI при onunmute
+                    console.log(`🔄 [ontrack onunmute] Вызываем updateVideoOverlays() для ${targetUserId}`);
                     this.videoCallManager.uiManager.updateVideoOverlays();
                 };
                 

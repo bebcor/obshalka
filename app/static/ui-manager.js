@@ -325,8 +325,12 @@ class UIManager {
             if (!track) return false;
             
             // КРИТИЧНО: Проверяем readyState === 'live' И enabled === true
-            // muted не проверяем для удаленных треков - это временное состояние браузера
-            const isActive = track.readyState === 'live' && track.enabled;
+            // ВАЖНО: Если трек muted (например, после replaceTrack(null)), он неактивен
+            // muted может быть временным состоянием браузера, но если трек muted И enabled=false,
+            // это означает что камера выключена
+            const isActive = track.readyState === 'live' && 
+                            track.enabled && 
+                            !track.muted; // Если muted - трек неактивен (например, после replaceTrack(null))
             
             console.log(`   [hasActiveCamera] Удаленный поток ${userId}, трек ${track.id}: readyState=${track.readyState}, enabled=${track.enabled}, muted=${track.muted}, активен=${isActive}`);
             
