@@ -349,12 +349,29 @@ class UIManager {
             const finalIsTrackMuted = trackToCheck ? trackToCheck.muted : true;
             const finalIsTrackLive = trackToCheck ? trackToCheck.readyState === 'live' : false;
             const finalIsTrackEnabled = trackToCheck ? trackToCheck.enabled : false;
-            const finalHasActiveVideo = finalIsTrackLive && finalIsTrackEnabled && !finalIsTrackMuted;
+            
+            // КРИТИЧНО: Проверяем состояние соединения - не показываем карточку если соединение не установлено
+            let isConnectionReady = false;
+            if (peerConnection) {
+                const iceState = peerConnection.iceConnectionState;
+                const connState = peerConnection.connectionState;
+                isConnectionReady = (iceState === 'connected' || iceState === 'completed') && 
+                                   (connState === 'connected');
+                console.log(`🔍 [${userId}] Состояние соединения:`);
+                console.log(`   - iceConnectionState: ${iceState}`);
+                console.log(`   - connectionState: ${connState}`);
+                console.log(`   - isConnectionReady: ${isConnectionReady}`);
+            } else {
+                console.log(`⚠️ [${userId}] PeerConnection не найден, считаем соединение не готовым`);
+            }
+            
+            const finalHasActiveVideo = finalIsTrackLive && finalIsTrackEnabled && !finalIsTrackMuted && isConnectionReady;
             
             console.log(`🔍 [${userId}] ФИНАЛЬНАЯ ПРОВЕРКА перед показом карточки:`);
             console.log(`   - track.muted: ${finalIsTrackMuted}`);
             console.log(`   - track.readyState: ${trackToCheck ? trackToCheck.readyState : 'N/A'}`);
             console.log(`   - track.enabled: ${finalIsTrackEnabled}`);
+            console.log(`   - isConnectionReady: ${isConnectionReady}`);
             console.log(`   - finalHasActiveVideo: ${finalHasActiveVideo}`);
             
             if (finalHasActiveVideo) {
@@ -426,17 +443,77 @@ class UIManager {
                         const hadSrcObject = !!videoElement.srcObject;
                         if (videoElement.srcObject !== stream) {
                             console.log(`🔄 [${userId}] Устанавливаем srcObject (было: ${hadSrcObject ? 'SET' : 'NULL'})`);
+                            
+                            // КРИТИЧНО: Устанавливаем обработчики событий ПЕРЕД установкой srcObject
+                            // Это нужно чтобы избежать черной плашки пока видео не загрузилось
+                            const handleLoadedMetadata = () => {
+                                console.log(`✅ [${userId}] Видео загружено (loadedmetadata)`);
+                                console.log(`   - videoElement.readyState: ${videoElement.readyState}`);
+                                console.log(`   - videoElement.videoWidth: ${videoElement.videoWidth}`);
+                                console.log(`   - videoElement.videoHeight: ${videoElement.videoHeight}`);
+                                
+                                // Проверяем что видео действительно загрузилось
+                                if (videoElement.readyState >= 2) { // HAVE_CURRENT_DATA или выше
+                                    console.log(`✅ [${userId}] Видео готово к показу, скрываем overlay`);
+                                    overlay.style.display = 'none';
+                                    videoElement.style.setProperty('display', 'block', 'important');
+                                } else {
+                                    console.log(`⚠️ [${userId}] Видео еще не готово (readyState=${videoElement.readyState}), ждем canplay`);
+                                }
+                            };
+                            
+                            const handleCanPlay = () => {
+                                console.log(`✅ [${userId}] Видео может воспроизводиться (canplay)`);
+                                console.log(`   - videoElement.readyState: ${videoElement.readyState}`);
+                                overlay.style.display = 'none';
+                                videoElement.style.setProperty('display', 'block', 'important');
+                            };
+                            
+                            const handleError = (error) => {
+                                console.error(`❌ [${userId}] Ошибка загрузки видео:`, error);
+                                console.error(`   - videoElement.error:`, videoElement.error);
+                                overlay.style.display = 'block';
+                                videoElement.style.setProperty('display', 'none', 'important');
+                            };
+                            
+                            // Удаляем старые обработчики если есть
+                            videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+                            videoElement.removeEventListener('canplay', handleCanPlay);
+                            videoElement.removeEventListener('error', handleError);
+                            
+                            // Добавляем новые обработчики
+                            videoElement.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
+                            videoElement.addEventListener('canplay', handleCanPlay, { once: true });
+                            videoElement.addEventListener('error', handleError, { once: true });
+                            
+                            // Устанавливаем srcObject
                             videoElement.srcObject = stream;
+                            videoElement.setAttribute('playsinline', 'true');
+                            
+                            // Пытаемся воспроизвести
+                            videoElement.play().then(() => {
+                                console.log(`✅ [${userId}] Видео воспроизводится`);
+                            }).catch(error => {
+                                console.warn(`⚠️ [${userId}] Ошибка воспроизведения видео:`, error);
+                            });
+                            
                             console.log(`   - videoElement.srcObject установлен: ${!!videoElement.srcObject}`);
+                            
+                            // Показываем overlay пока видео не загрузилось
+                            overlay.style.display = 'block';
+                            videoElement.style.setProperty('display', 'none', 'important');
                         } else {
                             console.log(`ℹ️ [${userId}] srcObject уже установлен, пропускаем`);
+                            // Если srcObject уже установлен, проверяем готовность
+                            if (videoElement.readyState >= 2) {
+                                overlay.style.display = 'none';
+                                videoElement.style.setProperty('display', 'block', 'important');
+                            } else {
+                                overlay.style.display = 'block';
+                                videoElement.style.setProperty('display', 'none', 'important');
+                            }
                         }
                     }
-                    
-                    // Видео включено - показываем видео
-                    overlay.style.display = 'none';
-                    videoElement.style.setProperty('display', 'block', 'important');
-                    videoElement.setAttribute('playsinline', 'true');
                     console.log(`   - overlay скрыт, videoElement показан`);
                     
                     videoElement.play().then(() => {
