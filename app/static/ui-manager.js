@@ -191,9 +191,9 @@ class UIManager {
         this.videoCallManager.remoteStreams.forEach((stream, userId) => {
             console.log(`\n🔵 ========== ОБРАБОТКА УЧАСТНИКА ${userId} ==========`);
             
-            const videoElement = document.getElementById(`remoteVideo-${userId}`);
+            let videoElement = document.getElementById(`remoteVideo-${userId}`);
             let participantCard = document.getElementById(`participant-${userId}`);
-            const overlay = participantCard?.querySelector('.video-overlay');
+            let overlay = participantCard?.querySelector('.video-overlay');
             
             console.log(`📊 [${userId}] Состояние DOM элементов:`);
             console.log(`   - videoElement exists: ${!!videoElement}`);
