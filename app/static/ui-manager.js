@@ -343,7 +343,21 @@ class UIManager {
                 return; // Прерываем обработку этого участника
             }
             
-            if (hasActiveVideo) {
+            // КРИТИЧНО: Проверяем состояние трека ЕЩЕ РАЗ перед показом карточки
+            // Трек мог стать muted между проверкой hasActiveVideo и показом карточки
+            const trackToCheck = trackFromReceiver || trackFromStream;
+            const finalIsTrackMuted = trackToCheck ? trackToCheck.muted : true;
+            const finalIsTrackLive = trackToCheck ? trackToCheck.readyState === 'live' : false;
+            const finalIsTrackEnabled = trackToCheck ? trackToCheck.enabled : false;
+            const finalHasActiveVideo = finalIsTrackLive && finalIsTrackEnabled && !finalIsTrackMuted;
+            
+            console.log(`🔍 [${userId}] ФИНАЛЬНАЯ ПРОВЕРКА перед показом карточки:`);
+            console.log(`   - track.muted: ${finalIsTrackMuted}`);
+            console.log(`   - track.readyState: ${trackToCheck ? trackToCheck.readyState : 'N/A'}`);
+            console.log(`   - track.enabled: ${finalIsTrackEnabled}`);
+            console.log(`   - finalHasActiveVideo: ${finalHasActiveVideo}`);
+            
+            if (finalHasActiveVideo) {
                 console.log(`✅ [${userId}] ЕСТЬ АКТИВНОЕ ВИДЕО - показываем карточку`);
                 
                 // ЕСТЬ АКТИВНОЕ ВИДЕО - создаем карточку если нет, показываем видео
@@ -358,8 +372,8 @@ class UIManager {
                         videoElement = document.getElementById(`remoteVideo-${userId}`);
                         overlay = participantCard.querySelector('.video-overlay');
                         console.log(`🔄 [${userId}] Обновлены переменные после создания: videoElement=${!!videoElement}, overlay=${!!overlay}`);
-                        }
-                    } else {
+                    }
+                } else {
                     console.log(`ℹ️ [${userId}] Карточка уже существует`);
                 }
                 
@@ -368,45 +382,45 @@ class UIManager {
                     
                     // Показываем карточку
                     const beforeDisplay = window.getComputedStyle(participantCard).display;
-                participantCard.style.setProperty('display', 'block', 'important');
-                participantCard.style.removeProperty('visibility');
-                participantCard.style.removeProperty('opacity');
-                participantCard.style.removeProperty('width');
-                participantCard.style.removeProperty('height');
-                participantCard.style.removeProperty('overflow');
-                participantCard.style.removeProperty('pointer-events');
+                    participantCard.style.setProperty('display', 'block', 'important');
+                    participantCard.style.removeProperty('visibility');
+                    participantCard.style.removeProperty('opacity');
+                    participantCard.style.removeProperty('width');
+                    participantCard.style.removeProperty('height');
+                    participantCard.style.removeProperty('overflow');
+                    participantCard.style.removeProperty('pointer-events');
                     const afterDisplay = window.getComputedStyle(participantCard).display;
                     console.log(`   - participantCard display: ${beforeDisplay} -> ${afterDisplay}`);
                     
                     // КРИТИЧНО: Устанавливаем srcObject ТОЛЬКО если трек НЕ muted
-                    // Если трек muted - данные не приходят, srcObject не устанавливаем чтобы не было черной плашки
-                    const trackToCheck = trackFromReceiver || trackFromStream;
-                    const isTrackMuted = trackToCheck ? trackToCheck.muted : false;
-                    const isTrackLive = trackToCheck ? trackToCheck.readyState === 'live' : false;
-                    const isTrackEnabled = trackToCheck ? trackToCheck.enabled : false;
+                    // Проверяем ЕЩЕ РАЗ перед установкой srcObject
+                    const currentIsTrackMuted = trackToCheck ? trackToCheck.muted : true;
+                    const currentIsTrackLive = trackToCheck ? trackToCheck.readyState === 'live' : false;
+                    const currentIsTrackEnabled = trackToCheck ? trackToCheck.enabled : false;
                     
                     console.log(`🔍 [${userId}] Проверка состояния трека перед установкой srcObject:`);
-                    console.log(`   - track.muted: ${isTrackMuted}`);
+                    console.log(`   - track.muted: ${currentIsTrackMuted}`);
                     console.log(`   - track.readyState: ${trackToCheck ? trackToCheck.readyState : 'N/A'}`);
-                    console.log(`   - track.enabled: ${isTrackEnabled}`);
+                    console.log(`   - track.enabled: ${currentIsTrackEnabled}`);
                     console.log(`   - videoElement.srcObject: ${videoElement.srcObject ? 'SET' : 'NULL'}`);
                     
                     // ЕСЛИ трек muted ИЛИ не live ИЛИ не enabled - НЕ устанавливаем srcObject
-                    if (isTrackMuted || !isTrackLive || !isTrackEnabled) {
-                        console.log(`⚠️ [${userId}] ТРЕК НЕ АКТИВЕН (muted=${isTrackMuted}, live=${isTrackLive}, enabled=${isTrackEnabled}) - НЕ УСТАНАВЛИВАЕМ srcObject`);
+                    if (currentIsTrackMuted || !currentIsTrackLive || !currentIsTrackEnabled) {
+                        console.log(`⚠️ [${userId}] ТРЕК НЕ АКТИВЕН (muted=${currentIsTrackMuted}, live=${currentIsTrackLive}, enabled=${currentIsTrackEnabled}) - НЕ УСТАНАВЛИВАЕМ srcObject И СКРЫВАЕМ КАРТОЧКУ`);
                         // Если srcObject уже установлен - ОБЯЗАТЕЛЬНО очищаем его
                         if (videoElement.srcObject) {
                             console.log(`   🔄 ОЧИЩАЕМ srcObject так как трек не активен...`);
                             videoElement.pause();
                             videoElement.srcObject = null;
                             videoElement.load();
-                            // Дополнительно очищаем все атрибуты
                             videoElement.removeAttribute('src');
                             videoElement.removeAttribute('srcObject');
                             console.log(`   ✅ srcObject ОЧИЩЕН`);
-                        } else {
-                            console.log(`   ℹ️ srcObject уже NULL, пропускаем очистку`);
                         }
+                        // Скрываем карточку если трек не активен
+                        participantCard.style.setProperty('display', 'none', 'important');
+                        overlay.style.display = 'block';
+                        return; // Прерываем обработку
                     } else {
                         // Трек активен - устанавливаем srcObject
                         const hadSrcObject = !!videoElement.srcObject;
