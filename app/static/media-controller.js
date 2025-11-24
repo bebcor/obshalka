@@ -695,16 +695,10 @@ class MediaController {
                                 console.log(`✅ [updateVideoTracksInConnections] Добавлен трек ${track.kind} ${track.id} для ${userId}`);
                             }
                             
-                            // Для видео треков обновляем videoElement
-                            if (track.kind === 'video') {
-                                const videoElement = document.getElementById(`remoteVideo-${userId}`);
-                                if (videoElement) {
-                                    if (videoElement.srcObject !== remoteStream) {
-                                        videoElement.srcObject = remoteStream;
-                                    }
-                                    videoElement.play().catch(() => {});
-                                }
-                            }
+                            // КРИТИЧНО: НЕ устанавливаем srcObject здесь!
+                            // Это создаст черную плашку если карточка скрыта
+                            // srcObject устанавливается в updateVideoOverlays когда карточка показывается
+                            // Просто обновляем UI чтобы updateVideoOverlays правильно обработал состояние
                         }
                     });
                     

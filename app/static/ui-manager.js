@@ -280,14 +280,25 @@ class UIManager {
                 // КРИТИЧНО: Очищаем srcObject ДО удаления карточки, чтобы не было черной плашки
                 if (videoElement) {
                     console.log(`🗑️ [updateVideoOverlays] Удаляем карточку для ${userId} - очищаем видео элемент`);
+                    // Останавливаем воспроизведение
                     videoElement.pause();
+                    // Очищаем поток
                     videoElement.srcObject = null;
                     // Полная очистка видео элемента
                     videoElement.load();
+                    // Скрываем элемент
                     videoElement.style.setProperty('display', 'none', 'important');
+                    // Дополнительная очистка - убираем все атрибуты
+                    videoElement.removeAttribute('src');
+                    videoElement.removeAttribute('srcObject');
                 }
                 if (participantCard && participantCard.parentNode) {
                     console.log(`🗑️ [updateVideoOverlays] Удаляем карточку ${userId} из DOM`);
+                    // Убеждаемся что srcObject очищен перед удалением
+                    if (videoElement && videoElement.srcObject) {
+                        videoElement.srcObject = null;
+                        videoElement.load();
+                    }
                     participantCard.remove();
                 }
             }

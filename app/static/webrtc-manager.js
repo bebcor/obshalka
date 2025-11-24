@@ -628,30 +628,10 @@ class WebRTCManager {
                             }
                         }
                         
-                        // Для видео треков устанавливаем srcObject
-                        if (track.kind === 'video') {
-                            const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                            if (videoElement) {
-                                // КРИТИЧНО: Проверяем что в потоке есть активные видео треки
-                                const activeVideoTracks = remoteStream.getVideoTracks().filter(t => t.enabled);
-                                if (activeVideoTracks.length > 0) {
-                                    if (videoElement.srcObject !== remoteStream) {
-                                        console.log(`🔄 [syncTracksAfterUserJoined ${targetUserId}] Устанавливаем srcObject для videoElement`);
-                                        videoElement.srcObject = remoteStream;
-                                    }
-                                    videoElement.play().catch(err => {
-                                        if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
-                                            console.warn(`⚠️ [syncTracksAfterUserJoined ${targetUserId}] Ошибка play:`, err);
-                                        }
-                                    });
-                                } else {
-                                    // Нет активных видео треков - очищаем srcObject
-                                    console.log(`🗑️ [syncTracksAfterUserJoined ${targetUserId}] Нет активных видео треков - очищаем srcObject`);
-                                    videoElement.srcObject = null;
-                                    videoElement.pause();
-                                }
-                            }
-                        }
+                        // КРИТИЧНО: НЕ устанавливаем srcObject здесь!
+                        // Это создаст черную плашку если карточка скрыта
+                        // srcObject устанавливается в updateVideoOverlays когда карточка показывается
+                        // Просто обновляем UI чтобы updateVideoOverlays правильно обработал состояние
                     }
                 });
                 
@@ -732,12 +712,9 @@ class WebRTCManager {
                         remoteStream.addTrack(track);
                         tracksAdded = true;
                         
-                        if (track.kind === 'video') {
-                            const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                            if (videoElement && videoElement.srcObject !== remoteStream) {
-                                videoElement.srcObject = remoteStream;
-                            }
-                        }
+                        // КРИТИЧНО: НЕ устанавливаем srcObject здесь!
+                        // Это создаст черную плашку если карточка скрыта
+                        // srcObject устанавливается в updateVideoOverlays когда карточка показывается
                     }
                 });
                 
