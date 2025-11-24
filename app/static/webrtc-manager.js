@@ -689,17 +689,36 @@ class WebRTCManager {
                 throw error;
             }
         
+            // КРИТИЧНО: Настраиваем transceivers ДО создания answer
+            // Это нужно чтобы видео transceiver был правильно настроен для приема видео
+            peerConnection.getTransceivers().forEach((transceiver, index) => {
+                if (transceiver.receiver.track?.kind === 'video') {
+                    // Для видео receiver: если нет sender track, устанавливаем recvonly (принимаем видео)
+                    // Если есть sender track, устанавливаем sendrecv (отправляем и принимаем)
+                    if (!transceiver.sender.track) {
+                        transceiver.direction = 'recvonly';
+                        console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на recvonly (нет локального видео)`);
+                    } else {
+                        transceiver.direction = 'sendrecv';
+                        console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на sendrecv (есть локальное видео)`);
+                    }
+                } else if (transceiver.receiver.track?.kind === 'audio') {
+                    // Для аудио receiver: аналогично
+                    if (!transceiver.sender.track) {
+                        transceiver.direction = 'recvonly';
+                    } else {
+                        transceiver.direction = 'sendrecv';
+                    }
+                } else if (transceiver.sender.track) {
+                    // Если есть sender track, но нет receiver track - устанавливаем sendonly
+                    transceiver.direction = 'sendonly';
+                }
+            });
+            
             // Создаем ответ (answer) с правильными опциями
             const answer = await peerConnection.createAnswer({
                 offerToReceiveAudio: true,
                 offerToReceiveVideo: true
-            });
-            
-            // Убеждаемся, что transceivers правильно настроены
-            peerConnection.getTransceivers().forEach((transceiver) => {
-                if (transceiver.direction === 'inactive' && transceiver.sender.track) {
-                    transceiver.direction = 'sendrecv';
-                }
             });
             
             // Устанавливаем созданный ответ как локальное описание
