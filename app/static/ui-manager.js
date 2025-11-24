@@ -239,6 +239,12 @@ class UIManager {
                     }
                     videoElement.style.setProperty('display', 'block', 'important');
                     
+                    // КРИТИЧНО: Устанавливаем playsInline для мобильных устройств
+                    if (videoElement.playsInline === undefined) {
+                        videoElement.setAttribute('playsinline', 'true');
+                        videoElement.setAttribute('webkit-playsinline', 'true');
+                    }
+                    
                     // КРИТИЧНО: Проверяем состояние видео элемента ПЕРЕД вызовом play()
                     console.log(`🔍 [updateVideoOverlays] Состояние videoElement ДО play() для ${userId}:`, {
                         paused: videoElement.paused,
@@ -255,14 +261,19 @@ class UIManager {
                             readyState: t.readyState
                         })) || [],
                         autoplay: videoElement.autoplay,
-                        playsInline: videoElement.playsInline
+                        playsInline: videoElement.playsInline,
+                        networkState: videoElement.networkState,
+                        error: videoElement.error
                     });
                     
                     // КРИТИЧНО: Пробуем воспроизвести видео и логируем результат
+                    // ВАЖНО: play() может вернуть Promise или undefined
                     try {
                         console.log(`🎬 [updateVideoOverlays] Вызываем play() для ${userId}`);
                         const playPromise = videoElement.play();
-                        if (playPromise !== undefined) {
+                        
+                        // Обрабатываем Promise если он есть
+                        if (playPromise !== undefined && playPromise !== null) {
                             playPromise
                                 .then(() => {
                                     console.log(`✅ [updateVideoOverlays] Видео успешно воспроизведено для ${userId}`);
@@ -281,7 +292,9 @@ class UIManager {
                                                 enabled: t.enabled, 
                                                 muted: t.muted,
                                                 readyState: t.readyState
-                                            })) || []
+                                            })) || [],
+                                            networkState: videoElement.networkState,
+                                            error: videoElement.error
                                         });
                                     }, 100);
                                 })
@@ -295,12 +308,14 @@ class UIManager {
                                             paused: videoElement.paused,
                                             ended: videoElement.ended,
                                             readyState: videoElement.readyState,
-                                            srcObject: videoElement.srcObject?.id || 'null'
+                                            srcObject: videoElement.srcObject?.id || 'null',
+                                            networkState: videoElement.networkState,
+                                            error: videoElement.error
                                         }
                                     });
                                 });
                         } else {
-                            console.warn(`⚠️ [updateVideoOverlays] play() вернул undefined для ${userId}`);
+                            console.warn(`⚠️ [updateVideoOverlays] play() вернул ${playPromise} для ${userId}, возможно уже воспроизводится`);
                         }
                     } catch (err) {
                         console.error(`❌ [updateVideoOverlays] Исключение при вызове play() для ${userId}:`, err);
@@ -310,10 +325,10 @@ class UIManager {
                 }
             } else {
                 // Нет активного видео - скрываем/удаляем карточку
-                if (videoElement) {
-                    videoElement.style.setProperty('display', 'none', 'important');
-                    videoElement.pause();
-                    videoElement.srcObject = null;
+            if (videoElement) {
+                videoElement.style.setProperty('display', 'none', 'important');
+                videoElement.pause();
+                videoElement.srcObject = null;
                 }
                 if (participantCard && participantCard.parentNode) {
                     participantCard.remove();
@@ -481,6 +496,48 @@ class UIManager {
             // Скрываем видео элемент тоже
             videoElement.style.setProperty('display', 'none', 'important');
             videoElement.srcObject = null;
+            
+            // КРИТИЧНО: Добавляем обработчики событий для отладки
+            videoElement.addEventListener('loadedmetadata', () => {
+                console.log(`✅ [videoElement ${userId}] loadedmetadata:`, {
+                    videoWidth: videoElement.videoWidth,
+                    videoHeight: videoElement.videoHeight,
+                    readyState: videoElement.readyState,
+                    duration: videoElement.duration
+                });
+            });
+            
+            videoElement.addEventListener('loadeddata', () => {
+                console.log(`✅ [videoElement ${userId}] loadeddata:`, {
+                    videoWidth: videoElement.videoWidth,
+                    videoHeight: videoElement.videoHeight,
+                    readyState: videoElement.readyState
+                });
+            });
+            
+            videoElement.addEventListener('canplay', () => {
+                console.log(`✅ [videoElement ${userId}] canplay:`, {
+                    videoWidth: videoElement.videoWidth,
+                    videoHeight: videoElement.videoHeight,
+                    readyState: videoElement.readyState
+                });
+            });
+            
+            videoElement.addEventListener('error', (e) => {
+                console.error(`❌ [videoElement ${userId}] error:`, e, {
+                    error: videoElement.error,
+                    networkState: videoElement.networkState,
+                    readyState: videoElement.readyState
+                });
+            });
+            
+            videoElement.addEventListener('stalled', () => {
+                console.warn(`⚠️ [videoElement ${userId}] stalled`);
+            });
+            
+            videoElement.addEventListener('waiting', () => {
+                console.warn(`⚠️ [videoElement ${userId}] waiting`);
+            });
         }
     }
 
