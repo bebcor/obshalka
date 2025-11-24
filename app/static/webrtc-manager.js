@@ -233,11 +233,34 @@ class WebRTCManager {
                     console.log(`   - readyState: ${incomingTrack.readyState}`);
                     console.log(`   - track.id: ${incomingTrack.id}`);
                     
-                    // КРИТИЧНО: Если видео трек стал muted - удаляем его из потока
-                    if (incomingTrack.kind === 'video' && remoteStream.getTracks().includes(incomingTrack)) {
-                        console.log(`🗑️ [ontrack] Удаляем muted видео трек из потока для ${targetUserId}`);
-                        remoteStream.removeTrack(incomingTrack);
-                        console.log(`✅ [ontrack] Muted видео трек удален из потока`);
+                    // КРИТИЧНО: Если видео трек стал muted - немедленно очищаем srcObject и удаляем карточку
+                    if (incomingTrack.kind === 'video') {
+                        console.log(`🗑️ [ontrack] ВИДЕО ТРЕК MUTED - НЕМЕДЛЕННАЯ ОЧИСТКА ДЛЯ ${targetUserId}`);
+                        
+                        // 1. Очищаем srcObject у videoElement
+                        const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                        if (videoElement && videoElement.srcObject) {
+                            console.log(`   🔄 Очищаем srcObject у videoElement...`);
+                            videoElement.pause();
+                            videoElement.srcObject = null;
+                            videoElement.load();
+                            console.log(`   ✅ srcObject очищен`);
+                        }
+                        
+                        // 2. Удаляем трек из потока
+                        if (remoteStream.getTracks().includes(incomingTrack)) {
+                            console.log(`   🔄 Удаляем muted видео трек из потока...`);
+                            remoteStream.removeTrack(incomingTrack);
+                            console.log(`   ✅ Трек удален из потока`);
+                        }
+                        
+                        // 3. Удаляем карточку из DOM
+                        const participantCard = document.getElementById(`participant-${targetUserId}`);
+                        if (participantCard && participantCard.parentNode) {
+                            console.log(`   🔄 Удаляем карточку из DOM...`);
+                            participantCard.remove();
+                            console.log(`   ✅ Карточка удалена из DOM`);
+                        }
                     }
                     
                     console.log(`🔄 [ontrack] Вызываем updateVideoOverlays() после mute...`);

@@ -667,11 +667,34 @@ class UIManager {
                     console.log(`   - track.readyState: ${track.readyState}`);
                     console.log(`   - track.muted: ${track.muted}`);
                     
-                    // КРИТИЧНО: Если видео трек стал muted - удаляем его из потока
-                    if (track.kind === 'video' && stream.getTracks().includes(track)) {
-                        console.log(`🗑️ [${userId}] Удаляем muted видео трек из потока`);
-                        stream.removeTrack(track);
-                        console.log(`✅ [${userId}] Muted видео трек удален из потока`);
+                    // КРИТИЧНО: Если видео трек стал muted - немедленно очищаем srcObject и удаляем карточку
+                    if (track.kind === 'video') {
+                        console.log(`🗑️ [${userId}] ВИДЕО ТРЕК MUTED - НЕМЕДЛЕННАЯ ОЧИСТКА`);
+                        
+                        // 1. Очищаем srcObject у videoElement
+                        const videoElement = document.getElementById(`remoteVideo-${userId}`);
+                        if (videoElement && videoElement.srcObject) {
+                            console.log(`   🔄 Очищаем srcObject у videoElement...`);
+                            videoElement.pause();
+                            videoElement.srcObject = null;
+                            videoElement.load();
+                            console.log(`   ✅ srcObject очищен`);
+                        }
+                        
+                        // 2. Удаляем трек из потока
+                        if (stream.getTracks().includes(track)) {
+                            console.log(`   🔄 Удаляем muted видео трек из потока...`);
+                            stream.removeTrack(track);
+                            console.log(`   ✅ Трек удален из потока`);
+                        }
+                        
+                        // 3. Удаляем карточку из DOM
+                        const participantCard = document.getElementById(`participant-${userId}`);
+                        if (participantCard && participantCard.parentNode) {
+                            console.log(`   🔄 Удаляем карточку из DOM...`);
+                            participantCard.remove();
+                            console.log(`   ✅ Карточка удалена из DOM`);
+                        }
                     }
                     
                     console.log(`🔄 [${userId}] Вызываем updateVideoOverlays() после mute...`);
