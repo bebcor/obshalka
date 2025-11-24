@@ -225,8 +225,9 @@ class UIManager {
                 console.log(`   - track.muted: ${track.muted}`);
                 console.log(`   - track.label: ${track.label}`);
                 
-                hasActiveVideo = track.readyState === 'live' && track.enabled;
-                console.log(`   - hasActiveVideo: ${hasActiveVideo} (readyState='live': ${track.readyState === 'live'}, enabled: ${track.enabled})`);
+                // КРИТИЧНО: muted=true означает что данные не приходят (камера выключена на удаленной стороне)
+                hasActiveVideo = track.readyState === 'live' && track.enabled && !track.muted;
+                console.log(`   - hasActiveVideo: ${hasActiveVideo} (readyState='live': ${track.readyState === 'live'}, enabled: ${track.enabled}, !muted: ${!track.muted})`);
             } else {
                 console.log(`   - НЕТ видео треков`);
             }

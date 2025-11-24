@@ -679,6 +679,14 @@ class MediaController {
                     updatePromises.push(
                         videoSender.replaceTrack(null).then(() => {
                             console.log(`✅ [updateVideoTracksInConnections] replaceTrack(null) выполнен для ${userId}`);
+                            
+                            // КРИТИЧЕСКИ ВАЖНО: запускаем renegotiation после replaceTrack(null)
+                            if (peerConnection.signalingState === 'stable') {
+                                console.log(`🔄 [updateVideoTracksInConnections] Запускаем renegotiation после replaceTrack(null) для ${userId}`);
+                                this.videoCallManager.webrtcManager.createOffer(userId).catch(err => {
+                                    console.error(`❌ [updateVideoTracksInConnections] Ошибка renegotiation для ${userId}:`, err);
+                                });
+                            }
                         }).catch(err => {
                             console.error(`❌ [updateVideoTracksInConnections] Ошибка replaceTrack(null) для ${userId}:`, err);
                         })
