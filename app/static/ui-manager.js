@@ -273,56 +273,76 @@ class UIManager {
         
         // КРИТИЧНО: Для удаленных потоков проверяем треки из RECEIVERS, а не из потока!
         // Треки в потоке могут быть устаревшими, актуальное состояние в receivers
+        console.log(`   [hasActiveCamera] ========== НАЧАЛО ПРОВЕРКИ УДАЛЕННОГО ПОТОКА ==========`);
+        console.log(`   [hasActiveCamera] Параметры: userId=${userId}, stream=${stream ? 'есть' : 'нет'}`);
+        
         if (!userId) {
+            console.log(`   [hasActiveCamera] userId не передан, ищем по потоку...`);
             // Находим userId по потоку
             for (const [id, remoteStream] of this.videoCallManager.remoteStreams.entries()) {
                 if (remoteStream === stream) {
                     userId = id;
+                    console.log(`   [hasActiveCamera] userId найден по потоку: ${userId}`);
                     break;
                 }
             }
         }
         
         if (!userId) {
-            console.log(`   [hasActiveCamera] Удаленный поток: userId не найден - возвращаем false`);
+            console.log(`   [hasActiveCamera] ❌ Удаленный поток: userId не найден - возвращаем false`);
             return false;
         }
         
+        console.log(`   [hasActiveCamera] Проверяем удаленный поток для userId: ${userId}`);
+        
         // Получаем peerConnection для проверки receivers
         const peerConnection = this.videoCallManager.remoteUsers.get(userId);
+        console.log(`   [hasActiveCamera] peerConnection для ${userId}: ${peerConnection ? 'есть ✅' : 'нет ❌'}`);
+        
         if (!peerConnection) {
-            console.log(`   [hasActiveCamera] Удаленный поток ${userId}: нет peerConnection - проверяем треки из потока`);
+            console.log(`   [hasActiveCamera] ⚠️ Удаленный поток ${userId}: нет peerConnection - проверяем треки из потока (fallback)`);
             // Fallback: проверяем треки из потока если нет peerConnection
             const videoTracks = stream.getVideoTracks();
+            console.log(`   [hasActiveCamera] Количество видео треков в потоке: ${videoTracks.length}`);
             if (videoTracks.length === 0) {
-                console.log(`   [hasActiveCamera] Удаленный поток ${userId}: нет видео треков - возвращаем false`);
+                console.log(`   [hasActiveCamera] ❌ Удаленный поток ${userId}: нет видео треков - возвращаем false`);
                 return false;
             }
             const hasActiveTrack = videoTracks.some(track => {
                 const isActive = track.readyState === 'live' && 
                                 track.enabled && 
                                 !track.muted;
+                console.log(`   [hasActiveCamera] Трек ${track.id} (fallback): readyState=${track.readyState}, enabled=${track.enabled}, muted=${track.muted}, активен=${isActive}`);
                 return isActive;
             });
-            console.log(`   [hasActiveCamera] Удаленный поток ${userId} (fallback): ${hasActiveTrack ? 'активен' : 'неактивен'}`);
+            console.log(`   [hasActiveCamera] Удаленный поток ${userId} (fallback): ${hasActiveTrack ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'}`);
             return hasActiveTrack;
         }
         
         // КРИТИЧНО: Проверяем треки из receivers - это актуальное состояние
+        console.log(`   [hasActiveCamera] Получаем receivers для ${userId}...`);
         const receivers = peerConnection.getReceivers();
-        const videoReceivers = receivers.filter(r => r.track && r.track.kind === 'video');
+        console.log(`   [hasActiveCamera] Всего receivers: ${receivers.length}`);
         
-        console.log(`   [hasActiveCamera] Удаленный поток ${userId}: проверяем ${videoReceivers.length} видео receivers`);
+        const videoReceivers = receivers.filter(r => r.track && r.track.kind === 'video');
+        console.log(`   [hasActiveCamera] Видео receivers: ${videoReceivers.length}`);
         
         if (videoReceivers.length === 0) {
-            console.log(`   [hasActiveCamera] Удаленный поток ${userId}: нет видео receivers - возвращаем false`);
+            console.log(`   [hasActiveCamera] ❌ Удаленный поток ${userId}: нет видео receivers - возвращаем false`);
+            console.log(`   [hasActiveCamera] ========== КОНЕЦ ПРОВЕРКИ УДАЛЕННОГО ПОТОКА (нет receivers) ==========`);
             return false;
         }
         
+        console.log(`   [hasActiveCamera] Начинаем проверку ${videoReceivers.length} видео receivers...`);
+        
         // Проверяем все видео треки из receivers
-        const hasActiveTrack = videoReceivers.some(receiver => {
+        let activeTrackFound = false;
+        videoReceivers.forEach((receiver, index) => {
             const track = receiver.track;
-            if (!track) return false;
+            if (!track) {
+                console.log(`   [hasActiveCamera] Receiver #${index}: трек отсутствует (null)`);
+                return;
+            }
             
             // КРИТИЧНО: Проверяем readyState === 'live' И enabled === true
             // ВАЖНО: Если трек muted (например, после replaceTrack(null)), он неактивен
@@ -332,13 +352,20 @@ class UIManager {
                             track.enabled && 
                             !track.muted; // Если muted - трек неактивен (например, после replaceTrack(null))
             
-            console.log(`   [hasActiveCamera] Удаленный поток ${userId}, трек ${track.id}: readyState=${track.readyState}, enabled=${track.enabled}, muted=${track.muted}, активен=${isActive}`);
+            console.log(`   [hasActiveCamera] Receiver #${index} (id: ${track.id}):`);
+            console.log(`      - readyState: ${track.readyState}`);
+            console.log(`      - enabled: ${track.enabled}`);
+            console.log(`      - muted: ${track.muted}`);
+            console.log(`      - активен: ${isActive ? '✅' : '❌'} (readyState=${track.readyState}, enabled=${track.enabled}, muted=${track.muted})`);
             
-            return isActive;
+            if (isActive) {
+                activeTrackFound = true;
+            }
         });
         
-        console.log(`   [hasActiveCamera] Удаленный поток ${userId}: ${hasActiveTrack ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'}`);
-        return hasActiveTrack;
+        console.log(`   [hasActiveCamera] Результат проверки всех receivers: ${activeTrackFound ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'}`);
+        console.log(`   [hasActiveCamera] ========== КОНЕЦ ПРОВЕРКИ УДАЛЕННОГО ПОТОКА ==========`);
+        return activeTrackFound;
     }
     
     displayOnlyActiveCameras(activeCameras) {

@@ -192,42 +192,115 @@ class WebRTCManager {
                 const incomingTrack = event.track;
                 
                 incomingTrack.onmute = () => {
-                    console.log(`🔇 [ontrack] Трек ${incomingTrack.kind} MUTED для ${targetUserId}`);
+                    console.log(`\n🔇🔇🔇 ========== [ontrack onmute] ТРЕК ${incomingTrack.kind.toUpperCase()} MUTED ДЛЯ ${targetUserId} ==========`);
+                    console.log(`📅 Время: ${new Date().toISOString()}`);
+                    console.log(`🔍 Информация о треке:`);
+                    console.log(`   - track.id: ${incomingTrack.id}`);
+                    console.log(`   - track.kind: ${incomingTrack.kind}`);
+                    console.log(`   - track.readyState: ${incomingTrack.readyState}`);
+                    console.log(`   - track.enabled: ${incomingTrack.enabled}`);
+                    console.log(`   - track.muted: ${incomingTrack.muted}`);
+                    
                     // КРИТИЧНО: При onmute проверяем состояние receiver
                     // replaceTrack(null) вызывает onmute, но enabled может остаться true
+                    // ВАЖНО: Трек в receiver может иметь другое состояние, чем трек в потоке
                     const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
                     if (peerConnection && incomingTrack.kind === 'video') {
+                        console.log(`🔍 Проверяем состояние receiver для ${targetUserId}...`);
                         const receivers = peerConnection.getReceivers();
                         const receiver = receivers.find(r => r.track && r.track.id === incomingTrack.id);
+                        
                         if (receiver && receiver.track) {
+                            const receiverTrack = receiver.track;
+                            console.log(`✅ Receiver найден для трека ${incomingTrack.id}`);
                             console.log(`🔍 [ontrack onmute] Состояние receiver трека для ${targetUserId}:`);
-                            console.log(`   - enabled: ${receiver.track.enabled}`);
-                            console.log(`   - muted: ${receiver.track.muted}`);
-                            console.log(`   - readyState: ${receiver.track.readyState}`);
+                            console.log(`   - receiverTrack.id: ${receiverTrack.id}`);
+                            console.log(`   - receiverTrack.enabled: ${receiverTrack.enabled}`);
+                            console.log(`   - receiverTrack.muted: ${receiverTrack.muted}`);
+                            console.log(`   - receiverTrack.readyState: ${receiverTrack.readyState}`);
+                            
+                            // КРИТИЧНО: Если трек muted, он неактивен, даже если enabled=true
+                            // Это происходит при replaceTrack(null) - трек становится muted
+                            const isActive = receiverTrack.readyState === 'live' && 
+                                          receiverTrack.enabled && 
+                                          !receiverTrack.muted;
+                            console.log(`   - Трек активен: ${isActive ? '✅' : '❌'}`);
+                            console.log(`   - Причина неактивности: ${!isActive ? 
+                                (!receiverTrack.enabled ? 'enabled=false' : 
+                                 receiverTrack.muted ? 'muted=true (камера выключена)' : 
+                                 receiverTrack.readyState !== 'live' ? 'readyState != live' : 'неизвестно') : 'активен'}`);
+                        } else {
+                            console.log(`⚠️ Receiver не найден для трека ${incomingTrack.id}`);
                         }
+                    } else if (!peerConnection) {
+                        console.log(`⚠️ peerConnection не найден для ${targetUserId}`);
+                    } else {
+                        console.log(`ℹ️ Трек не видео, пропускаем проверку receiver`);
                     }
+                    
+                    // КРИТИЧНО: Если это видео трек и он muted, это означает что камера выключена
+                    // Нужно немедленно обновить UI, чтобы скрыть карточку
+                    if (incomingTrack.kind === 'video') {
+                        console.log(`🎥 Это видео трек - камера выключена, обновляем UI`);
+                    }
+                    
                     // НЕМЕДЛЕННО обновляем UI при onmute
                     console.log(`🔄 [ontrack onmute] Вызываем updateVideoOverlays() для ${targetUserId}`);
                     this.videoCallManager.uiManager.updateVideoOverlays();
+                    console.log(`🔇🔇🔇 ========== КОНЕЦ [ontrack onmute] ==========\n`);
                 };
                 
                 incomingTrack.onunmute = () => {
-                    console.log(`✅ [ontrack] Трек ${incomingTrack.kind} UNMUTED для ${targetUserId}`);
+                    console.log(`\n✅✅✅ ========== [ontrack onunmute] ТРЕК ${incomingTrack.kind.toUpperCase()} UNMUTED ДЛЯ ${targetUserId} ==========`);
+                    console.log(`📅 Время: ${new Date().toISOString()}`);
+                    console.log(`🔍 Информация о треке:`);
+                    console.log(`   - track.id: ${incomingTrack.id}`);
+                    console.log(`   - track.kind: ${incomingTrack.kind}`);
+                    console.log(`   - track.readyState: ${incomingTrack.readyState}`);
+                    console.log(`   - track.enabled: ${incomingTrack.enabled}`);
+                    console.log(`   - track.muted: ${incomingTrack.muted}`);
+                    
                     // КРИТИЧНО: При onunmute проверяем состояние receiver
+                    // Это означает что камера снова включена
                     const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
                     if (peerConnection && incomingTrack.kind === 'video') {
+                        console.log(`🔍 Проверяем состояние receiver для ${targetUserId}...`);
                         const receivers = peerConnection.getReceivers();
                         const receiver = receivers.find(r => r.track && r.track.id === incomingTrack.id);
+                        
                         if (receiver && receiver.track) {
+                            const receiverTrack = receiver.track;
+                            console.log(`✅ Receiver найден для трека ${incomingTrack.id}`);
                             console.log(`🔍 [ontrack onunmute] Состояние receiver трека для ${targetUserId}:`);
-                            console.log(`   - enabled: ${receiver.track.enabled}`);
-                            console.log(`   - muted: ${receiver.track.muted}`);
-                            console.log(`   - readyState: ${receiver.track.readyState}`);
+                            console.log(`   - receiverTrack.id: ${receiverTrack.id}`);
+                            console.log(`   - receiverTrack.enabled: ${receiverTrack.enabled}`);
+                            console.log(`   - receiverTrack.muted: ${receiverTrack.muted}`);
+                            console.log(`   - receiverTrack.readyState: ${receiverTrack.readyState}`);
+                            
+                            // Проверяем, активен ли трек
+                            const isActive = receiverTrack.readyState === 'live' && 
+                                          receiverTrack.enabled && 
+                                          !receiverTrack.muted;
+                            console.log(`   - Трек активен: ${isActive ? '✅' : '❌'}`);
+                        } else {
+                            console.log(`⚠️ Receiver не найден для трека ${incomingTrack.id}`);
                         }
+                    } else if (!peerConnection) {
+                        console.log(`⚠️ peerConnection не найден для ${targetUserId}`);
+                    } else {
+                        console.log(`ℹ️ Трек не видео, пропускаем проверку receiver`);
                     }
+                    
+                    // КРИТИЧНО: Если это видео трек и он unmuted, это означает что камера включена
+                    // Нужно немедленно обновить UI, чтобы показать карточку
+                    if (incomingTrack.kind === 'video') {
+                        console.log(`🎥 Это видео трек - камера включена, обновляем UI`);
+                    }
+                    
                     // НЕМЕДЛЕННО обновляем UI при onunmute
                     console.log(`🔄 [ontrack onunmute] Вызываем updateVideoOverlays() для ${targetUserId}`);
                     this.videoCallManager.uiManager.updateVideoOverlays();
+                    console.log(`✅✅✅ ========== КОНЕЦ [ontrack onunmute] ==========\n`);
                 };
                 
                 incomingTrack.onended = () => {
