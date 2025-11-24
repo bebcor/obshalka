@@ -21,9 +21,14 @@ class NotificationManager {
     }
     
     isAnimalName(name) {
-        const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
-                        'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
-        return animals.includes(name.toLowerCase());
+        // Используем полный список из 30 животных, как в main.js
+        const animals = [
+            'жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка',
+            'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру',
+            'дельфин', 'акула', 'орёл', 'ястреб', 'лис', 'барсук', 'енот', 'бобр', 'выдра', 'бабочка'
+        ];
+        // Проверяем базовое имя или имя с номером (как в main.js)
+        return animals.some(animal => name.toLowerCase().startsWith(animal.toLowerCase()));
     }
 
     ensureStyles() {
@@ -241,11 +246,38 @@ class NotificationManager {
             // Проверяем, занято ли имя (только для животных)
             if (window.videoCallManager && window.videoCallManager.isAnimalName) {
                 if (window.videoCallManager.isAnimalName(userName)) {
-                    if (window.videoCallManager.usedAnimalNames && window.videoCallManager.usedAnimalNames.has(userName)) {
-                        nameWarning.textContent = `⚠️ Имя "${userName}" уже занято. Выберите другое.`;
-                        nameWarning.style.display = 'block';
-                        userNameInput.style.borderColor = 'var(--error)';
-                        return false;
+                    const usedNames = window.videoCallManager.usedAnimalNames;
+                    if (usedNames && usedNames.size > 0) {
+                        // КРИТИЧНО: Проверяем точное совпадение имени
+                        const isNameTaken = usedNames.has(userName);
+                        
+                        // Дополнительно: если введено базовое имя (без номера), 
+                        // проверяем, не занято ли оно базовым именем
+                        if (!isNameTaken) {
+                            const animals = [
+                                'жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка',
+                                'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру',
+                                'дельфин', 'акула', 'орёл', 'ястреб', 'лис', 'барсук', 'енот', 'бобр', 'выдра', 'бабочка'
+                            ];
+                            const baseName = animals.find(animal => 
+                                userName.toLowerCase() === animal.toLowerCase()
+                            );
+                            // Если это базовое имя (без номера), проверяем, не занято ли оно
+                            if (baseName && usedNames.has(baseName)) {
+                                console.log(`🔍 [checkNameUniqueness] Имя "${userName}" занято (базовое имя в usedAnimalNames)`, Array.from(usedNames));
+                                nameWarning.textContent = `⚠️ Имя "${userName}" уже занято. Выберите другое.`;
+                                nameWarning.style.display = 'block';
+                                userNameInput.style.borderColor = 'var(--error)';
+                                return false;
+                            }
+                        } else {
+                            // Имя точно занято
+                            console.log(`🔍 [checkNameUniqueness] Имя "${userName}" занято (точное совпадение)`, Array.from(usedNames));
+                            nameWarning.textContent = `⚠️ Имя "${userName}" уже занято. Выберите другое.`;
+                            nameWarning.style.display = 'block';
+                            userNameInput.style.borderColor = 'var(--error)';
+                            return false;
+                        }
                     }
                 }
             }

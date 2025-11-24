@@ -17,6 +17,7 @@ class VideoCallManager {
         this.usedAnimalNames = new Set();
         
         // Метод для получения уникального базового никнейма
+        // КРИТИЧНО: НЕ добавляем имя в usedAnimalNames здесь - это делается только при подтверждении
         this.getUniqueAnimalName = function() {
             const animals = [
                 'жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка',
@@ -24,12 +25,12 @@ class VideoCallManager {
                 'дельфин', 'акула', 'орёл', 'ястреб', 'лис', 'барсук', 'енот', 'бобр', 'выдра', 'бабочка'
             ];
             
-            // Находим свободное имя
+            // Находим свободное имя (НЕ добавляем в usedAnimalNames!)
             const available = animals.filter(name => !this.usedAnimalNames.has(name));
             
             if (available.length > 0) {
                 const selected = available[Math.floor(Math.random() * available.length)];
-                this.usedAnimalNames.add(selected);
+                // НЕ добавляем в usedAnimalNames - это делается только при подтверждении
                 return selected;
             }
             
@@ -42,7 +43,7 @@ class VideoCallManager {
                 counter++;
             } while (this.usedAnimalNames.has(nameWithNumber));
             
-            this.usedAnimalNames.add(nameWithNumber);
+            // НЕ добавляем в usedAnimalNames - это делается только при подтверждении
             return nameWithNumber;
         };
         
@@ -238,7 +239,17 @@ class VideoCallManager {
             
             this.socket.on('error', (data) => {
                 console.error('Server error:', data.message);
-                this.notificationManager.show('Ошибка: ' + data.message, 'error');
+                // Показываем сообщение об ошибке
+                this.notificationManager.show(data.message || 'Ошибка сервера', 'error');
+                
+                // Если это ошибка переполнения комнаты, возвращаем на стартовый экран
+                if (data.message && data.message.includes('переполнена')) {
+                    setTimeout(() => {
+                        if (this.roomManager) {
+                            this.roomManager.showWelcomeScreen();
+                        }
+                    }, 2000);
+                }
             });
             
         } catch (error) {
@@ -977,16 +988,25 @@ class VideoCallManager {
         // Обновляем список пользователей (включая текущего пользователя)
         this.usersManager.updateParticipants(data.participants);
         
+        // КРИТИЧНО: Очищаем usedAnimalNames при входе в новую комнату
+        // Уникальность животных работает только в рамках одной комнаты
+        this.usedAnimalNames.clear();
+        
         // Сохраняем имена всех участников в userNames для консистентности
+        console.log(`🔍 [handleRoomInfo] Получен список участников:`, data.participants.map(p => p.name));
         data.participants.forEach(participant => {
             if (participant.name) {
                 this.userNames.set(participant.socket_id, participant.name);
-                // Если это базовый никнейм (животное), отмечаем как занятый
+                // Если это базовый никнейм (животное), отмечаем как занятый ТОЛЬКО в этой комнате
                 if (this.isAnimalName && this.isAnimalName(participant.name)) {
+                    console.log(`🔍 [handleRoomInfo] Добавляем в usedAnimalNames (комната ${this.roomId}): "${participant.name}"`);
                     this.usedAnimalNames.add(participant.name);
+                } else {
+                    console.log(`🔍 [handleRoomInfo] Имя "${participant.name}" не является животным, пропускаем (обычные имена могут повторяться)`);
                 }
             }
         });
+        console.log(`🔍 [handleRoomInfo] Текущий usedAnimalNames:`, Array.from(this.usedAnimalNames));
         
         // КРИТИЧНО: Находим текущего пользователя в списке участников
         const currentUser = data.participants.find(p => p.socket_id === this.socketId);

@@ -218,6 +218,12 @@ class RoomManager {
             async (userName) => {
                 this.videoCallManager.userName = userName;
                 
+                // КРИТИЧНО: Добавляем имя в usedAnimalNames только при подтверждении
+                if (this.videoCallManager.isAnimalName && this.videoCallManager.isAnimalName(userName)) {
+                    console.log(`🔍 [showUserNameModal] Добавляем подтвержденное имя в usedAnimalNames: "${userName}"`);
+                    this.videoCallManager.usedAnimalNames.add(userName);
+                }
+                
                 // КРИТИЧНО: 1. СНАЧАЛА создай локальный поток
                 if (!this.videoCallManager.localStream) {
                     console.log('🔄 Создаем локальный поток перед присоединением к комнате...');
