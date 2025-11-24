@@ -443,21 +443,12 @@ class UIManager {
                         // Показываем overlay "Ожидание видео..."
                         overlay.style.display = 'block';
                         videoElement.style.setProperty('display', 'none', 'important');
-                    } else if (!isConnectionReady) {
-                        // Трек активен, но соединение еще не готово - показываем overlay
-                        console.log(`⏳ [${userId}] Трек активен, но соединение еще не готово - показываем overlay "Ожидание соединения..."`);
-                        overlay.style.display = 'block';
-                        overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
-                        videoElement.style.setProperty('display', 'none', 'important');
-                        // НЕ устанавливаем srcObject пока соединение не готово
-                        if (videoElement.srcObject) {
-                            console.log(`   🔄 Очищаем srcObject так как соединение не готово...`);
-                            videoElement.pause();
-                            videoElement.srcObject = null;
-                            videoElement.load();
-                        }
                     } else {
-                        // Трек активен - устанавливаем srcObject
+                        // Трек активен - устанавливаем srcObject (даже если соединение еще не готово)
+                        // По документации WebRTC, srcObject можно устанавливать до установления соединения
+                        // Видео начнет воспроизводиться когда данные начнут приходить
+                        console.log(`🔄 [${userId}] Трек активен - устанавливаем srcObject (соединение: ${isConnectionReady ? 'готово ✅' : 'еще устанавливается ⏳'})`);
+                        
                         const hadSrcObject = !!videoElement.srcObject;
                         if (videoElement.srcObject !== stream) {
                             console.log(`🔄 [${userId}] Устанавливаем srcObject (было: ${hadSrcObject ? 'SET' : 'NULL'})`);
@@ -518,31 +509,41 @@ class UIManager {
                             console.log(`   - videoElement.srcObject установлен: ${!!videoElement.srcObject}`);
                             
                             // Показываем overlay пока видео не загрузилось
+                            if (!isConnectionReady) {
+                                overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
+                            }
                             overlay.style.display = 'block';
                             videoElement.style.setProperty('display', 'none', 'important');
                         } else {
-                            console.log(`ℹ️ [${userId}] srcObject уже установлен, пропускаем`);
+                            console.log(`ℹ️ [${userId}] srcObject уже установлен, проверяем готовность`);
                             // Если srcObject уже установлен, проверяем готовность
                             if (videoElement.readyState >= 2) {
+                                console.log(`✅ [${userId}] Видео готово (readyState=${videoElement.readyState}), показываем`);
                                 overlay.style.display = 'none';
                                 videoElement.style.setProperty('display', 'block', 'important');
                             } else {
+                                console.log(`⏳ [${userId}] Видео еще не готово (readyState=${videoElement.readyState}), показываем overlay`);
+                                if (!isConnectionReady) {
+                                    overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
+                                }
                                 overlay.style.display = 'block';
                                 videoElement.style.setProperty('display', 'none', 'important');
                             }
                         }
-                    }
-                    console.log(`   - overlay скрыт, videoElement показан`);
-                    
-                    videoElement.play().then(() => {
-                        console.log(`✅ [${userId}] videoElement.play() успешно`);
-                    }).catch(error => {
-                        if (error.name !== 'AbortError') {
-                            console.warn(`⚠️ [${userId}] Ошибка play:`, error);
-                        } else {
-                            console.log(`ℹ️ [${userId}] play() AbortError (нормально)`);
+                        
+                        // Пытаемся воспроизвести если еще не воспроизводится
+                        if (videoElement.paused) {
+                            videoElement.play().then(() => {
+                                console.log(`✅ [${userId}] videoElement.play() успешно`);
+                            }).catch(error => {
+                                if (error.name !== 'AbortError') {
+                                    console.warn(`⚠️ [${userId}] Ошибка play:`, error);
+                                } else {
+                                    console.log(`ℹ️ [${userId}] play() AbortError (нормально)`);
+                                }
+                            });
                         }
-                    });
+                    }
                 } else {
                     console.warn(`⚠️ [${userId}] Не все элементы найдены: participantCard=${!!participantCard}, overlay=${!!overlay}, videoElement=${!!videoElement}`);
                 }
