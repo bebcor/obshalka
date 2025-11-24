@@ -93,8 +93,15 @@ class UIManager {
     }
     
     _updateVideoOverlaysInternal() {
-        console.log(`\n🟡 ========== НАЧАЛО updateVideoOverlays ==========`);
+        console.log(`\n🟡🟡🟡 ========== НАЧАЛО updateVideoOverlays ========== 🟡🟡🟡`);
+        console.log(`📅 Время начала: ${new Date().toISOString()}`);
         console.log(`🔄 ОБНОВЛЕНИЕ ВИДЕО - ТОЛЬКО АКТИВНЫЕ КАМЕРЫ`);
+        console.log(`📊 Текущее состояние:`);
+        console.log(`   - Локальный поток: ${this.videoCallManager.localStream ? 'есть' : 'нет'}`);
+        console.log(`   - Удаленных потоков: ${this.videoCallManager.remoteStreams.size}`);
+        this.videoCallManager.remoteStreams.forEach((stream, userId) => {
+            console.log(`   - Удаленный поток ${userId}: ${stream ? 'есть' : 'нет'}`);
+        });
         
         // ЗАЩИТА ОТ РЕКУРСИИ: если уже выполняется обновление, пропускаем
         if (this._updatingVideoOverlays) {
@@ -105,22 +112,32 @@ class UIManager {
         
         try {
             // 1. СБРОСИТЬ ВСЕ КАРТОЧКИ
+            console.log(`\n📋 ШАГ 1: Скрываем все карточки`);
             this.hideAllParticipantCards();
             
             // 2. СОБРАТЬ ВСЕ АКТИВНЫЕ КАМЕРЫ (включая локальную)
+            console.log(`\n📋 ШАГ 2: Собираем активные камеры`);
             const activeCameras = this.getAllActiveCameras();
+            console.log(`📊 Найдено активных камер: ${activeCameras.size}`);
+            activeCameras.forEach((stream, userId) => {
+                console.log(`   - Активная камера: ${userId}`);
+            });
             
             // 3. ОТОБРАЗИТЬ ТОЛЬКО АКТИВНЫЕ КАМЕРЫ
+            console.log(`\n📋 ШАГ 3: Отображаем только активные камеры`);
             this.displayOnlyActiveCameras(activeCameras);
             
             // 4. ОБНОВИТЬ ЛАЙАУТ
+            console.log(`\n📋 ШАГ 4: Обновляем лайаут`);
             this.updateGridLayout(activeCameras.size);
             
             // 5. ОБРАБОТКА АУДИО (независимо от видео)
+            console.log(`\n📋 ШАГ 5: Обрабатываем аудио треки`);
             this.handleAudioTracks();
             
-            console.log(`\n🟡 ========== КОНЕЦ updateVideoOverlays ==========\n`);
-            console.log(`📅 Время завершения: ${new Date().toISOString()}\n`);
+            console.log(`\n🟡🟡🟡 ========== КОНЕЦ updateVideoOverlays ========== 🟡🟡🟡`);
+            console.log(`📅 Время завершения: ${new Date().toISOString()}`);
+            console.log(`📊 Итоговое состояние: ${activeCameras.size} активных камер\n`);
         } finally {
             // Сбрасываем флаг после завершения обновления
             this._updatingVideoOverlays = false;
@@ -369,7 +386,11 @@ class UIManager {
     }
     
     displayOnlyActiveCameras(activeCameras) {
-        console.log(`🔄 [displayOnlyActiveCameras] Отображаем ${activeCameras.size} активных камер`);
+        console.log(`\n🔄🔄🔄 ========== [displayOnlyActiveCameras] НАЧАЛО ==========`);
+        console.log(`📊 Параметры: ${activeCameras.size} активных камер`);
+        activeCameras.forEach((stream, userId) => {
+            console.log(`   - Активная камера: ${userId}`);
+        });
         
         // Локальная камера
         if (activeCameras.has('local')) {
@@ -380,36 +401,56 @@ class UIManager {
         }
         
         // Удаленные камеры
+        console.log(`\n📋 Показываем удаленные камеры:`);
+        let shownCount = 0;
         activeCameras.forEach((stream, userId) => {
             if (userId !== 'local') {
                 console.log(`   ✅ [displayOnlyActiveCameras] Показываем удаленную камеру ${userId}`);
                 this.showRemoteCamera(userId, stream);
+                shownCount++;
             }
         });
+        console.log(`📊 Показано удаленных камер: ${shownCount}`);
         
         // ВАЖНО: Убеждаемся, что все НЕактивные карточки скрыты и srcObject сброшен
+        console.log(`\n📋 Проверяем неактивные карточки:`);
+        let hiddenCount = 0;
         this.videoCallManager.remoteStreams.forEach((stream, userId) => {
             if (!activeCameras.has(userId)) {
+                console.log(`   🔍 Проверяем карточку ${userId} (неактивна)`);
                 const remoteCard = document.getElementById(`participant-${userId}`);
                 if (remoteCard) {
                     const computedStyle = window.getComputedStyle(remoteCard);
-                    if (computedStyle.display !== 'none') {
+                    const isVisible = computedStyle.display !== 'none';
+                    console.log(`      - Карточка существует: да`);
+                    console.log(`      - Видима: ${isVisible ? 'ДА ⚠️' : 'нет ✅'}`);
+                    
+                    if (isVisible) {
                         console.log(`   ⚠️ [displayOnlyActiveCameras] Карточка ${userId} неактивна, но все еще видима! Принудительно скрываем`);
                         remoteCard.style.setProperty('display', 'none', 'important');
                         remoteCard.style.setProperty('visibility', 'hidden', 'important');
                         remoteCard.style.setProperty('opacity', '0', 'important');
+                        hiddenCount++;
                         
                         const videoElement = document.getElementById(`remoteVideo-${userId}`);
                         if (videoElement && videoElement.srcObject) {
                             console.log(`   🗑️ [displayOnlyActiveCameras] Сбрасываем srcObject для неактивной карточки ${userId}`);
                             videoElement.srcObject = null;
                         }
+                    } else {
+                        console.log(`      - Карточка уже скрыта ✅`);
                     }
+                } else {
+                    console.log(`      - Карточка не существует (не создана)`);
                 }
+            } else {
+                console.log(`   ✅ Карточка ${userId} активна, не скрываем`);
             }
         });
+        console.log(`📊 Скрыто неактивных карточек: ${hiddenCount}`);
         
         console.log(`✅ [displayOnlyActiveCameras] Отображение камер завершено`);
+        console.log(`🔄🔄🔄 ========== [displayOnlyActiveCameras] КОНЕЦ ==========\n`);
     }
     
     showLocalCamera(stream) {

@@ -363,9 +363,32 @@ class WebRTCManager {
                     };
                 }
                 
-                // Обновляем UI - карточка создастся только если есть видео
-                console.log(`🔄 [ontrack] Обновляем UI для ${targetUserId}`);
+                // КРИТИЧНО: Проверяем начальное состояние трека перед обновлением UI
+                if (incomingTrack.kind === 'video') {
+                    const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
+                    if (peerConnection) {
+                        const receivers = peerConnection.getReceivers();
+                        const receiver = receivers.find(r => r.track && r.track.id === incomingTrack.id);
+                        if (receiver && receiver.track) {
+                            const receiverTrack = receiver.track;
+                            console.log(`🔍 [ontrack] Начальное состояние receiver трека для ${targetUserId}:`);
+                            console.log(`   - receiverTrack.enabled: ${receiverTrack.enabled}`);
+                            console.log(`   - receiverTrack.muted: ${receiverTrack.muted}`);
+                            console.log(`   - receiverTrack.readyState: ${receiverTrack.readyState}`);
+                            const isActive = receiverTrack.readyState === 'live' && 
+                                          receiverTrack.enabled && 
+                                          !receiverTrack.muted;
+                            console.log(`   - Трек активен: ${isActive ? '✅' : '❌'}`);
+                        }
+                    }
+                }
+                
+                // КРИТИЧЕСКИ ВАЖНО: Обновляем UI после получения трека
+                // Это проверит активность трека и покажет/скроет карточку соответственно
+                console.log(`🔄 [ontrack] ========== ВЫЗЫВАЕМ updateVideoOverlays() ДЛЯ ${targetUserId} ==========`);
+                console.log(`📅 Время вызова: ${new Date().toISOString()}`);
                 this.videoCallManager.uiManager.updateVideoOverlays();
+                console.log(`✅ [ontrack] updateVideoOverlays() вызван для ${targetUserId}`);
                 console.log(`🟣 [ontrack] ========== КОНЕЦ ОБРАБОТКИ ТРЕКА ==========`);
                 console.log(`📅 Время завершения ontrack: ${new Date().toISOString()}`);
                 console.log(`🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥🎥\n`);
