@@ -278,8 +278,15 @@ class UIManager {
             } else {
                 // НЕТ АКТИВНОГО ВИДЕО - удаляем карточку полностью
                 // КРИТИЧНО: Очищаем srcObject ДО удаления карточки, чтобы не было черной плашки
+                console.log(`🗑️ [updateVideoOverlays] НЕТ АКТИВНОГО ВИДЕО для ${userId}, удаляем карточку`);
+                console.log(`   - videoTracks.length: ${videoTracks.length}`);
+                if (videoTracks.length > 0) {
+                    console.log(`   - videoTracks[0].enabled: ${videoTracks[0].enabled}`);
+                    console.log(`   - videoTracks[0].readyState: ${videoTracks[0].readyState}`);
+                }
+                
                 if (videoElement) {
-                    console.log(`🗑️ [updateVideoOverlays] Удаляем карточку для ${userId} - очищаем видео элемент`);
+                    console.log(`🗑️ [updateVideoOverlays] Очищаем видео элемент для ${userId}`);
                     // Останавливаем воспроизведение
                     videoElement.pause();
                     // Очищаем поток
@@ -291,15 +298,32 @@ class UIManager {
                     // Дополнительная очистка - убираем все атрибуты
                     videoElement.removeAttribute('src');
                     videoElement.removeAttribute('srcObject');
+                    // Убеждаемся что элемент не виден
+                    videoElement.style.setProperty('visibility', 'hidden', 'important');
+                    videoElement.style.setProperty('opacity', '0', 'important');
+                    videoElement.style.setProperty('width', '0', 'important');
+                    videoElement.style.setProperty('height', '0', 'important');
                 }
+                
                 if (participantCard && participantCard.parentNode) {
                     console.log(`🗑️ [updateVideoOverlays] Удаляем карточку ${userId} из DOM`);
                     // Убеждаемся что srcObject очищен перед удалением
-                    if (videoElement && videoElement.srcObject) {
-                        videoElement.srcObject = null;
-                        videoElement.load();
+                    if (videoElement) {
+                        if (videoElement.srcObject) {
+                            console.log(`⚠️ [updateVideoOverlays] srcObject все еще установлен для ${userId}, очищаем`);
+                            videoElement.srcObject = null;
+                            videoElement.load();
+                        }
+                        // Дополнительная проверка - если элемент все еще в DOM, удаляем его
+                        if (videoElement.parentNode) {
+                            console.log(`🗑️ [updateVideoOverlays] Удаляем videoElement из DOM для ${userId}`);
+                            videoElement.remove();
+                        }
                     }
                     participantCard.remove();
+                    console.log(`✅ [updateVideoOverlays] Карточка ${userId} удалена из DOM`);
+                } else if (participantCard) {
+                    console.log(`⚠️ [updateVideoOverlays] Карточка ${userId} не имеет parentNode, но существует`);
                 }
             }
         });
@@ -464,6 +488,11 @@ class UIManager {
             
             // ДОБАВЛЯЕМ ОБРАБОТЧИКИ ДЛЯ СЛЕДЕНИЯ ЗА СОСТОЯНИЕМ ТРЕКОВ
             stream.getTracks().forEach(track => {
+                // Удаляем старые обработчики если есть
+                track.onended = null;
+                track.onmute = null;
+                track.onunmute = null;
+                
                 track.onended = () => {
                     console.log(`Трек ${track.kind} завершился для пользователя ${userId}`);
                     this.updateVideoOverlays();
@@ -478,6 +507,45 @@ class UIManager {
                     console.log(`Трек ${track.kind} включен для пользователя ${userId}`);
                     this.updateVideoOverlays();
                 };
+                
+                // КРИТИЧНО: Отслеживаем изменение enabled через периодическую проверку
+                // потому что событие изменения enabled может не сработать
+                if (track.kind === 'video') {
+                    const checkEnabled = () => {
+                        const participantCard = document.getElementById(`participant-${userId}`);
+                        if (!participantCard || !participantCard.parentNode) {
+                            // Карточка уже удалена, прекращаем проверку
+                            return;
+                        }
+                        
+                        const videoTracks = stream.getVideoTracks();
+                        const hasActiveVideo = videoTracks.length > 0 && 
+                                               videoTracks[0].readyState === 'live' && 
+                                               videoTracks[0].enabled;
+                        
+                        if (!hasActiveVideo) {
+                            // Видео выключено - обновляем UI
+                            console.log(`🔄 [checkEnabled] Видео выключено для ${userId}, обновляем UI`);
+                            this.updateVideoOverlays();
+                        }
+                    };
+                    
+                    // Проверяем каждые 500ms
+                    const enabledCheckInterval = setInterval(() => {
+                        if (!stream.getTracks().includes(track) || track.readyState === 'ended') {
+                            clearInterval(enabledCheckInterval);
+                            return;
+                        }
+                        checkEnabled();
+                    }, 500);
+                    
+                    // Очищаем интервал когда трек заканчивается
+                    track.onended = () => {
+                        clearInterval(enabledCheckInterval);
+                        console.log(`Трек ${track.kind} завершился для пользователя ${userId}`);
+                        this.updateVideoOverlays();
+                    };
+                }
             });
             
             // ВАЖНО: Обновляем состояние после создания видео элемента
