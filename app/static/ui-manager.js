@@ -183,28 +183,40 @@ class UIManager {
                 return;
             }
             
+            // Информация о треках в потоке (может быть устаревшей)
             const videoTracks = stream.getVideoTracks();
-            console.log(`   📹 Количество видео треков: ${videoTracks.length}`);
+            console.log(`   📹 Количество видео треков в потоке: ${videoTracks.length}`);
             
-            if (videoTracks.length === 0) {
-                console.log(`   ❌ Нет видео треков - поток неактивен`);
-                return;
+            // КРИТИЧНО: Проверяем треки из receivers (актуальное состояние)
+            const peerConnection = this.videoCallManager.remoteUsers.get(userId);
+            if (peerConnection) {
+                const receivers = peerConnection.getReceivers();
+                const videoReceivers = receivers.filter(r => r.track && r.track.kind === 'video');
+                console.log(`   📹 Количество видео receivers: ${videoReceivers.length}`);
+                
+                // Детальная информация о каждом треке из receivers
+                videoReceivers.forEach((receiver, index) => {
+                    const track = receiver.track;
+                    console.log(`   📹 Receiver #${index} (id: ${track.id}):`);
+                    console.log(`      - readyState: ${track.readyState}`);
+                    console.log(`      - enabled: ${track.enabled}`);
+                    console.log(`      - muted: ${track.muted}`);
+                    
+                    const isActive = track.readyState === 'live' && track.enabled;
+                    console.log(`      - активен: ${isActive ? '✅' : '❌'} (проверяем только readyState и enabled)`);
+                });
+            } else {
+                console.log(`   ⚠️ Нет peerConnection, проверяем треки из потока (fallback)`);
+                videoTracks.forEach((track, index) => {
+                    console.log(`   📹 Трек #${index} (id: ${track.id}):`);
+                    console.log(`      - readyState: ${track.readyState}`);
+                    console.log(`      - enabled: ${track.enabled}`);
+                    console.log(`      - muted: ${track.muted}`);
+                });
             }
             
-            // Детальная информация о каждом треке
-            videoTracks.forEach((track, index) => {
-                console.log(`   📹 Трек #${index} (id: ${track.id}):`);
-                console.log(`      - readyState: ${track.readyState}`);
-                console.log(`      - enabled: ${track.enabled}`);
-                console.log(`      - muted: ${track.muted}`);
-                
-                const isActive = track.readyState === 'live' && 
-                                track.enabled && 
-                                !track.muted;
-                console.log(`      - активен: ${isActive ? '✅' : '❌'}`);
-            });
-            
-            const isActive = this.hasActiveCamera(stream);
+            // КРИТИЧНО: Передаем userId для проверки треков из receivers
+            const isActive = this.hasActiveCamera(stream, userId);
             console.log(`   🎯 Итоговый результат для ${userId}: ${isActive ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'}`);
             
             if (isActive) {
@@ -216,50 +228,113 @@ class UIManager {
         return activeCameras;
     }
     
-    hasActiveCamera(stream) {
+    hasActiveCamera(stream, userId = null) {
         if (!stream) {
             console.log(`   [hasActiveCamera] Поток отсутствует - возвращаем false`);
             return false;
         }
         
-        const videoTracks = stream.getVideoTracks();
-        if (videoTracks.length === 0) {
-            console.log(`   [hasActiveCamera] Нет видео треков - возвращаем false`);
-            return false;
-        }
-        
-        // Проверяем все треки, а не только первый
-        const hasActiveTrack = videoTracks.some(track => {
-            const isActive = track.readyState === 'live' && 
-                            track.enabled && 
-                            !track.muted;
-            return isActive;
-        });
-        
-        // Если есть активный трек, возвращаем true
-        if (hasActiveTrack) {
-            console.log(`   [hasActiveCamera] Найден активный трек - возвращаем true`);
-            return true;
-        }
-        
-        // Для локального потока: проверяем демонстрацию экрана
-        // ВАЖНО: для удаленных потоков эта проверка не выполняется
         const isLocalStream = stream === this.videoCallManager.localStream;
+        
+        // Для локального потока проверяем треки из потока
         if (isLocalStream) {
+            const videoTracks = stream.getVideoTracks();
+            if (videoTracks.length === 0) {
+                console.log(`   [hasActiveCamera] Локальный поток: нет видео треков - возвращаем false`);
+                return false;
+            }
+            
+            // Проверяем все треки
+            const hasActiveTrack = videoTracks.some(track => {
+                const isActive = track.readyState === 'live' && 
+                                track.enabled && 
+                                !track.muted;
+                return isActive;
+            });
+            
+            // Если есть активный трек, возвращаем true
+            if (hasActiveTrack) {
+                console.log(`   [hasActiveCamera] Локальный поток: найден активный трек - возвращаем true`);
+                return true;
+            }
+            
+            // Проверяем демонстрацию экрана
             const isSharingScreen = this.videoCallManager.isSharingScreen || false;
             console.log(`   [hasActiveCamera] Локальный поток, isSharingScreen: ${isSharingScreen}`);
-            // При демонстрации экрана проверяем, что трек хотя бы существует и live
             if (isSharingScreen) {
                 const hasLiveTrack = videoTracks.some(track => track.readyState === 'live');
                 console.log(`   [hasActiveCamera] Демонстрация экрана, есть live трек: ${hasLiveTrack}`);
                 return hasLiveTrack;
             }
-        } else {
-            console.log(`   [hasActiveCamera] Удаленный поток - проверка isSharingScreen пропущена`);
+            
+            console.log(`   [hasActiveCamera] Локальный поток: нет активных треков - возвращаем false`);
+            return false;
         }
         
-        console.log(`   [hasActiveCamera] Нет активных треков - возвращаем false`);
-        return false;
+        // КРИТИЧНО: Для удаленных потоков проверяем треки из RECEIVERS, а не из потока!
+        // Треки в потоке могут быть устаревшими, актуальное состояние в receivers
+        if (!userId) {
+            // Находим userId по потоку
+            for (const [id, remoteStream] of this.videoCallManager.remoteStreams.entries()) {
+                if (remoteStream === stream) {
+                    userId = id;
+                    break;
+                }
+            }
+        }
+        
+        if (!userId) {
+            console.log(`   [hasActiveCamera] Удаленный поток: userId не найден - возвращаем false`);
+            return false;
+        }
+        
+        // Получаем peerConnection для проверки receivers
+        const peerConnection = this.videoCallManager.remoteUsers.get(userId);
+        if (!peerConnection) {
+            console.log(`   [hasActiveCamera] Удаленный поток ${userId}: нет peerConnection - проверяем треки из потока`);
+            // Fallback: проверяем треки из потока если нет peerConnection
+            const videoTracks = stream.getVideoTracks();
+            if (videoTracks.length === 0) {
+                console.log(`   [hasActiveCamera] Удаленный поток ${userId}: нет видео треков - возвращаем false`);
+                return false;
+            }
+            const hasActiveTrack = videoTracks.some(track => {
+                const isActive = track.readyState === 'live' && 
+                                track.enabled && 
+                                !track.muted;
+                return isActive;
+            });
+            console.log(`   [hasActiveCamera] Удаленный поток ${userId} (fallback): ${hasActiveTrack ? 'активен' : 'неактивен'}`);
+            return hasActiveTrack;
+        }
+        
+        // КРИТИЧНО: Проверяем треки из receivers - это актуальное состояние
+        const receivers = peerConnection.getReceivers();
+        const videoReceivers = receivers.filter(r => r.track && r.track.kind === 'video');
+        
+        console.log(`   [hasActiveCamera] Удаленный поток ${userId}: проверяем ${videoReceivers.length} видео receivers`);
+        
+        if (videoReceivers.length === 0) {
+            console.log(`   [hasActiveCamera] Удаленный поток ${userId}: нет видео receivers - возвращаем false`);
+            return false;
+        }
+        
+        // Проверяем все видео треки из receivers
+        const hasActiveTrack = videoReceivers.some(receiver => {
+            const track = receiver.track;
+            if (!track) return false;
+            
+            // КРИТИЧНО: Проверяем readyState === 'live' И enabled === true
+            // muted не проверяем для удаленных треков - это временное состояние браузера
+            const isActive = track.readyState === 'live' && track.enabled;
+            
+            console.log(`   [hasActiveCamera] Удаленный поток ${userId}, трек ${track.id}: readyState=${track.readyState}, enabled=${track.enabled}, muted=${track.muted}, активен=${isActive}`);
+            
+            return isActive;
+        });
+        
+        console.log(`   [hasActiveCamera] Удаленный поток ${userId}: ${hasActiveTrack ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'}`);
+        return hasActiveTrack;
     }
     
     displayOnlyActiveCameras(activeCameras) {
