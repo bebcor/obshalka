@@ -390,6 +390,26 @@ class WebRTCManager {
                 return this.handleWebRTCOffer(data);
             }
             
+            // Проверяем, не был ли уже установлен remote description
+            if (peerConnection.remoteDescription) {
+                // Если remote description уже установлен, проверяем его тип
+                if (peerConnection.remoteDescription.type === 'offer') {
+                    console.warn('⚠️ [handleWebRTCOffer] Remote description (offer) already set, ignoring duplicate offer');
+                    return;
+                }
+                // Если это answer, значит соединение уже установлено
+                if (peerConnection.remoteDescription.type === 'answer') {
+                    console.warn('⚠️ [handleWebRTCOffer] Connection already established (answer set), ignoring offer');
+                    return;
+                }
+            }
+            
+            // Проверяем signaling state - если уже в have-remote-offer, значит offer уже обработан
+            if (peerConnection.signalingState === 'have-remote-offer' || peerConnection.signalingState === 'have-local-pranswer') {
+                console.warn('⚠️ [handleWebRTCOffer] Already processing offer (signalingState:', peerConnection.signalingState + '), ignoring duplicate');
+                return;
+            }
+            
             // Устанавливаем полученное предложение (offer) как удаленное описание
             await peerConnection.setRemoteDescription(data.offer);
             console.log('✅ [handleWebRTCOffer] Remote description установлено для', data.sender_id);
@@ -446,6 +466,24 @@ class WebRTCManager {
             if (peerConnection.signalingState === 'closed' || peerConnection.connectionState === 'closed') {
                 console.warn('⚠️ [handleWebRTCAnswer] Connection is closed, ignoring answer');
                 return;
+            }
+            
+            // Проверяем, не был ли уже установлен remote description
+            if (peerConnection.remoteDescription) {
+                if (peerConnection.remoteDescription.type === 'answer') {
+                    console.warn('⚠️ [handleWebRTCAnswer] Answer already set, ignoring duplicate answer');
+                    return;
+                }
+                // Если это offer, но мы получаем answer - это нормально (может быть renegotiation)
+            }
+            
+            // Проверяем signaling state - answer можно устанавливать только в have-local-offer
+            if (peerConnection.signalingState !== 'have-local-offer' && peerConnection.signalingState !== 'stable') {
+                if (peerConnection.signalingState === 'have-remote-offer') {
+                    console.warn('⚠️ [handleWebRTCAnswer] Wrong signaling state (have-remote-offer), expected have-local-offer. This might be a duplicate answer.');
+                    return;
+                }
+                console.warn('⚠️ [handleWebRTCAnswer] Unexpected signaling state:', peerConnection.signalingState, ', expected have-local-offer or stable');
             }
             
             await peerConnection.setRemoteDescription(data.answer);
