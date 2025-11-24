@@ -243,7 +243,7 @@ class MediaController {
             // Обновляем UI - WebRTC автоматически обновит треки на другой стороне
             this.videoCallManager.uiManager.updateVideoOverlays();
             this.videoCallManager.checkEmptyState();
-            this.videoCallManager.notificationManager.show(enabled ? 'Камера включена' : 'Камера выключена', 'info');
+            this.videoCallManager.notificationManager.show(newEnabledState ? 'Камера включена' : 'Камера выключена', 'info');
         }
     }
 
