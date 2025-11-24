@@ -185,11 +185,37 @@ class UIManager {
         
         streamsToCheck.forEach(([userId, stream]) => {
             const videoElement = document.getElementById(`remoteVideo-${userId}`);
-            const participantCard = document.getElementById(`participant-${userId}`);
+            let participantCard = document.getElementById(`participant-${userId}`);
             const overlay = participantCard?.querySelector('.video-overlay');
             
+            // ВАЖНО: Если карточка не существует, проверяем, есть ли активный видео трек
+            // Если есть - создаем карточку
             if (!participantCard) {
-                return; // Карточка не существует, пропускаем
+                // Проверяем, есть ли активный видео трек в receivers
+                const peerConnection = this.videoCallManager.remoteUsers.get(userId);
+                if (peerConnection) {
+                    const receivers = peerConnection.getReceivers();
+                    const videoReceiver = receivers.find(receiver => {
+                        const track = receiver.track;
+                        return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
+                    });
+                    if (videoReceiver && videoReceiver.track) {
+                        // Есть активный видео трек - создаем карточку
+                        console.log(`✅ [updateVideoOverlays ${userId}] Создаем карточку - обнаружен активный видео трек`);
+                        this.createRemoteVideoElement(userId, stream);
+                        participantCard = document.getElementById(`participant-${userId}`);
+                        if (!participantCard) {
+                            console.error(`❌ [updateVideoOverlays ${userId}] Не удалось создать карточку`);
+                            return;
+                        }
+                    } else {
+                        // Нет активного видео трека - не создаем карточку
+                        return;
+                    }
+                } else {
+                    // Нет peer connection - не создаем карточку
+                    return;
+                }
             }
             
             // ВАЖНО: Проверяем, что peer connection существует и треки в receivers соответствуют трекам в stream
@@ -583,6 +609,22 @@ class UIManager {
             
             // КРИТИЧНО: Показываем карточку ТОЛЬКО если есть АКТИВНЫЙ видео трек
             if (hasActiveVideoTrackInReceivers && finalHasActiveVideo) {
+                // ВАЖНО: Если карточка не существует, создаем ее
+                if (!participantCard) {
+                    console.log(`✅ [updateVideoOverlays ${userId}] Создаем карточку - появился активный видео трек`);
+                    this.createRemoteVideoElement(userId, stream);
+                    // После создания карточки нужно получить ее снова
+                    const newParticipantCard = document.getElementById(`participant-${userId}`);
+                    const newVideoElement = document.getElementById(`remoteVideo-${userId}`);
+                    if (!newParticipantCard || !newVideoElement) {
+                        console.error(`❌ [updateVideoOverlays ${userId}] Не удалось создать карточку`);
+                        return;
+                    }
+                    // Используем новые элементы
+                    participantCard = newParticipantCard;
+                    videoElement = newVideoElement;
+                }
+                
                 // Есть видео трек в receivers - показываем карточку
                 participantCard.style.setProperty('display', 'block', 'important');
                 participantCard.style.removeProperty('visibility');
@@ -705,15 +747,15 @@ class UIManager {
                 }
             }
             
-            // НЕТ активного видео - СКРЫВАЕМ карточку и ОЧИЩАЕМ srcObject
+            // НЕТ активного видео - УДАЛЯЕМ карточку из DOM
             // ВАЖНО: Делаем это ТОЛЬКО если не нашли активный трек в receivers выше
             if (foundActiveTrackInReceivers) {
                 return; // Уже обработали выше
             }
             
-            console.log(`❌ [updateVideoOverlays ${userId}] НЕТ активного видео - скрываем карточку и очищаем srcObject`);
+            console.log(`❌ [updateVideoOverlays ${userId}] НЕТ активного видео - удаляем карточку из DOM`);
             
-            // КРИТИЧНО: СНАЧАЛА очищаем srcObject и скрываем карточку - это предотвращает показ черного экрана
+            // КРИТИЧНО: СНАЧАЛА очищаем srcObject и останавливаем воспроизведение
             // ВАЖНО: Делаем это в правильном порядке для предотвращения черных квадратов
             if (videoElement) {
                 // СНАЧАЛА скрываем элемент - это предотвращает показ черного экрана
@@ -730,17 +772,6 @@ class UIManager {
                 }
             }
             
-            // Скрываем карточку полностью СРАЗУ
-            participantCard.style.setProperty('display', 'none', 'important');
-            participantCard.style.setProperty('visibility', 'hidden', 'important');
-            participantCard.style.setProperty('opacity', '0', 'important');
-            participantCard.style.setProperty('width', '0', 'important');
-            participantCard.style.setProperty('height', '0', 'important');
-            participantCard.style.setProperty('overflow', 'hidden', 'important');
-            participantCard.style.setProperty('pointer-events', 'none', 'important');
-            
-            if (overlay) overlay.style.display = 'none';
-            
             // ВАЖНО: Удаляем ВСЕ видео треки из потока ПОСЛЕ очистки srcObject
             const allVideoTracks = stream.getVideoTracks();
             allVideoTracks.forEach(track => {
@@ -748,7 +779,19 @@ class UIManager {
                 stream.removeTrack(track);
             });
             
-            console.log(`❌ [updateVideoOverlays ${userId}] Карточка скрыта, srcObject очищен, треки удалены`);
+            // КРИТИЧНО: Удаляем карточку из DOM полностью, если она существует
+            if (participantCard && participantCard.parentNode) {
+                console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем карточку из DOM (нет активного видео)`);
+                // Останавливаем интервал проверки треков если он есть
+                if (this.trackCheckIntervals && this.trackCheckIntervals.has(userId)) {
+                    clearInterval(this.trackCheckIntervals.get(userId));
+                    this.trackCheckIntervals.delete(userId);
+                }
+                // Удаляем карточку из DOM
+                participantCard.remove();
+            }
+            
+            console.log(`❌ [updateVideoOverlays ${userId}] Карточка удалена из DOM, srcObject очищен, треки удалены`);
         });
         } finally {
             // Сбрасываем флаг после завершения обновления
