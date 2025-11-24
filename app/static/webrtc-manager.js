@@ -405,6 +405,12 @@ class WebRTCManager {
             const currentSignalingState = peerConnection.signalingState;
             console.log('📥 Current signaling state before setting remote description:', currentSignalingState);
             
+            // ВАЖНО: Проверяем, что remote description еще не установлен
+            if (peerConnection.remoteDescription) {
+                console.warn('⚠️ [handleWebRTCOffer] Remote description already set, skipping');
+                return;
+            }
+            
             // Если уже есть локальный offer, значит мы уже отправили offer этому пользователю
             // В этом случае нужно обработать race condition
             if (currentSignalingState === 'have-local-offer') {
@@ -645,16 +651,21 @@ class WebRTCManager {
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
             console.log('📥 [handleWebRTCAnswer] Setting remote description, current signalingState:', peerConnection.signalingState);
             
-            // ВАЖНО: Проверяем signalingState - нельзя устанавливать answer в stable
-            if (peerConnection.signalingState === 'stable') {
-                console.warn('⚠️ [handleWebRTCAnswer] SignalingState is stable, skipping setRemoteDescription');
+            // ВАЖНО: Проверяем signalingState - answer можно устанавливать только в have-local-offer
+            if (peerConnection.signalingState !== 'have-local-offer') {
+                console.warn(`⚠️ [handleWebRTCAnswer] SignalingState is ${peerConnection.signalingState}, expected have-local-offer, skipping`);
                 return;
             }
             
-            // ВАЖНО: Проверяем, что remote description еще не установлен
+            // ВАЖНО: Проверяем, что remote description еще не установлен (или это старый offer)
             if (peerConnection.remoteDescription) {
-                console.warn('⚠️ [handleWebRTCAnswer] Remote description already set, skipping');
-                return;
+                // Если remoteDescription уже установлен и это answer - пропускаем
+                if (peerConnection.remoteDescription.type === 'answer') {
+                    console.warn('⚠️ [handleWebRTCAnswer] Answer already set, skipping');
+                    return;
+                }
+                // Если это старый offer - заменяем на answer
+                console.log('🔄 [handleWebRTCAnswer] Replacing old remote description with answer');
             }
             
             await peerConnection.setRemoteDescription(data.answer);
