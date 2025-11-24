@@ -239,37 +239,71 @@ class UIManager {
                     }
                     videoElement.style.setProperty('display', 'block', 'important');
                     
+                    // КРИТИЧНО: Проверяем состояние видео элемента ПЕРЕД вызовом play()
+                    console.log(`🔍 [updateVideoOverlays] Состояние videoElement ДО play() для ${userId}:`, {
+                        paused: videoElement.paused,
+                        ended: videoElement.ended,
+                        readyState: videoElement.readyState,
+                        videoWidth: videoElement.videoWidth,
+                        videoHeight: videoElement.videoHeight,
+                        srcObject: videoElement.srcObject?.id || 'null',
+                        srcObjectTracks: videoElement.srcObject?.getTracks().map(t => ({ 
+                            kind: t.kind, 
+                            id: t.id, 
+                            enabled: t.enabled, 
+                            muted: t.muted,
+                            readyState: t.readyState
+                        })) || [],
+                        autoplay: videoElement.autoplay,
+                        playsInline: videoElement.playsInline
+                    });
+                    
                     // КРИТИЧНО: Пробуем воспроизвести видео и логируем результат
-                    const playPromise = videoElement.play();
-                    if (playPromise !== undefined) {
-                        playPromise
-                            .then(() => {
-                                console.log(`✅ [updateVideoOverlays] Видео успешно воспроизведено для ${userId}`);
-                                // Проверяем состояние видео элемента
-                                console.log(`🔍 [updateVideoOverlays] Состояние videoElement для ${userId}:`, {
-                                    paused: videoElement.paused,
-                                    ended: videoElement.ended,
-                                    readyState: videoElement.readyState,
-                                    videoWidth: videoElement.videoWidth,
-                                    videoHeight: videoElement.videoHeight,
-                                    srcObject: videoElement.srcObject?.id || 'null',
-                                    srcObjectTracks: videoElement.srcObject?.getTracks().map(t => ({ kind: t.kind, id: t.id, enabled: t.enabled, muted: t.muted })) || []
+                    try {
+                        console.log(`🎬 [updateVideoOverlays] Вызываем play() для ${userId}`);
+                        const playPromise = videoElement.play();
+                        if (playPromise !== undefined) {
+                            playPromise
+                                .then(() => {
+                                    console.log(`✅ [updateVideoOverlays] Видео успешно воспроизведено для ${userId}`);
+                                    // Проверяем состояние видео элемента ПОСЛЕ play()
+                                    setTimeout(() => {
+                                        console.log(`🔍 [updateVideoOverlays] Состояние videoElement ПОСЛЕ play() для ${userId}:`, {
+                                            paused: videoElement.paused,
+                                            ended: videoElement.ended,
+                                            readyState: videoElement.readyState,
+                                            videoWidth: videoElement.videoWidth,
+                                            videoHeight: videoElement.videoHeight,
+                                            srcObject: videoElement.srcObject?.id || 'null',
+                                            srcObjectTracks: videoElement.srcObject?.getTracks().map(t => ({ 
+                                                kind: t.kind, 
+                                                id: t.id, 
+                                                enabled: t.enabled, 
+                                                muted: t.muted,
+                                                readyState: t.readyState
+                                            })) || []
+                                        });
+                                    }, 100);
+                                })
+                                .catch(err => {
+                                    console.error(`❌ [updateVideoOverlays] Ошибка play для ${userId}:`, err);
+                                    console.error(`❌ [updateVideoOverlays] Детали ошибки:`, {
+                                        name: err.name,
+                                        message: err.message,
+                                        stack: err.stack,
+                                        videoElement: {
+                                            paused: videoElement.paused,
+                                            ended: videoElement.ended,
+                                            readyState: videoElement.readyState,
+                                            srcObject: videoElement.srcObject?.id || 'null'
+                                        }
+                                    });
                                 });
-                            })
-                            .catch(err => {
-                                console.error(`❌ [updateVideoOverlays] Ошибка play для ${userId}:`, err);
-                                console.error(`❌ [updateVideoOverlays] Детали ошибки:`, {
-                                    name: err.name,
-                                    message: err.message,
-                                    stack: err.stack,
-                                    videoElement: {
-                                        paused: videoElement.paused,
-                                        ended: videoElement.ended,
-                                        readyState: videoElement.readyState,
-                                        srcObject: videoElement.srcObject?.id || 'null'
-                                    }
-                                });
-                            });
+                        } else {
+                            console.warn(`⚠️ [updateVideoOverlays] play() вернул undefined для ${userId}`);
+                        }
+                    } catch (err) {
+                        console.error(`❌ [updateVideoOverlays] Исключение при вызове play() для ${userId}:`, err);
                     }
                 } else {
                     console.warn(`⚠️ [updateVideoOverlays] videoElement не найден для ${userId}`);
