@@ -197,11 +197,12 @@ class UIManager {
                     const receivers = peerConnection.getReceivers();
                     const videoReceiver = receivers.find(receiver => {
                         const track = receiver.track;
-                        return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
+                        // КРИТИЧНО: Проверяем что трек не muted - если muted=true, камера выключена
+                        return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
                     });
                     if (videoReceiver && videoReceiver.track) {
-                        // Есть активный видео трек - создаем карточку
-                        console.log(`✅ [updateVideoOverlays ${userId}] Создаем карточку - обнаружен активный видео трек`);
+                        // Есть активный видео трек (enabled=true И !muted) - создаем карточку
+                        console.log(`✅ [updateVideoOverlays ${userId}] Создаем карточку - обнаружен активный видео трек (enabled=true, muted=false)`);
                         this.createRemoteVideoElement(userId, stream);
                         participantCard = document.getElementById(`participant-${userId}`);
                         if (!participantCard) {
@@ -210,6 +211,7 @@ class UIManager {
                         }
                     } else {
                         // Нет активного видео трека - не создаем карточку
+                        console.log(`❌ [updateVideoOverlays ${userId}] НЕ создаем карточку - нет активного видео трека (muted или disabled)`);
                         return;
                     }
                 } else {
@@ -240,7 +242,7 @@ class UIManager {
                 // 1. Трека нет в receivers вообще
                 // 2. Трек ended
                 // 3. Трек enabled=false (камера выключена пользователем)
-                // НЕ удаляем если трек muted=true но enabled=true (временное состояние браузера)
+                // 4. Трек muted=true (камера выключена пользователем)
                 const streamTracks = stream.getTracks();
                 streamTracks.forEach(track => {
                     const receiverTrack = receivers.find(r => r.track && r.track.id === track.id)?.track;
@@ -248,11 +250,13 @@ class UIManager {
                     // 1. Трека нет в receivers вообще
                     // 2. Трек ended
                     // 3. Трек enabled=false (камера выключена)
-                    if (!receiverTrack || receiverTrack.readyState === 'ended' || (receiverTrack && !receiverTrack.enabled)) {
+                    // 4. Трек muted=true (камера выключена)
+                    if (!receiverTrack || receiverTrack.readyState === 'ended' || (receiverTrack && (!receiverTrack.enabled || receiverTrack.muted))) {
                         console.log(`🗑️ [updateVideoOverlays] Трек ${track.kind} (${track.id}) удаляем из потока для ${userId}`, {
                             hasReceiver: !!receiverTrack,
                             readyState: receiverTrack?.readyState,
-                            enabled: receiverTrack?.enabled
+                            enabled: receiverTrack?.enabled,
+                            muted: receiverTrack?.muted
                         });
                         stream.removeTrack(track);
                     }
@@ -267,13 +271,14 @@ class UIManager {
             // КРИТИЧНО: Удаляем треки из потока если:
             // 1. Трек ended
             // 2. Трек enabled=false (камера выключена пользователем)
-            // НЕ удаляем если трек muted=true но enabled=true (временное состояние браузера)
+            // 3. Трек muted=true (камера выключена пользователем)
             videoTracks.forEach(track => {
-                if (track.readyState === 'ended' || !track.enabled) {
+                if (track.readyState === 'ended' || !track.enabled || track.muted) {
                     console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек:`, {
                         id: track.id,
                         readyState: track.readyState,
-                        enabled: track.enabled
+                        enabled: track.enabled,
+                        muted: track.muted
                     });
                     stream.removeTrack(track);
                 }
@@ -411,18 +416,18 @@ class UIManager {
                 } else {
                     const track = videoReceiver.track;
                     // Есть видео трек - проверяем активность
-                    // КРИТИЧНО: muted не влияет на активность - это временное состояние браузера
-                    const isActive = track.enabled && track.readyState === 'live';
-                    hasActiveVideo = isActive; // hasActiveVideo = true только если трек активен
+                    // ВАЖНО: Если muted=true, камера выключена пользователем - не показываем карточку
+                    const isActive = track.enabled && track.readyState === 'live' && !track.muted;
+                    hasActiveVideo = isActive; // hasActiveVideo = true только если трек активен (enabled=true И !muted)
                     
-                    // КРИТИЧНО: Добавляем трек в поток ТОЛЬКО если он enabled (камера включена)
-                    // Если enabled=false, камера выключена пользователем - не добавляем трек
+                    // КРИТИЧНО: Добавляем трек в поток ТОЛЬКО если он enabled И !muted (камера включена)
+                    // Если enabled=false или muted=true, камера выключена пользователем - не добавляем трек
                     const trackInStream = stream.getTracks().find(t => t.id === track.id);
-                    if (!trackInStream && track.enabled && track.readyState === 'live') {
+                    if (!trackInStream && track.enabled && track.readyState === 'live' && !track.muted) {
                         console.log(`✅ [${userId}] Добавляем видео трек из receivers в поток (enabled=${track.enabled}, muted=${track.muted})`);
                         stream.addTrack(track);
-                    } else if (!trackInStream && !track.enabled) {
-                        console.log(`❌ [${userId}] НЕ добавляем видео трек в поток - камера выключена (enabled=false)`);
+                    } else if (!trackInStream && (!track.enabled || track.muted)) {
+                        console.log(`❌ [${userId}] НЕ добавляем видео трек в поток - камера выключена (enabled=${track.enabled}, muted=${track.muted})`);
                     }
                 }
             } else {
@@ -444,24 +449,25 @@ class UIManager {
                                       track.enabled
                                   );
             
-                // КРИТИЧНО: Финальная проверка - если в потоке нет активных видео треков, камера выключена
-                // КРИТИЧНО: muted не влияет на активность - это временное состояние браузера
-                const hasActiveVideoInStream = finalVideoTracks.length > 0 && 
+            // КРИТИЧНО: Финальная проверка - если в потоке нет активных видео треков, камера выключена
+            // ВАЖНО: Если muted=true, камера выключена пользователем - не показываем карточку
+            const hasActiveVideoInStream = finalVideoTracks.length > 0 && 
                                           finalVideoTracks.some(track => 
                                               track && 
                                               track.readyState === 'live' && 
-                                              track.enabled
+                                              track.enabled &&
+                                              !track.muted
                                           );
             
             // ВАЖНО: Если трек активен в receivers, но его нет в потоке - добавляем его
             // Это критично для случая, когда трек приходит через ontrack, но еще не добавлен в поток
             // ИЛИ когда трек становится активным после того как был неактивен
-            // КРИТИЧНО: muted не влияет на активность - это временное состояние браузера
+            // ВАЖНО: Если muted=true, камера выключена пользователем - не добавляем трек
             if (hasActiveVideo && !hasActiveVideoInStream && peerConnection) {
                 const receivers = peerConnection.getReceivers();
                 const videoReceiver = receivers.find(receiver => {
                     const track = receiver.track;
-                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
+                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
                 });
                 if (videoReceiver && videoReceiver.track) {
                     const track = videoReceiver.track;
@@ -499,7 +505,8 @@ class UIManager {
                         const receivers = peerConnection.getReceivers();
                         const videoReceiver = receivers.find(receiver => {
                             const track = receiver.track;
-                            return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
+                            // ВАЖНО: Если muted=true, камера выключена пользователем - не показываем карточку
+                            return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
                         });
                     if (videoReceiver && videoReceiver.track) {
                         // Есть активный receiver, но его нет в потоке - добавляем
@@ -527,12 +534,13 @@ class UIManager {
             
             // КРИТИЧНО: Финальная проверка - видео активно ТОЛЬКО если в потоке есть активные треки
             // Это единственный надежный источник истины для отображения
-            // ДОПОЛНИТЕЛЬНО: Проверяем, что треки действительно активны (enabled, live)
-            // КРИТИЧНО: muted не влияет на активность - это временное состояние браузера
+            // ДОПОЛНИТЕЛЬНО: Проверяем, что треки действительно активны (enabled, live, !muted)
+            // ВАЖНО: Если muted=true, камера выключена пользователем - не показываем карточку
             const finalHasActiveVideo = hasActiveVideoInStream && finalVideoTracks.some(track => 
                 track && 
                 track.readyState === 'live' && 
-                track.enabled
+                track.enabled &&
+                !track.muted
             );
             
             // КРИТИЧНО: Показываем карточку ТОЛЬКО если есть АКТИВНЫЙ видео трек
@@ -542,10 +550,12 @@ class UIManager {
             const receivers = peerConnection ? peerConnection.getReceivers() : [];
             const hasActiveVideoTrackInReceivers = peerConnection && receivers.some(r => {
                 const track = r.track;
+                // КРИТИЧНО: Проверяем что трек не muted - если muted=true, камера выключена
                 return track && 
                        track.kind === 'video' && 
                        track.readyState === 'live' && 
-                       track.enabled;
+                       track.enabled &&
+                       !track.muted;
             });
             
             // ПРОВЕРКА ИЗМЕНЕНИЯ СОСТОЯНИЯ: обновляем UI только если состояние изменилось
@@ -753,7 +763,17 @@ class UIManager {
                 return; // Уже обработали выше
             }
             
-            console.log(`❌ [updateVideoOverlays ${userId}] НЕТ активного видео - удаляем карточку из DOM`);
+            // Дополнительная проверка: если трек muted, тоже удаляем карточку
+            const hasMutedVideo = peerConnection && peerConnection.getReceivers().some(r => {
+                const track = r.track;
+                return track && track.kind === 'video' && track.muted;
+            });
+            
+            if (hasMutedVideo) {
+                console.log(`❌ [updateVideoOverlays ${userId}] Видео трек muted - удаляем карточку из DOM`);
+            } else {
+                console.log(`❌ [updateVideoOverlays ${userId}] НЕТ активного видео - удаляем карточку из DOM`);
+            }
             
             // КРИТИЧНО: СНАЧАЛА очищаем srcObject и останавливаем воспроизведение
             // ВАЖНО: Делаем это в правильном порядке для предотвращения черных квадратов

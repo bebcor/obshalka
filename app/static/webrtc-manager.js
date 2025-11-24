@@ -425,13 +425,13 @@ class WebRTCManager {
                 // Управление отображением через enabled/muted, а не через удаление треков
                 if (!remoteStream.getTracks().some(t => t.id === track.id)) {
                     if (track.kind === 'video') {
-                        // КРИТИЧНО: Добавляем ТОЛЬКО если enabled=true (камера включена)
-                        // Если enabled=false, камера выключена пользователем - не добавляем
-                        if (track.readyState === 'live' && track.enabled) {
-                            // ВАЖНО: Создаем карточку только когда появляется активный видео трек
+                        // КРИТИЧНО: Добавляем ТОЛЬКО если enabled=true И !muted (камера включена)
+                        // Если enabled=false или muted=true, камера выключена пользователем - не добавляем
+                        if (track.readyState === 'live' && track.enabled && !track.muted) {
+                            // ВАЖНО: Создаем карточку только когда появляется активный видео трек (enabled=true И !muted)
                             const participantCard = document.getElementById(`participant-${targetUserId}`);
                             if (!participantCard) {
-                                console.log(`✅ [ontrack] Создаем карточку для ${targetUserId} - появился активный видео трек`);
+                                console.log(`✅ [ontrack] Создаем карточку для ${targetUserId} - появился активный видео трек (enabled=true, muted=false)`);
                                 this.videoCallManager.uiManager.createRemoteVideoElement(targetUserId, remoteStream);
                             }
                             
@@ -1205,12 +1205,13 @@ class WebRTCManager {
                         // КРИТИЧНО: Добавляем треки ТОЛЬКО если enabled=true (камера/микрофон включены)
                         // Если enabled=false, устройство выключено пользователем - не добавляем
                         if (track.kind === 'video') {
-                            // Для видео: добавляем ТОЛЬКО если enabled=true и live
-                            if (track.readyState === 'live' && track.enabled) {
-                                // ВАЖНО: Создаем карточку только когда появляется активный видео трек
+                            // Для видео: добавляем ТОЛЬКО если enabled=true, !muted и live
+                            // ВАЖНО: Если muted=true, камера выключена пользователем
+                            if (track.readyState === 'live' && track.enabled && !track.muted) {
+                                // ВАЖНО: Создаем карточку только когда появляется активный видео трек (enabled=true И !muted)
                                 const participantCard = document.getElementById(`participant-${data.sender_id}`);
                                 if (!participantCard) {
-                                    console.log(`✅ [handleWebRTCOffer] Создаем карточку для ${data.sender_id} - появился активный видео трек`);
+                                    console.log(`✅ [handleWebRTCOffer] Создаем карточку для ${data.sender_id} - появился активный видео трек (enabled=true, muted=false)`);
                                     this.videoCallManager.uiManager.createRemoteVideoElement(data.sender_id, remoteStream);
                                 }
                                 const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
@@ -1225,6 +1226,9 @@ class WebRTCManager {
                                     tracksUpdated = true;
                                     console.log(`🔄 [handleWebRTCOffer] Видео трек ${track.id} для ${data.sender_id} заменен в потоке`);
                                 }
+                            } else {
+                                console.log(`❌ [handleWebRTCOffer] НЕ создаем карточку и НЕ добавляем трек для ${data.sender_id} - видео трек неактивен (enabled=${track.enabled}, muted=${track.muted})`);
+                            }
                                 
                                 // КРИТИЧНО: Убеждаемся, что videoElement существует и обновляем его srcObject
                                 const videoElement = document.getElementById(`remoteVideo-${data.sender_id}`);
@@ -1387,12 +1391,13 @@ class WebRTCManager {
                         // КРИТИЧНО: Добавляем треки ТОЛЬКО если enabled=true (камера/микрофон включены)
                         // Если enabled=false, устройство выключено пользователем - не добавляем
                         if (track.kind === 'video') {
-                            // Для видео: добавляем ТОЛЬКО если enabled=true и live
-                            if (track.readyState === 'live' && track.enabled) {
-                                // ВАЖНО: Создаем карточку только когда появляется активный видео трек
+                            // Для видео: добавляем ТОЛЬКО если enabled=true, !muted и live
+                            // ВАЖНО: Если muted=true, камера выключена пользователем
+                            if (track.readyState === 'live' && track.enabled && !track.muted) {
+                                // ВАЖНО: Создаем карточку только когда появляется активный видео трек (enabled=true И !muted)
                                 const participantCard = document.getElementById(`participant-${data.sender_id}`);
                                 if (!participantCard) {
-                                    console.log(`✅ [handleWebRTCAnswer] Создаем карточку для ${data.sender_id} - появился активный видео трек`);
+                                    console.log(`✅ [handleWebRTCAnswer] Создаем карточку для ${data.sender_id} - появился активный видео трек (enabled=true, muted=false)`);
                                     this.videoCallManager.uiManager.createRemoteVideoElement(data.sender_id, remoteStream);
                                 }
                                 const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
@@ -1407,6 +1412,9 @@ class WebRTCManager {
                                     tracksUpdated = true;
                                     console.log(`🔄 [handleWebRTCAnswer] Видео трек ${track.id} для ${data.sender_id} заменен в потоке`);
                                 }
+                            } else {
+                                console.log(`❌ [handleWebRTCAnswer] НЕ создаем карточку и НЕ добавляем трек для ${data.sender_id} - видео трек неактивен (enabled=${track.enabled}, muted=${track.muted})`);
+                            }
                                 
                                 // КРИТИЧНО: Убеждаемся, что videoElement существует и обновляем его srcObject
                                 const videoElement = document.getElementById(`remoteVideo-${data.sender_id}`);
@@ -1547,13 +1555,19 @@ class WebRTCManager {
                     
                     // КРИТИЧНО: Добавляем треки ТОЛЬКО если enabled=true (камера/микрофон включены)
                     // Если enabled=false, устройство выключено пользователем - не добавляем
+                    // ВАЖНО: Для видео также проверяем !muted - если muted=true, камера выключена
                     if (track.readyState === 'live' && track.enabled) {
-                        // ВАЖНО: Создаем карточку только когда появляется активный видео трек
+                        // ВАЖНО: Создаем карточку только когда появляется активный видео трек (enabled=true И !muted)
                         if (track.kind === 'video') {
-                            const participantCard = document.getElementById(`participant-${targetUserId}`);
-                            if (!participantCard) {
-                                console.log(`✅ [syncTracksAfterUserJoined] Создаем карточку для ${targetUserId} - появился активный видео трек`);
-                                this.videoCallManager.uiManager.createRemoteVideoElement(targetUserId, remoteStream);
+                            // КРИТИЧНО: Проверяем что трек не muted - если muted=true, камера выключена
+                            if (!track.muted) {
+                                const participantCard = document.getElementById(`participant-${targetUserId}`);
+                                if (!participantCard) {
+                                    console.log(`✅ [syncTracksAfterUserJoined] Создаем карточку для ${targetUserId} - появился активный видео трек (enabled=true, muted=false)`);
+                                    this.videoCallManager.uiManager.createRemoteVideoElement(targetUserId, remoteStream);
+                                }
+                            } else {
+                                console.log(`❌ [syncTracksAfterUserJoined] НЕ создаем карточку для ${targetUserId} - видео трек muted (камера выключена)`);
                             }
                         }
                         const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
