@@ -365,6 +365,28 @@ class WebRTCManager {
                     return;
                 }
                 
+                // КРИТИЧНО: Проверяем, есть ли трек уже в потоке
+                // WebRTC автоматически добавляет треки в event.streams[0], но нужно убедиться
+                const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
+                if (!existingTrack && track.readyState === 'live' && track.enabled) {
+                    // Трека нет в потоке, но он активен - добавляем явно
+                    console.log(`🔄 [ontrack] Добавляем трек ${track.kind} ${track.id} в поток для ${targetUserId} (enabled=${track.enabled}, muted=${track.muted})`);
+                    remoteStream.addTrack(track);
+                } else if (existingTrack) {
+                    console.log(`✅ [ontrack] Трек ${track.kind} ${track.id} уже в потоке для ${targetUserId}`);
+                } else {
+                    console.log(`⚠️ [ontrack] Трек ${track.kind} ${track.id} не добавлен (readyState=${track.readyState}, enabled=${track.enabled})`);
+                }
+                
+                // Для видео треков создаем карточку если ее нет
+                if (track.kind === 'video' && track.readyState === 'live' && track.enabled) {
+                    const participantCard = document.getElementById(`participant-${targetUserId}`);
+                    if (!participantCard) {
+                        console.log(`✅ [ontrack] Создаем карточку для ${targetUserId} - получен видео трек через ontrack`);
+                        this.videoCallManager.uiManager.createRemoteVideoElement(targetUserId, remoteStream);
+                    }
+                }
+                
                 // WebRTC САМ управляет треками в потоке!
                 // Просто обновляем UI - WebRTC автоматически добавит/удалит треки
                 this.videoCallManager.uiManager.updateVideoOverlays();
@@ -689,15 +711,22 @@ class WebRTCManager {
                 throw error;
             }
         
-            // КРИТИЧНО: Настраиваем transceivers ДО создания answer
+            // Создаем ответ (answer) с правильными опциями
+            const answer = await peerConnection.createAnswer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
+            
+            // КРИТИЧНО: Настраиваем transceivers ПОСЛЕ создания answer, но ДО setLocalDescription
             // Это нужно чтобы видео transceiver был правильно настроен для приема видео
+            // WebRTC может изменить direction при создании answer, поэтому настраиваем после
             peerConnection.getTransceivers().forEach((transceiver, index) => {
                 if (transceiver.receiver.track?.kind === 'video') {
                     // Для видео receiver: если нет sender track, устанавливаем recvonly (принимаем видео)
                     // Если есть sender track, устанавливаем sendrecv (отправляем и принимаем)
                     if (!transceiver.sender.track) {
                         transceiver.direction = 'recvonly';
-                        console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на recvonly (нет локального видео)`);
+                        console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на recvonly (нет локального видео), currentDirection: ${transceiver.currentDirection}`);
                     } else {
                         transceiver.direction = 'sendrecv';
                         console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на sendrecv (есть локальное видео)`);
@@ -715,11 +744,29 @@ class WebRTCManager {
                 }
             });
             
-            // Создаем ответ (answer) с правильными опциями
-            const answer = await peerConnection.createAnswer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true
-            });
+            // ВАЖНО: Проверяем состояние transceivers после настройки
+            const videoTransceiver = peerConnection.getTransceivers().find(t => t.receiver.track?.kind === 'video' || t.receiver.track === null && t.receiver.track?.kind === 'video');
+            if (videoTransceiver) {
+                console.log(`🔍 [handleWebRTCOffer] Видео transceiver после настройки: direction=${videoTransceiver.direction}, currentDirection=${videoTransceiver.currentDirection}, receiver.track=${videoTransceiver.receiver.track ? 'exists' : 'null'}`);
+                
+                // Если currentDirection все еще inactive после настройки, пытаемся исправить через модификацию SDP
+                if (videoTransceiver.currentDirection === 'inactive' && answer.sdp) {
+                    console.warn(`⚠️ [handleWebRTCOffer] Видео transceiver все еще inactive, модифицируем SDP`);
+                    // Модифицируем SDP: заменяем "a=inactive" на "a=recvonly" для видео
+                    let modifiedSDP = answer.sdp;
+                    const videoMatch = modifiedSDP.match(/m=video[\s\S]*?(?=m=|$)/);
+                    if (videoMatch) {
+                        const videoSection = videoMatch[0];
+                        if (videoSection.includes('a=inactive')) {
+                            modifiedSDP = modifiedSDP.replace(/m=video[\s\S]*?a=inactive/g, (match) => {
+                                return match.replace('a=inactive', 'a=recvonly');
+                            });
+                            answer.sdp = modifiedSDP;
+                            console.log(`✅ [handleWebRTCOffer] SDP модифицирован: inactive -> recvonly для видео`);
+                        }
+                    }
+                }
+            }
             
             // Устанавливаем созданный ответ как локальное описание
             await peerConnection.setLocalDescription(answer);
