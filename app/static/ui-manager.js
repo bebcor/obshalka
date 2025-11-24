@@ -194,31 +194,48 @@ class UIManager {
             
             // ОБРАБОТКА АУДИО: создаем скрытый audio элемент если есть аудио треки
             const audioTracks = stream.getAudioTracks();
-            const hasAudio = audioTracks.length > 0 && audioTracks[0].readyState === 'live';
+            const hasAudio = audioTracks.length > 0 && audioTracks[0].readyState === 'live' && audioTracks[0].enabled;
             
             if (hasAudio) {
-                // Есть аудио - создаем/обновляем скрытый audio элемент
+                // Есть активное аудио - создаем/обновляем скрытый audio элемент
                 let hiddenAudio = this._hiddenAudioElements.get(userId);
                 if (!hiddenAudio) {
+                    console.log(`🔊 [updateVideoOverlays] Создаем скрытый audio элемент для ${userId}`);
                     hiddenAudio = document.createElement('audio');
                     hiddenAudio.autoplay = true;
                     hiddenAudio.playsInline = true;
                     hiddenAudio.style.display = 'none';
+                    hiddenAudio.setAttribute('muted', 'false');
                     document.body.appendChild(hiddenAudio);
                     this._hiddenAudioElements.set(userId, hiddenAudio);
+                    console.log(`✅ [updateVideoOverlays] Скрытый audio элемент создан для ${userId}`);
                 }
                 if (hiddenAudio.srcObject !== stream) {
+                    console.log(`🔄 [updateVideoOverlays] Устанавливаем srcObject для скрытого audio ${userId}`);
                     hiddenAudio.srcObject = stream;
-                    hiddenAudio.play().catch(error => {
+                    hiddenAudio.play().then(() => {
+                        console.log(`✅ [updateVideoOverlays] Скрытый audio воспроизводится для ${userId}`);
+                    }).catch(error => {
                         if (error.name !== 'AbortError') {
-                            console.warn(`⚠️ Ошибка play для скрытого audio ${userId}:`, error);
+                            console.warn(`⚠️ [updateVideoOverlays] Ошибка play для скрытого audio ${userId}:`, error);
                         }
                     });
+                } else {
+                    // Убеждаемся что audio воспроизводится
+                    if (hiddenAudio.paused) {
+                        console.log(`🔄 [updateVideoOverlays] Возобновляем воспроизведение скрытого audio ${userId}`);
+                        hiddenAudio.play().catch(error => {
+                            if (error.name !== 'AbortError') {
+                                console.warn(`⚠️ [updateVideoOverlays] Ошибка возобновления play для ${userId}:`, error);
+                            }
+                        });
+                    }
                 }
             } else {
-                // Нет аудио - удаляем скрытый audio элемент
+                // Нет активного аудио - удаляем скрытый audio элемент
                 const hiddenAudio = this._hiddenAudioElements.get(userId);
                 if (hiddenAudio) {
+                    console.log(`🗑️ [updateVideoOverlays] Удаляем скрытый audio элемент для ${userId}`);
                     hiddenAudio.pause();
                     hiddenAudio.srcObject = null;
                     hiddenAudio.remove();
@@ -427,7 +444,16 @@ class UIManager {
         
         const videoElement = document.getElementById(`remoteVideo-${userId}`);
         if (videoElement) {
-            videoElement.srcObject = stream;
+            // НЕ устанавливаем srcObject сразу - это сделает updateVideoOverlays когда карточка будет показана
+            // Устанавливаем только если есть активное видео
+            const videoTracks = stream.getVideoTracks();
+            const hasActiveVideo = videoTracks.length > 0 && 
+                                   videoTracks[0].readyState === 'live' && 
+                                   videoTracks[0].enabled;
+            
+            if (hasActiveVideo) {
+                videoElement.srcObject = stream;
+            }
 
             // ДОБАВЛЯЕМ ОБРАБОТЧИКИ ДЛЯ СЛЕДЕНИЯ ЗА СОСТОЯНИЕМ ТРЕКОВ
             stream.getTracks().forEach(track => {
@@ -445,11 +471,6 @@ class UIManager {
                     console.log(`Трек ${track.kind} включен для пользователя ${userId}`);
                     this.updateVideoOverlays();
                 };
-            });
-            
-            videoElement.play().catch(error => {
-                console.log('Автовоспроизведение звука заблокировано:', error);
-                this.showAudioActivationButton(videoElement, userId);
             });
             
             // ВАЖНО: Обновляем состояние после создания видео элемента
