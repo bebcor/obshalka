@@ -361,12 +361,26 @@ class UIManager {
                 });
                 
                 if (hasNullVideoReceiver) {
-                    // Есть null receiver - удаляем все видео треки из потока
+                    // Есть null receiver - удаляем все видео треки из потока и карточку
                     const videoTracks = stream.getVideoTracks();
                     videoTracks.forEach(track => {
                         console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек ${track.id} - есть null receiver (replaceTrack(null))`);
                         stream.removeTrack(track);
                     });
+                    // КРИТИЧНО: Удаляем карточку и очищаем srcObject
+                    if (videoElement) {
+                        videoElement.style.setProperty('display', 'none', 'important');
+                        videoElement.pause();
+                        videoElement.srcObject = null;
+                        try {
+                            videoElement.load();
+                        } catch (e) {}
+                    }
+                    if (participantCard && participantCard.parentNode) {
+                        console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем карточку - есть null receiver (replaceTrack(null))`);
+                        participantCard.remove();
+                    }
+                    return; // Выходим, карточка удалена
                 } else {
                     // Нет null receiver - проверяем каждый трек индивидуально
                     // ВАЖНО: НЕ удаляем треки если они просто disabled - оставляем их в потоке!
@@ -382,8 +396,9 @@ class UIManager {
                         // Удаляем трек если:
                         // 1. Трек ended (полностью завершен)
                         // 2. Трек enabled=false (камера выключена пользователем)
-                        // 3. Нет receiver И трек ended
-                        // ВАЖНО: muted - это временное состояние при инициализации, НЕ используем его
+                        // 3. Трек muted=true (камера выключена, источник недоступен)
+                        // 4. Нет receiver И трек ended
+                        // ВАЖНО: muted=true означает что источник недоступен - камера выключена
                         let shouldRemove = false;
                         if (streamTrack.readyState === 'ended') {
                             shouldRemove = true;
@@ -392,17 +407,38 @@ class UIManager {
                             // КРИТИЧНО: Если enabled=false, камера выключена - удаляем трек из потока
                             shouldRemove = true;
                             console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек ${streamTrack.id} - enabled=false (камера выключена)`);
+                        } else if (receiverTrack && receiverTrack.muted) {
+                            // КРИТИЧНО: Если muted=true, источник недоступен - камера выключена
+                            shouldRemove = true;
+                            console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек ${streamTrack.id} - muted=true (камера выключена, источник недоступен)`);
                         } else if (!receiver && streamTrack.readyState === 'ended') {
                             // Нет receiver для этого трека И трек ended
                             shouldRemove = true;
                             console.log(`🗑️ [updateVideoOverlays ${userId}] Удаляем видео трек ${streamTrack.id} - нет receiver и ended`);
                         } else {
-                            // Трек live и enabled - оставляем в потоке
-                            console.log(`✅ [updateVideoOverlays ${userId}] Оставляем видео трек ${streamTrack.id} в потоке (enabled=${streamTrack.enabled}, readyState=${streamTrack.readyState})`);
+                            // Трек live, enabled и не muted - оставляем в потоке
+                            console.log(`✅ [updateVideoOverlays ${userId}] Оставляем видео трек ${streamTrack.id} в потоке (enabled=${streamTrack.enabled}, muted=${streamTrack.muted}, readyState=${streamTrack.readyState})`);
                         }
                         
                         if (shouldRemove && stream.getTracks().includes(streamTrack)) {
                             stream.removeTrack(streamTrack);
+                            // КРИТИЧНО: Если удалили все видео треки, удаляем карточку
+                            const remainingVideoTracks = stream.getVideoTracks();
+                            if (remainingVideoTracks.length === 0) {
+                                console.log(`🗑️ [updateVideoOverlays ${userId}] Все видео треки удалены - удаляем карточку`);
+                                if (videoElement) {
+                                    videoElement.style.setProperty('display', 'none', 'important');
+                                    videoElement.pause();
+                                    videoElement.srcObject = null;
+                                    try {
+                                        videoElement.load();
+                                    } catch (e) {}
+                                }
+                                if (participantCard && participantCard.parentNode) {
+                                    participantCard.remove();
+                                }
+                                return; // Выходим, карточка удалена
+                            }
                         }
                     });
                 }
