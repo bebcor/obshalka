@@ -192,16 +192,21 @@ class WebRTCManager {
                             shouldRemove = true;
                             reason = 'receiver track is null (replaceTrack(null))';
                         } else if (receiverTrack) {
-                            // Трек есть в receivers - НЕ УДАЛЯЕМ даже если disabled!
-                            // Удаляем ТОЛЬКО если трек ended (полностью завершен)
+                            // Трек есть в receivers - проверяем его состояние
+                            // Удаляем если:
+                            // 1. Трек ended (полностью завершен)
+                            // 2. Трек muted=true (камера выключена пользователем)
                             if (receiverTrack.readyState === 'ended') {
                                 shouldRemove = true;
                                 reason = 'receiver track ended';
+                            } else if (receiverTrack.muted) {
+                                // КРИТИЧНО: Если muted=true, камера выключена - удаляем трек из потока
+                                shouldRemove = true;
+                                reason = 'receiver track muted (camera off)';
                             } else {
-                                // Трек live, но может быть disabled - НЕ УДАЛЯЕМ!
-                                // Оставляем трек в потоке, управление через enabled/muted
+                                // Трек live и не muted - оставляем в потоке
                                 shouldRemove = false;
-                                reason = 'receiver track exists (keeping in stream, managed by enabled/muted)';
+                                reason = 'receiver track active (enabled=true, muted=false)';
                             }
                         } else {
                             // Нет receiver для этого трека, но receivers не пустые
