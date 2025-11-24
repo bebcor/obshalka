@@ -266,10 +266,14 @@ class WebRTCManager {
                     console.log(`✅ [ConnectionState] WebRTC connection established для ${targetUserId}!`);
                     // КРИТИЧНО: После установки соединения синхронизируем треки
                     // Это нужно чтобы увидеть видео другого пользователя
-                        this.syncTracksAfterUserJoined(targetUserId);
+                    this.syncTracksAfterUserJoined(targetUserId);
+                    // Обновляем UI когда соединение установлено
+                    this.videoCallManager.uiManager.updateVideoOverlays();
                 } else if (state === 'disconnected' || state === 'failed') {
                     console.log(`❌ [ConnectionState] WebRTC connection lost для ${targetUserId}`);
                     this.videoCallManager.notificationManager.show('Соединение потеряно', 'error');
+                    // Обновляем UI при потере соединения
+                    this.videoCallManager.uiManager.updateVideoOverlays();
                 }
             };
         
@@ -289,6 +293,8 @@ class WebRTCManager {
                     console.log(`✅ [ICEConnectionState] ICE connection successful для ${targetUserId}!`);
                     // КРИТИЧНО: После установки ICE соединения синхронизируем треки
                     this.syncTracksAfterUserJoined(targetUserId);
+                    // Обновляем UI чтобы показать видео когда соединение готово
+                    this.videoCallManager.uiManager.updateVideoOverlays();
                 } else if (iceState === 'checking') {
                     // Таймаут для зависших соединений в состоянии checking
                     iceConnectionTimeout = setTimeout(() => {

@@ -350,7 +350,8 @@ class UIManager {
             const finalIsTrackLive = trackToCheck ? trackToCheck.readyState === 'live' : false;
             const finalIsTrackEnabled = trackToCheck ? trackToCheck.enabled : false;
             
-            // КРИТИЧНО: Проверяем состояние соединения - не показываем карточку если соединение не установлено
+            // КРИТИЧНО: Проверяем состояние соединения - используем только для определения когда устанавливать srcObject
+            // Карточка должна показываться даже если соединение еще устанавливается (показываем overlay)
             let isConnectionReady = false;
             if (peerConnection) {
                 const iceState = peerConnection.iceConnectionState;
@@ -365,13 +366,15 @@ class UIManager {
                 console.log(`⚠️ [${userId}] PeerConnection не найден, считаем соединение не готовым`);
             }
             
-            const finalHasActiveVideo = finalIsTrackLive && finalIsTrackEnabled && !finalIsTrackMuted && isConnectionReady;
+            // КРИТИЧНО: Карточка показывается если трек активен, НЕ зависимо от состояния соединения
+            // Состояние соединения используется только для определения когда устанавливать srcObject
+            const finalHasActiveVideo = finalIsTrackLive && finalIsTrackEnabled && !finalIsTrackMuted;
             
             console.log(`🔍 [${userId}] ФИНАЛЬНАЯ ПРОВЕРКА перед показом карточки:`);
             console.log(`   - track.muted: ${finalIsTrackMuted}`);
             console.log(`   - track.readyState: ${trackToCheck ? trackToCheck.readyState : 'N/A'}`);
             console.log(`   - track.enabled: ${finalIsTrackEnabled}`);
-            console.log(`   - isConnectionReady: ${isConnectionReady}`);
+            console.log(`   - isConnectionReady: ${isConnectionReady} (используется только для srcObject)`);
             console.log(`   - finalHasActiveVideo: ${finalHasActiveVideo}`);
             
             if (finalHasActiveVideo) {
@@ -409,21 +412,24 @@ class UIManager {
                     const afterDisplay = window.getComputedStyle(participantCard).display;
                     console.log(`   - participantCard display: ${beforeDisplay} -> ${afterDisplay}`);
                     
-                    // КРИТИЧНО: Устанавливаем srcObject ТОЛЬКО если трек НЕ muted
+                    // КРИТИЧНО: Устанавливаем srcObject ТОЛЬКО если трек активен И соединение готово
                     // Проверяем ЕЩЕ РАЗ перед установкой srcObject
                     const currentIsTrackMuted = trackToCheck ? trackToCheck.muted : true;
                     const currentIsTrackLive = trackToCheck ? trackToCheck.readyState === 'live' : false;
                     const currentIsTrackEnabled = trackToCheck ? trackToCheck.enabled : false;
+                    const canSetSrcObject = !currentIsTrackMuted && currentIsTrackLive && currentIsTrackEnabled && isConnectionReady;
                     
                     console.log(`🔍 [${userId}] Проверка состояния трека перед установкой srcObject:`);
                     console.log(`   - track.muted: ${currentIsTrackMuted}`);
                     console.log(`   - track.readyState: ${trackToCheck ? trackToCheck.readyState : 'N/A'}`);
                     console.log(`   - track.enabled: ${currentIsTrackEnabled}`);
+                    console.log(`   - isConnectionReady: ${isConnectionReady}`);
+                    console.log(`   - canSetSrcObject: ${canSetSrcObject}`);
                     console.log(`   - videoElement.srcObject: ${videoElement.srcObject ? 'SET' : 'NULL'}`);
                     
                     // ЕСЛИ трек muted ИЛИ не live ИЛИ не enabled - НЕ устанавливаем srcObject
                     if (currentIsTrackMuted || !currentIsTrackLive || !currentIsTrackEnabled) {
-                        console.log(`⚠️ [${userId}] ТРЕК НЕ АКТИВЕН (muted=${currentIsTrackMuted}, live=${currentIsTrackLive}, enabled=${currentIsTrackEnabled}) - НЕ УСТАНАВЛИВАЕМ srcObject И СКРЫВАЕМ КАРТОЧКУ`);
+                        console.log(`⚠️ [${userId}] ТРЕК НЕ АКТИВЕН (muted=${currentIsTrackMuted}, live=${currentIsTrackLive}, enabled=${currentIsTrackEnabled}) - НЕ УСТАНАВЛИВАЕМ srcObject`);
                         // Если srcObject уже установлен - ОБЯЗАТЕЛЬНО очищаем его
                         if (videoElement.srcObject) {
                             console.log(`   🔄 ОЧИЩАЕМ srcObject так как трек не активен...`);
@@ -434,10 +440,22 @@ class UIManager {
                             videoElement.removeAttribute('srcObject');
                             console.log(`   ✅ srcObject ОЧИЩЕН`);
                         }
-                        // Скрываем карточку если трек не активен
-                        participantCard.style.setProperty('display', 'none', 'important');
+                        // Показываем overlay "Ожидание видео..."
                         overlay.style.display = 'block';
-                        return; // Прерываем обработку
+                        videoElement.style.setProperty('display', 'none', 'important');
+                    } else if (!isConnectionReady) {
+                        // Трек активен, но соединение еще не готово - показываем overlay
+                        console.log(`⏳ [${userId}] Трек активен, но соединение еще не готово - показываем overlay "Ожидание соединения..."`);
+                        overlay.style.display = 'block';
+                        overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
+                        videoElement.style.setProperty('display', 'none', 'important');
+                        // НЕ устанавливаем srcObject пока соединение не готово
+                        if (videoElement.srcObject) {
+                            console.log(`   🔄 Очищаем srcObject так как соединение не готово...`);
+                            videoElement.pause();
+                            videoElement.srcObject = null;
+                            videoElement.load();
+                        }
                     } else {
                         // Трек активен - устанавливаем srcObject
                         const hadSrcObject = !!videoElement.srcObject;
