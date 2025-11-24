@@ -331,50 +331,17 @@ class WebRTCManager {
                 }
             }
         
-            // Перед созданием offer убеждаемся, что transceiver'ы имеют корректное направление
-            let transceiversAdjusted = false;
-            peerConnection.getTransceivers().forEach((transceiver, index) => {
-                if (transceiver.sender.track) {
-                    // Если есть отправляемый трек, должно быть sendrecv или sendonly
-                    if (transceiver.direction === 'inactive' || transceiver.direction === 'recvonly') {
-                        transceiver.direction = 'sendrecv';
-                        transceiversAdjusted = true;
-                        console.log(`🔄 Fixed transceiver ${index} direction to sendrecv BEFORE offer`);
-                    }
-                }
-            });
-            
-            // КРИТИЧНО: Проверяем, есть ли локальное видео перед созданием offer
-            // Если нет локального видео, не используем offerToReceiveVideo - это создаст recvonly, что неправильно
-            const hasLocalVideo = this.videoCallManager.localStream?.getVideoTracks().some(t => t.enabled) || false;
-            
-            // Используем стандартные опции, но с правильными настройками для медиа
-            const offerOptions = {
+            // БАЗОВАЯ настройка - используем стандартные опции WebRTC
+            // WebRTC сам правильно настроит transceivers на основе добавленных треков
+            const offer = await peerConnection.createOffer({
                 offerToReceiveAudio: true,
-                offerToReceiveVideo: hasLocalVideo // Только если есть локальное видео
-            };
-            
-            console.log(`🔍 [createOffer] hasLocalVideo: ${hasLocalVideo}, offerToReceiveVideo: ${offerOptions.offerToReceiveVideo}`);
-            
-            console.log(`📤 Creating offer for ${targetUserId}...`);
-            const offer = await peerConnection.createOffer(offerOptions);
-        
-            if (transceiversAdjusted) {
-                console.log('♻️ Transceiver directions were updated prior to offer generation');
-            }
+                offerToReceiveVideo: true
+            });
         
             await peerConnection.setLocalDescription(offer);
             console.log(`✅ Local description set for ${targetUserId}`);
         
             console.log('📤 Sending offer to:', targetUserId);
-            console.log('SDP offer direction check:');
-            peerConnection.getTransceivers().forEach((transceiver, index) => {
-                console.log(`Transceiver ${index}:`, {
-                    direction: transceiver.direction,
-                    currentDirection: transceiver.currentDirection,
-                    kind: transceiver.receiver.track?.kind || transceiver.sender.track?.kind || 'no track'
-                });
-            });
         
             this.videoCallManager.socket.emit('webrtc_offer', {
                 target_user_id: targetUserId,
@@ -411,11 +378,8 @@ class WebRTCManager {
                 console.log('⚠️ Уже есть локальный offer для', data.sender_id, ', обрабатываем race condition...');
                 // Устанавливаем remote description - это может вызвать renegotiation
                 await peerConnection.setRemoteDescription(data.offer);
-                // Создаем новый answer
-                const answer = await peerConnection.createAnswer({
-                    offerToReceiveAudio: true,
-                    offerToReceiveVideo: true
-                });
+                // БАЗОВАЯ настройка - используем стандартные опции WebRTC
+                const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
                 this.videoCallManager.socket.emit('webrtc_answer', {
                     target_user_id: data.sender_id,
@@ -497,114 +461,12 @@ class WebRTCManager {
                 throw error;
             }
         
-            // Создаем ответ (answer) с правильными опциями
-            const answer = await peerConnection.createAnswer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true
-            });
-            
-            // КРИТИЧНО: Проверяем offer - есть ли в нем видео секция и какое направление
-            const offerSDP = peerConnection.remoteDescription?.sdp || '';
-            const offerVideoMatch = offerSDP.match(/m=video[\s\S]*?(?=m=|$)/);
-            const offerHasVideo = !!offerVideoMatch;
-            const offerHasVideoSend = offerVideoMatch && (
-                offerVideoMatch[0].includes('a=sendonly') || 
-                offerVideoMatch[0].includes('a=sendrecv')
-            );
-            const offerHasVideoRecv = offerVideoMatch && offerVideoMatch[0].includes('a=recvonly');
-            
-            console.log(`🔍 [handleWebRTCOffer] Offer содержит видео: ${offerHasVideo}, send: ${offerHasVideoSend}, recv: ${offerHasVideoRecv}`);
-            
-            // Настраиваем transceivers:
-            // 1. Если в offer есть send - устанавливаем recvonly (принимаем видео)
-            // 2. Если в offer есть recvonly - устанавливаем sendonly/sendrecv (отправляем видео, если есть локальное)
-            if (offerHasVideo) {
-                const hasLocalVideo = this.videoCallManager.localStream?.getVideoTracks().some(t => t.enabled) || false;
-                
-                peerConnection.getTransceivers().forEach((transceiver, index) => {
-                    if (transceiver.receiver.track?.kind === 'video' || (!transceiver.receiver.track && transceiver.mid && answer.sdp.includes('m=video'))) {
-                        if (offerHasVideoSend) {
-                            // В offer есть send - устанавливаем recvonly (принимаем видео)
-                            if (!transceiver.sender.track) {
-                                transceiver.direction = 'recvonly';
-                                console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на recvonly (offer имеет send, нет локального видео)`);
-                            } else {
-                                transceiver.direction = 'sendrecv';
-                                console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на sendrecv (offer имеет send, есть локальное видео)`);
-                            }
-                        } else if (offerHasVideoRecv) {
-                            // В offer есть recvonly - отправитель хочет получать видео
-                            if (hasLocalVideo && transceiver.sender.track) {
-                                // Есть локальное видео - устанавливаем sendrecv (отправляем и принимаем)
-                                transceiver.direction = 'sendrecv';
-                                console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на sendrecv (offer имеет recvonly, есть локальное видео)`);
-                            } else {
-                                // Нет локального видео - устанавливаем sendonly (не можем отправлять, но можем принимать)
-                                // Но на самом деле, если нет локального видео, мы не можем установить sendonly
-                                // Поэтому оставляем recvonly (принимаем видео от отправителя, если он его отправит)
-                                transceiver.direction = 'recvonly';
-                                console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на recvonly (offer имеет recvonly, нет локального видео)`);
-                            }
-                        }
-                    } else if (transceiver.receiver.track?.kind === 'audio') {
-                        // Для аудио всегда настраиваем
-                        if (!transceiver.sender.track) {
-                            transceiver.direction = 'recvonly';
-                        } else {
-                            transceiver.direction = 'sendrecv';
-                        }
-                    }
-                });
-            } else {
-                console.log(`⚠️ [handleWebRTCOffer] Offer не содержит видео секцию`);
-            }
+            // БАЗОВАЯ настройка - используем стандартные опции WebRTC
+            const answer = await peerConnection.createAnswer();
             
             // Устанавливаем созданный ответ как локальное описание
             await peerConnection.setLocalDescription(answer);
             console.log('✅ [handleWebRTCOffer] Local description set, signalingState:', peerConnection.signalingState);
-            
-            // КРИТИЧНО: Настраиваем transceivers ПОСЛЕ setLocalDescription
-            // WebRTC может изменить direction при установке описания, поэтому настраиваем после
-            if (offerHasVideo) {
-                const hasLocalVideo = this.videoCallManager.localStream?.getVideoTracks().some(t => t.enabled) || false;
-                
-                peerConnection.getTransceivers().forEach((transceiver, index) => {
-                    if (transceiver.receiver.track?.kind === 'video' || (!transceiver.receiver.track && transceiver.mid)) {
-                        if (offerHasVideoSend) {
-                            // В offer есть send - устанавливаем recvonly (принимаем видео)
-                            if (!transceiver.sender.track) {
-                                transceiver.direction = 'recvonly';
-                                console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на recvonly ПОСЛЕ setLocalDescription (offer имеет send)`);
-                            } else {
-                                transceiver.direction = 'sendrecv';
-                                console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на sendrecv ПОСЛЕ setLocalDescription (offer имеет send, есть локальное видео)`);
-                            }
-                        } else if (offerHasVideoRecv) {
-                            // В offer есть recvonly - отправитель хочет получать видео
-                            // КРИТИЧНО: Если в offer есть recvonly, а у получателя нет локального видео,
-                            // получатель должен установить inactive (не может отправить видео)
-                            if (hasLocalVideo && transceiver.sender.track) {
-                                // Есть локальное видео - устанавливаем sendrecv
-                                transceiver.direction = 'sendrecv';
-                                console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на sendrecv ПОСЛЕ setLocalDescription (offer имеет recvonly, есть локальное видео)`);
-                            } else {
-                                // Нет локального видео - устанавливаем inactive (не можем отправить видео)
-                                transceiver.direction = 'inactive';
-                                console.log(`⚠️ [handleWebRTCOffer] Настраиваем видео transceiver ${index} на inactive ПОСЛЕ setLocalDescription (offer имеет recvonly, нет локального видео для отправки)`);
-                            }
-                        }
-                    }
-                });
-            }
-            
-            // Проверяем состояние transceivers после настройки
-            const videoTransceiver = peerConnection.getTransceivers().find(t => 
-                t.receiver.track?.kind === 'video' || 
-                (!t.receiver.track && t.mid && peerConnection.localDescription?.sdp?.includes('m=video'))
-            );
-            if (videoTransceiver) {
-                console.log(`🔍 [handleWebRTCOffer] Видео transceiver после настройки: direction=${videoTransceiver.direction}, currentDirection=${videoTransceiver.currentDirection}`);
-            }
             
             // ВАЖНО: После установки local description треки должны прийти через ontrack
             // Но иногда они уже есть в receivers, поэтому проверяем их тоже
@@ -725,14 +587,6 @@ class WebRTCManager {
             }, 2000);
         
             console.log('📤 [handleWebRTCOffer] Sending answer to:', data.sender_id);
-            console.log('Answer transceivers:');
-            peerConnection.getTransceivers().forEach((transceiver, index) => {
-                console.log(`Transceiver ${index}:`, {
-                    direction: transceiver.direction,
-                    currentDirection: transceiver.currentDirection,
-                    kind: transceiver.receiver.track?.kind || transceiver.sender.track?.kind || 'no track'
-                });
-            });
             
             // Отправляем ответ обратно инициатору через signaling-сервер
             this.videoCallManager.socket.emit('webrtc_answer', {
