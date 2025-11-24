@@ -344,11 +344,17 @@ class WebRTCManager {
                 }
             });
             
+            // КРИТИЧНО: Проверяем, есть ли локальное видео перед созданием offer
+            // Если нет локального видео, не используем offerToReceiveVideo - это создаст recvonly, что неправильно
+            const hasLocalVideo = this.videoCallManager.localStream?.getVideoTracks().some(t => t.enabled) || false;
+            
             // Используем стандартные опции, но с правильными настройками для медиа
             const offerOptions = {
                 offerToReceiveAudio: true,
-                offerToReceiveVideo: true
+                offerToReceiveVideo: hasLocalVideo // Только если есть локальное видео
             };
+            
+            console.log(`🔍 [createOffer] hasLocalVideo: ${hasLocalVideo}, offerToReceiveVideo: ${offerOptions.offerToReceiveVideo}`);
             
             console.log(`📤 Creating offer for ${targetUserId}...`);
             const offer = await peerConnection.createOffer(offerOptions);
@@ -575,14 +581,16 @@ class WebRTCManager {
                             }
                         } else if (offerHasVideoRecv) {
                             // В offer есть recvonly - отправитель хочет получать видео
+                            // КРИТИЧНО: Если в offer есть recvonly, а у получателя нет локального видео,
+                            // получатель должен установить inactive (не может отправить видео)
                             if (hasLocalVideo && transceiver.sender.track) {
                                 // Есть локальное видео - устанавливаем sendrecv
                                 transceiver.direction = 'sendrecv';
                                 console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на sendrecv ПОСЛЕ setLocalDescription (offer имеет recvonly, есть локальное видео)`);
                             } else {
-                                // Нет локального видео - устанавливаем recvonly (принимаем видео)
-                                transceiver.direction = 'recvonly';
-                                console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на recvonly ПОСЛЕ setLocalDescription (offer имеет recvonly, нет локального видео)`);
+                                // Нет локального видео - устанавливаем inactive (не можем отправить видео)
+                                transceiver.direction = 'inactive';
+                                console.log(`⚠️ [handleWebRTCOffer] Настраиваем видео transceiver ${index} на inactive ПОСЛЕ setLocalDescription (offer имеет recvonly, нет локального видео для отправки)`);
                             }
                         }
                     }
