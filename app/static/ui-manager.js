@@ -178,57 +178,58 @@ class UIManager {
             }
         }
         
-        // УПРОЩЕННАЯ обработка удаленных видео
+        // ДЛЯ УДАЛЕННЫХ УЧАСТНИКОВ
         this.videoCallManager.remoteStreams.forEach((stream, userId) => {
             const videoElement = document.getElementById(`remoteVideo-${userId}`);
             let participantCard = document.getElementById(`participant-${userId}`);
+            const overlay = participantCard?.querySelector('.video-overlay');
             
-            // ПРОСТАЯ ПРОВЕРКА: Есть ли активные видео треки?
-            // УБРАТЬ проверку на muted - показываем даже если muted
-            // track.enabled - оставить, это выключение камеры пользователем
+            // ПРОВЕРКА: Есть ли видео треки (не проверяем enabled - это для UI, трек может быть live но disabled)
             const videoTracks = stream.getVideoTracks();
-            const hasActiveVideo = videoTracks.some(track => 
-                track && track.readyState === 'live' && track.enabled
-            );
+            const hasVideo = videoTracks.length > 0 && videoTracks[0].readyState === 'live';
             
-            if (hasActiveVideo) {
-                // Есть активное видео - показываем карточку
+            if (hasVideo) {
+                // ЕСТЬ ВИДЕО - создаем карточку если нет, показываем видео
                 if (!participantCard) {
                     this.createRemoteVideoElement(userId, stream);
                     participantCard = document.getElementById(`participant-${userId}`);
                 }
                 
-                if (participantCard) {
+                if (participantCard && overlay && videoElement) {
+                    // Показываем карточку
                     participantCard.style.setProperty('display', 'block', 'important');
                     participantCard.style.removeProperty('visibility');
                     participantCard.style.removeProperty('opacity');
-                }
-                
-                if (videoElement) {
+                    participantCard.style.removeProperty('width');
+                    participantCard.style.removeProperty('height');
+                    participantCard.style.removeProperty('overflow');
+                    participantCard.style.removeProperty('pointer-events');
+                    
+                    // Устанавливаем поток если нужно
                     if (videoElement.srcObject !== stream) {
                         videoElement.srcObject = stream;
                     }
-                    videoElement.style.setProperty('display', 'block', 'important');
-                    videoElement.setAttribute('playsinline', 'true');
                     
-                    // ВАЖНО: пытаемся воспроизвести даже если трек muted
-                    // Периодически пытаемся воспроизвести (как было в сложной логике)
-                    let playAttempts = 0;
-                    const tryPlay = () => {
-                        if (playAttempts < 10 && videoElement.srcObject) {
-                            videoElement.play().catch(error => {
-                                if (error.name !== 'AbortError') {
-                                    console.warn(`⚠️ Ошибка play для ${userId} (попытка ${playAttempts + 1}):`, error);
-                                }
-                                playAttempts++;
-                                setTimeout(tryPlay, 500);
-                            });
-                        }
-                    };
-                    tryPlay();
+                    // Проверяем enabled для показа видео или overlay
+                    const videoTrack = videoTracks[0];
+                    if (videoTrack && videoTrack.enabled) {
+                        // Видео включено - показываем видео
+                        overlay.style.display = 'none';
+                        videoElement.style.setProperty('display', 'block', 'important');
+                        videoElement.setAttribute('playsinline', 'true');
+                        videoElement.play().catch(error => {
+                            if (error.name !== 'AbortError') {
+                                console.warn(`⚠️ Ошибка play для ${userId}:`, error);
+                            }
+                        });
+                    } else {
+                        // Видео выключено - показываем overlay
+                        overlay.style.display = 'flex';
+                        videoElement.style.setProperty('display', 'none', 'important');
+                    }
                 }
             } else {
-                // Нет активного видео - удаляем карточку
+                // НЕТ ВИДЕО - удаляем карточку полностью
                 if (videoElement) {
                     videoElement.style.setProperty('display', 'none', 'important');
                     videoElement.pause();
@@ -394,9 +395,39 @@ class UIManager {
         
         const videoElement = document.getElementById(`remoteVideo-${userId}`);
         if (videoElement) {
-            // УПРОЩЕНО: Скрываем видео элемент по умолчанию
-            videoElement.style.setProperty('display', 'none', 'important');
-            videoElement.srcObject = null;
+            videoElement.srcObject = stream;
+
+            // ДОБАВЛЯЕМ ОБРАБОТЧИКИ ДЛЯ СЛЕДЕНИЯ ЗА СОСТОЯНИЕМ ТРЕКОВ
+            stream.getTracks().forEach(track => {
+                track.onended = () => {
+                    console.log(`Трек ${track.kind} завершился для пользователя ${userId}`);
+                    this.updateVideoOverlays();
+                };
+                
+                track.onmute = () => {
+                    console.log(`Трек ${track.kind} заглушен для пользователя ${userId}`);
+                    this.updateVideoOverlays();
+                };
+                
+                track.onunmute = () => {
+                    console.log(`Трек ${track.kind} включен для пользователя ${userId}`);
+                    this.updateVideoOverlays();
+                };
+            });
+            
+            videoElement.play().catch(error => {
+                console.log('Автовоспроизведение звука заблокировано:', error);
+                this.showAudioActivationButton(videoElement, userId);
+            });
+            
+            // ВАЖНО: Обновляем состояние после создания видео элемента
+            setTimeout(() => {
+                if (this.videoCallManager.checkEmptyState) {
+                    this.videoCallManager.checkEmptyState();
+                }
+            }, 100);
+        } else {
+            console.error('❌ Video element not found after creation for:', userId);
         }
     }
 

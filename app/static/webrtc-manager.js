@@ -249,7 +249,7 @@ class WebRTCManager {
                     this.videoCallManager.uiManager.updateVideoOverlays();
                 };
                 
-                // Обновляем UI
+                // Обновляем UI - карточка создастся только если есть видео
                 console.log(`🔄 [ontrack] Обновляем UI для ${targetUserId}`);
                 this.videoCallManager.uiManager.updateVideoOverlays();
                 console.log(`🟣 [ontrack] ========== КОНЕЦ ОБРАБОТКИ ТРЕКА ==========`);
