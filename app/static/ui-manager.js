@@ -228,7 +228,7 @@ class UIManager {
                 // КРИТИЧНО: muted=true означает что данные не приходят (камера выключена на удаленной стороне)
                 hasActiveVideo = track.readyState === 'live' && track.enabled && !track.muted;
                 console.log(`   - hasActiveVideo: ${hasActiveVideo} (readyState='live': ${track.readyState === 'live'}, enabled: ${track.enabled}, !muted: ${!track.muted})`);
-            } else {
+                } else {
                 console.log(`   - НЕТ видео треков`);
             }
             
@@ -260,18 +260,18 @@ class UIManager {
                             console.warn(`⚠️ [updateVideoOverlays] Ошибка play для скрытого audio ${userId}:`, error);
                         }
                     });
-                } else {
+                        } else {
                     // Убеждаемся что audio воспроизводится
                     if (hiddenAudio.paused) {
                         console.log(`🔄 [updateVideoOverlays] Возобновляем воспроизведение скрытого audio ${userId}`);
                         hiddenAudio.play().catch(error => {
                             if (error.name !== 'AbortError') {
                                 console.warn(`⚠️ [updateVideoOverlays] Ошибка возобновления play для ${userId}:`, error);
-                            }
-                        });
-                    }
+                        }
+                    });
                 }
-            } else {
+                }
+                } else {
                 // Нет активного аудио - удаляем скрытый audio элемент
                 const hiddenAudio = this._hiddenAudioElements.get(userId);
                 if (hiddenAudio) {
@@ -298,8 +298,8 @@ class UIManager {
                         videoElement = document.getElementById(`remoteVideo-${userId}`);
                         overlay = participantCard.querySelector('.video-overlay');
                         console.log(`🔄 [${userId}] Обновлены переменные после создания: videoElement=${!!videoElement}, overlay=${!!overlay}`);
-                    }
-                } else {
+                        }
+                    } else {
                     console.log(`ℹ️ [${userId}] Карточка уже существует`);
                 }
                 
@@ -308,13 +308,13 @@ class UIManager {
                     
                     // Показываем карточку
                     const beforeDisplay = window.getComputedStyle(participantCard).display;
-                    participantCard.style.setProperty('display', 'block', 'important');
-                    participantCard.style.removeProperty('visibility');
-                    participantCard.style.removeProperty('opacity');
-                    participantCard.style.removeProperty('width');
-                    participantCard.style.removeProperty('height');
-                    participantCard.style.removeProperty('overflow');
-                    participantCard.style.removeProperty('pointer-events');
+                participantCard.style.setProperty('display', 'block', 'important');
+                participantCard.style.removeProperty('visibility');
+                participantCard.style.removeProperty('opacity');
+                participantCard.style.removeProperty('width');
+                participantCard.style.removeProperty('height');
+                participantCard.style.removeProperty('overflow');
+                participantCard.style.removeProperty('pointer-events');
                     const afterDisplay = window.getComputedStyle(participantCard).display;
                     console.log(`   - participantCard display: ${beforeDisplay} -> ${afterDisplay}`);
                     
@@ -354,24 +354,24 @@ class UIManager {
                 if (videoTracks.length > 0) {
                     const track = videoTracks[0];
                     console.log(`   - track.id: ${track.id}`);
-                    console.log(`   - track.enabled: ${track.enabled} ❌ (должно быть true)`);
+                    console.log(`   - track.enabled: ${track.enabled} ${track.enabled ? '✅' : '❌ (должно быть true)'}`);
                     console.log(`   - track.readyState: ${track.readyState} ${track.readyState === 'live' ? '✅' : '❌'}`);
-                    console.log(`   - track.muted: ${track.muted}`);
-                    console.log(`   - hasActiveVideo = ${track.readyState === 'live'} && ${track.enabled} = ${hasActiveVideo}`);
+                    console.log(`   - track.muted: ${track.muted} ${track.muted ? '❌ (КАМЕРА ВЫКЛЮЧЕНА!)' : '✅'}`);
+                    console.log(`   - hasActiveVideo = ${track.readyState === 'live'} && ${track.enabled} && ${!track.muted} = ${hasActiveVideo}`);
                 } else {
                     console.log(`   - НЕТ видео треков в потоке`);
                 }
                 
                 // КРИТИЧНО: Очищаем srcObject ПЕРЕД удалением карточки
-                if (videoElement) {
+                        if (videoElement) {
                     console.log(`\n🗑️ [${userId}] ШАГ 1: Очищаем videoElement`);
                     const hadSrcObject = !!videoElement.srcObject;
                     console.log(`   - srcObject ДО очистки: ${hadSrcObject ? 'SET ❌' : 'NULL ✅'}`);
                     
                     if (hadSrcObject) {
-                        videoElement.pause();
-                        videoElement.srcObject = null;
-                        videoElement.load();
+                            videoElement.pause();
+                            videoElement.srcObject = null;
+                                videoElement.load();
                         console.log(`   ✅ srcObject очищен (pause, null, load)`);
                     }
                     
@@ -600,7 +600,7 @@ class UIManager {
             // Карточка скрыта, и установка srcObject создаст черную плашку
             // srcObject будет установлен в updateVideoOverlays когда карточка покажется
             console.log(`🔒 [createRemoteVideoElement ${userId}] НЕ устанавливаем srcObject (карточка скрыта)`);
-            
+
             // ДОБАВЛЯЕМ ОБРАБОТЧИКИ ДЛЯ СЛЕДЕНИЯ ЗА СОСТОЯНИЕМ ТРЕКОВ
             console.log(`📡 [createRemoteVideoElement ${userId}] Добавляем обработчики событий для треков`);
             const tracks = stream.getTracks();
@@ -622,16 +622,18 @@ class UIManager {
                     console.log(`   - track.id: ${track.id}`);
                     console.log(`   - track.enabled: ${track.enabled}`);
                     console.log(`   - track.readyState: ${track.readyState}`);
-                    this.updateVideoOverlays();
+                            this.updateVideoOverlays();
                 };
                 
                 track.onmute = () => {
-                    console.log(`\n🔇 [${userId}] СОБЫТИЕ: Трек ${track.kind} заглушен`);
+                    console.log(`\n🔇🔇🔇 [${userId}] СОБЫТИЕ: ТРЕК ${track.kind} ЗАГЛУШЕН (MUTED) 🔇🔇🔇`);
                     console.log(`   - track.id: ${track.id}`);
                     console.log(`   - track.enabled: ${track.enabled}`);
                     console.log(`   - track.readyState: ${track.readyState}`);
                     console.log(`   - track.muted: ${track.muted}`);
+                    console.log(`🔄 [${userId}] Вызываем updateVideoOverlays() после mute...`);
                     this.updateVideoOverlays();
+                    console.log(`✅ [${userId}] updateVideoOverlays() вызван после mute`);
                 };
                 
                 track.onunmute = () => {
@@ -665,9 +667,9 @@ class UIManager {
                             console.log(`   - track.readyState: ${track.readyState}`);
                             console.log(`   - track.muted: ${track.muted}`);
                             lastEnabledState = currentEnabled;
-                            this.updateVideoOverlays();
-                        }
-                    }, 100);
+                                        this.updateVideoOverlays();
+                                    }
+                }, 100);
                     
                     console.log(`✅ [createRemoteVideoElement ${userId}] Интервал проверки enabled установлен (100ms)`);
                     
@@ -685,7 +687,7 @@ class UIManager {
             // ВАЖНО: Обновляем состояние после создания видео элемента
             setTimeout(() => {
                 if (this.videoCallManager.checkEmptyState) {
-                    this.videoCallManager.checkEmptyState();
+                this.videoCallManager.checkEmptyState();
                 }
             }, 100);
             

@@ -118,11 +118,11 @@ class WebRTCManager {
                 console.log(`✅ [setupPeerConnection] Добавляем локальные треки в соединение для: ${targetUserId}`);
                 let addedCount = 0;
                 this.videoCallManager.localStream.getTracks().forEach(track => {
-                    try {
-                        peerConnection.addTrack(track, this.videoCallManager.localStream);
+                        try {
+                            peerConnection.addTrack(track, this.videoCallManager.localStream);
                         addedCount++;
                         console.log(`✅ [setupPeerConnection] Добавлен ${track.kind} трек (id=${track.id}, enabled=${track.enabled})`);
-                    } catch (error) {
+                        } catch (error) {
                         console.error(`❌ [setupPeerConnection] Ошибка добавления ${track.kind} трека:`, error);
                         console.error(`   - Error name: ${error.name}`);
                         console.error(`   - Error message: ${error.message}`);
@@ -197,7 +197,7 @@ class WebRTCManager {
                 
                 // Сохраняем поток
                 const hadStream = this.videoCallManager.remoteStreams.has(targetUserId);
-                this.videoCallManager.remoteStreams.set(targetUserId, remoteStream);
+                    this.videoCallManager.remoteStreams.set(targetUserId, remoteStream);
                 console.log(`💾 [ontrack] Поток ${hadStream ? 'обновлен' : 'создан'} для ${targetUserId}`);
                 
                 // ВАЖНО: добавляем трек сразу, даже если muted
@@ -208,7 +208,7 @@ class WebRTCManager {
                 if (!trackAlreadyInStream) {
                     remoteStream.addTrack(incomingTrack);
                     console.log(`✅ [ontrack] Трек ${incomingTrack.kind} добавлен в поток для ${targetUserId}`);
-                } else {
+                        } else {
                     console.log(`ℹ️ [ontrack] Трек ${incomingTrack.kind} уже в потоке для ${targetUserId}`);
                 }
                 
@@ -220,15 +220,18 @@ class WebRTCManager {
                     console.log(`   - enabled: ${incomingTrack.enabled}`);
                     console.log(`   - muted: ${incomingTrack.muted}`);
                     console.log(`   - readyState: ${incomingTrack.readyState}`);
-                    this.videoCallManager.uiManager.updateVideoOverlays();
+                            this.videoCallManager.uiManager.updateVideoOverlays();
                 };
                 
                 incomingTrack.onmute = () => {
-                    console.log(`🔇 [ontrack] Трек ${incomingTrack.kind} MUTED для ${targetUserId}`);
+                    console.log(`\n🔇🔇🔇 [ontrack] ТРЕК ${incomingTrack.kind} MUTED ДЛЯ ${targetUserId} 🔇🔇🔇`);
                     console.log(`   - enabled: ${incomingTrack.enabled}`);
                     console.log(`   - muted: ${incomingTrack.muted}`);
                     console.log(`   - readyState: ${incomingTrack.readyState}`);
+                    console.log(`   - track.id: ${incomingTrack.id}`);
+                    console.log(`🔄 [ontrack] Вызываем updateVideoOverlays() после mute...`);
                     this.videoCallManager.uiManager.updateVideoOverlays();
+                    console.log(`✅ [ontrack] updateVideoOverlays() вызван после mute`);
                 };
                 
                 incomingTrack.onended = () => {
@@ -237,7 +240,7 @@ class WebRTCManager {
                         remoteStream.removeTrack(incomingTrack);
                         console.log(`🗑️ [ontrack] Трек ${incomingTrack.kind} удален из потока для ${targetUserId}`);
                     }
-                    this.videoCallManager.uiManager.updateVideoOverlays();
+                                    this.videoCallManager.uiManager.updateVideoOverlays();
                 };
                 
                 // КРИТИЧНО: Отслеживаем изменение enabled через периодическую проверку
@@ -261,8 +264,8 @@ class WebRTCManager {
                             console.log(`   - track.readyState: ${incomingTrack.readyState}`);
                             console.log(`   - track.muted: ${incomingTrack.muted}`);
                             lastEnabled = currentEnabled;
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                        }
+                                    this.videoCallManager.uiManager.updateVideoOverlays();
+                                }
                     }, 100); // Проверяем каждые 100ms для быстрой реакции
                     
                     // Очищаем интервал когда трек заканчивается
@@ -275,7 +278,7 @@ class WebRTCManager {
                 
                 // Обновляем UI - карточка создастся только если есть видео
                 console.log(`🔄 [ontrack] Обновляем UI для ${targetUserId}`);
-                this.videoCallManager.uiManager.updateVideoOverlays();
+                        this.videoCallManager.uiManager.updateVideoOverlays();
                 console.log(`🟣 [ontrack] ========== КОНЕЦ ОБРАБОТКИ ТРЕКА ==========`);
             };
         
@@ -294,7 +297,7 @@ class WebRTCManager {
                     console.log(`✅ [ConnectionState] WebRTC connection established для ${targetUserId}!`);
                     // КРИТИЧНО: После установки соединения синхронизируем треки
                     // Это нужно чтобы увидеть видео другого пользователя
-                    this.syncTracksAfterUserJoined(targetUserId);
+                        this.syncTracksAfterUserJoined(targetUserId);
                 } else if (state === 'disconnected' || state === 'failed') {
                     console.log(`❌ [ConnectionState] WebRTC connection lost для ${targetUserId}`);
                     this.videoCallManager.notificationManager.show('Соединение потеряно', 'error');
@@ -315,7 +318,7 @@ class WebRTCManager {
                     console.log(`✅ [ICEConnectionState] ICE connection successful для ${targetUserId}!`);
                     // КРИТИЧНО: После установки ICE соединения синхронизируем треки
                     // Это нужно чтобы увидеть видео другого пользователя
-                    this.syncTracksAfterUserJoined(targetUserId);
+                        this.syncTracksAfterUserJoined(targetUserId);
                 } else if (iceState === 'disconnected' || iceState === 'failed') {
                     console.log(`❌ [ICEConnectionState] ICE connection lost для ${targetUserId}`);
                 }
@@ -370,7 +373,7 @@ class WebRTCManager {
             console.error('❌ [createOffer] No peer connection for:', targetUserId);
             return;
         }
-        
+    
         try {
             const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
             const offer = await peerConnection.createOffer();
@@ -382,7 +385,7 @@ class WebRTCManager {
                 offer: offer
             });
             console.log('✅ [createOffer] Offer sent to:', targetUserId);
-            
+        
         } catch (error) {
             console.error('❌ [createOffer] Error creating offer для', targetUserId, ':', error);
             console.error('   - Error name:', error.name);
@@ -394,7 +397,7 @@ class WebRTCManager {
     async handleWebRTCOffer(data) {
         try {
             console.log('📥 [handleWebRTCOffer] Received offer from:', data.sender_id);
-            
+        
             // Если соединение с этим пользователем еще не создано, создаем его
             if (!this.videoCallManager.remoteUsers.has(data.sender_id)) {
                 console.log('🔄 [handleWebRTCOffer] Peer connection не существует, создаем для', data.sender_id);
@@ -419,8 +422,8 @@ class WebRTCManager {
                 // Если remote description уже установлен, проверяем его тип
                 if (peerConnection.remoteDescription.type === 'offer') {
                     console.warn('⚠️ [handleWebRTCOffer] Remote description (offer) already set, ignoring duplicate offer');
-                    return;
-                }
+                return;
+            }
                 // Если это answer, значит соединение уже установлено
                 if (peerConnection.remoteDescription.type === 'answer') {
                     console.warn('⚠️ [handleWebRTCOffer] Connection already established (answer set), ignoring offer');
@@ -435,23 +438,23 @@ class WebRTCManager {
             }
             
             // Устанавливаем полученное предложение (offer) как удаленное описание
-            await peerConnection.setRemoteDescription(data.offer);
+                await peerConnection.setRemoteDescription(data.offer);
             console.log('✅ [handleWebRTCOffer] Remote description установлено для', data.sender_id);
-            
+                
             // Добавляем отложенные ICE кандидаты после установки remote description
-            if (peerConnection._pendingIceCandidates && peerConnection._pendingIceCandidates.length > 0) {
-                console.log(`🔄 [handleWebRTCOffer] Adding ${peerConnection._pendingIceCandidates.length} pending ICE candidates`);
-                for (const candidate of peerConnection._pendingIceCandidates) {
-                    try {
-                        await peerConnection.addIceCandidate(candidate);
-                    } catch (err) {
+                if (peerConnection._pendingIceCandidates && peerConnection._pendingIceCandidates.length > 0) {
+                    console.log(`🔄 [handleWebRTCOffer] Adding ${peerConnection._pendingIceCandidates.length} pending ICE candidates`);
+                    for (const candidate of peerConnection._pendingIceCandidates) {
+                        try {
+                            await peerConnection.addIceCandidate(candidate);
+                        } catch (err) {
                         // Игнорируем ошибки "Unknown ufrag" - это нормально
                         if (!err.message || !err.message.includes('Unknown ufrag')) {
                             console.warn('⚠️ [handleWebRTCOffer] Error adding pending ICE candidate:', err);
                         }
+                        }
                     }
-                }
-                peerConnection._pendingIceCandidates = [];
+                    peerConnection._pendingIceCandidates = [];
             }
             
             // Создаем answer
@@ -466,7 +469,7 @@ class WebRTCManager {
                 answer: answer
             });
             console.log('✅ [handleWebRTCOffer] Answer отправлен для', data.sender_id);
-            
+        
         } catch (error) {
             console.error('❌ [handleWebRTCOffer] Ошибка обработки offer от', data.sender_id, ':', error);
             console.error('   - Error name:', error.name);
@@ -478,12 +481,12 @@ class WebRTCManager {
     async handleWebRTCAnswer(data) {
         try {
             console.log('📥 [handleWebRTCAnswer] Received ANSWER from:', data.sender_id);
-            
+        
             if (!this.videoCallManager.remoteUsers.has(data.sender_id)) {
                 console.error('❌ [handleWebRTCAnswer] No peer connection for:', data.sender_id);
                 return;
             }
-            
+        
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
             
             // Проверяем состояние соединения
@@ -496,7 +499,7 @@ class WebRTCManager {
             if (peerConnection.remoteDescription) {
                 if (peerConnection.remoteDescription.type === 'answer') {
                     console.warn('⚠️ [handleWebRTCAnswer] Answer already set, ignoring duplicate answer');
-                    return;
+                return;
                 }
                 // Если это offer, но мы получаем answer - это нормально (может быть renegotiation)
             }
@@ -522,7 +525,7 @@ class WebRTCManager {
                     } catch (err) {
                         // Игнорируем ошибки "Unknown ufrag" - это нормально
                         if (!err.message || !err.message.includes('Unknown ufrag')) {
-                            console.warn('⚠️ [handleWebRTCAnswer] Error adding pending ICE candidate:', err);
+                        console.warn('⚠️ [handleWebRTCAnswer] Error adding pending ICE candidate:', err);
                         }
                     }
                 }
@@ -534,9 +537,9 @@ class WebRTCManager {
             if (error.message && error.message.includes('ICE restart')) {
                 console.warn('⚠️ [handleWebRTCAnswer] ICE restart detected, connection may have been recreated');
                 // Не выбрасываем ошибку дальше - это нормальная ситуация
-                return;
-            }
-            
+                            return;
+                        }
+                        
             console.error('❌ [handleWebRTCAnswer] Ошибка обработки answer от', data.sender_id, ':', error);
             console.error('   - Error name:', error.name);
             console.error('   - Error message:', error.message);
@@ -638,17 +641,17 @@ class WebRTCManager {
                             }
                         } else {
                             // Для аудио просто добавляем в поток
-                            const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
-                            if (!existingTrack) {
-                                remoteStream.addTrack(track);
-                                tracksUpdated = true;
-                                console.log(`✅ [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} добавлен в поток`);
-                            } else if (existingTrack !== track) {
-                                // Трек заменен - обновляем
-                                remoteStream.removeTrack(existingTrack);
-                                remoteStream.addTrack(track);
-                                tracksUpdated = true;
-                                console.log(`🔄 [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} заменен в потоке`);
+                        const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
+                        if (!existingTrack) {
+                            remoteStream.addTrack(track);
+                            tracksUpdated = true;
+                            console.log(`✅ [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} добавлен в поток`);
+                        } else if (existingTrack !== track) {
+                            // Трек заменен - обновляем
+                            remoteStream.removeTrack(existingTrack);
+                            remoteStream.addTrack(track);
+                            tracksUpdated = true;
+                            console.log(`🔄 [syncTracksAfterUserJoined ${targetUserId}] Трек ${track.kind} ${track.id} заменен в потоке`);
                             }
                         }
                         

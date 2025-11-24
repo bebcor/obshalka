@@ -673,12 +673,15 @@ class MediaController {
                 }
             } else {
                 // ЕСЛИ трека нет - удаляем видео-отправитель если есть
-                console.log(`🗑️ [updateVideoTracksInConnections] Удаляем видео-трек для пользователя: ${userId}, videoSender=${videoSender ? 'есть' : 'нет'}`);
+                console.log(`\n🗑️🗑️🗑️ [updateVideoTracksInConnections] УДАЛЯЕМ ВИДЕО-ТРЕК ДЛЯ ${userId} 🗑️🗑️🗑️`);
+                console.log(`   - videoSender: ${videoSender ? 'есть ✅' : 'нет ❌'}`);
+                console.log(`   - videoTrack: ${videoTrack ? 'есть' : 'нет (null)'}`);
                 if (videoSender) {
-                    console.log(`🔄 [updateVideoTracksInConnections] Вызываем replaceTrack(null) для ${userId}`);
+                    console.log(`🔄 [updateVideoTracksInConnections] Вызываем replaceTrack(null) для ${userId}...`);
                     updatePromises.push(
                         videoSender.replaceTrack(null).then(() => {
-                            console.log(`✅ [updateVideoTracksInConnections] replaceTrack(null) выполнен для ${userId}`);
+                            console.log(`✅✅✅ [updateVideoTracksInConnections] replaceTrack(null) УСПЕШНО ВЫПОЛНЕН ДЛЯ ${userId} ✅✅✅`);
+                            console.log(`   - Это должно вызвать onmute на удаленной стороне`);
                             
                             // КРИТИЧЕСКИ ВАЖНО: запускаем renegotiation после replaceTrack(null)
                             if (peerConnection.signalingState === 'stable') {
@@ -686,13 +689,15 @@ class MediaController {
                                 this.videoCallManager.webrtcManager.createOffer(userId).catch(err => {
                                     console.error(`❌ [updateVideoTracksInConnections] Ошибка renegotiation для ${userId}:`, err);
                                 });
+                            } else {
+                                console.log(`⚠️ [updateVideoTracksInConnections] signalingState не stable (${peerConnection.signalingState}), пропускаем renegotiation`);
                             }
                         }).catch(err => {
-                            console.error(`❌ [updateVideoTracksInConnections] Ошибка replaceTrack(null) для ${userId}:`, err);
+                            console.error(`❌❌❌ [updateVideoTracksInConnections] ОШИБКА replaceTrack(null) ДЛЯ ${userId}:`, err);
                         })
                     );
                 } else {
-                    console.warn(`⚠️ [updateVideoTracksInConnections] Нет videoSender для ${userId}, не можем вызвать replaceTrack(null)`);
+                    console.warn(`⚠️⚠️⚠️ [updateVideoTracksInConnections] НЕТ videoSender ДЛЯ ${userId}, НЕ МОЖЕМ ВЫЗВАТЬ replaceTrack(null) ⚠️⚠️⚠️`);
                 }
             }
         });
