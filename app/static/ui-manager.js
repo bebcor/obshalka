@@ -336,6 +336,23 @@ class UIManager {
             return hasActiveTrack;
         }
         
+        // КРИТИЧНО: Сначала проверяем сохраненное состояние камеры (из сигнала)
+        // Это более надежно, чем полагаться только на состояние трека
+        const cameraState = this.videoCallManager.cameraStates.get(userId);
+        if (cameraState !== undefined) {
+            console.log(`   [hasActiveCamera] Найдено сохраненное состояние камеры для ${userId}: ${cameraState.cameraEnabled ? 'включена ✅' : 'выключена ❌'}`);
+            // Если состояние камеры сохранено, используем его
+            if (!cameraState.cameraEnabled) {
+                console.log(`   [hasActiveCamera] Камера выключена по сигналу - возвращаем false`);
+                console.log(`   [hasActiveCamera] ========== КОНЕЦ ПРОВЕРКИ УДАЛЕННОГО ПОТОКА (выключена по сигналу) ==========`);
+                return false;
+            }
+            // Если камера включена по сигналу, все равно проверяем трек для надежности
+            console.log(`   [hasActiveCamera] Камера включена по сигналу, проверяем трек для подтверждения...`);
+        } else {
+            console.log(`   [hasActiveCamera] Сохраненное состояние камеры для ${userId} не найдено, проверяем трек...`);
+        }
+        
         // КРИТИЧНО: Проверяем треки из receivers - это актуальное состояние
         console.log(`   [hasActiveCamera] Получаем receivers для ${userId}...`);
         const receivers = peerConnection.getReceivers();
@@ -379,6 +396,14 @@ class UIManager {
                 activeTrackFound = true;
             }
         });
+        
+        // КРИТИЧНО: Если состояние камеры сохранено и выключено, игнорируем результат проверки трека
+        if (cameraState !== undefined && !cameraState.cameraEnabled) {
+            console.log(`   [hasActiveCamera] Камера выключена по сигналу, игнорируем результат проверки трека`);
+            console.log(`   [hasActiveCamera] Результат: ❌ НЕАКТИВЕН (выключена по сигналу)`);
+            console.log(`   [hasActiveCamera] ========== КОНЕЦ ПРОВЕРКИ УДАЛЕННОГО ПОТОКА ==========`);
+            return false;
+        }
         
         console.log(`   [hasActiveCamera] Результат проверки всех receivers: ${activeTrackFound ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'}`);
         console.log(`   [hasActiveCamera] ========== КОНЕЦ ПРОВЕРКИ УДАЛЕННОГО ПОТОКА ==========`);

@@ -238,6 +238,15 @@ class MediaController {
         if (createdVideoTrack) {
             // Камера только что включена — оставляем трек активным
             this.videoCallManager.hasVideoTrack = true;
+            
+            // КРИТИЧНО: Обновляем локальное состояние камеры
+            this.videoCallManager.localCameraEnabled = true;
+            this.videoCallManager.cameraStates.set('local', { cameraEnabled: true });
+            
+            // КРИТИЧНО: Отправляем сигнал о состоянии камеры всем участникам
+            console.log(`📤 [toggleVideo] Отправляем сигнал camera_state: true (камера включена)`);
+            this.videoCallManager.sendCameraState(true);
+            
             this.videoCallManager.uiManager.updateControlButtons();
             this.videoCallManager.uiManager.updateVideoOverlays();
             this.videoCallManager.notificationManager.show('Камера включена', 'info');
@@ -269,6 +278,14 @@ class MediaController {
             console.log(`🔄 [toggleVideo] Обновляем видео трек в соединениях: ${newEnabledState ? 'ENABLED' : 'DISABLED'}`);
             await this.updateVideoTracksInConnections(newEnabledState ? videoTrack : null);
             console.log(`✅ [toggleVideo] updateVideoTracksInConnections завершен`);
+            
+            // КРИТИЧНО: Обновляем локальное состояние камеры
+            this.videoCallManager.localCameraEnabled = newEnabledState;
+            this.videoCallManager.cameraStates.set('local', { cameraEnabled: newEnabledState });
+            
+            // КРИТИЧНО: Отправляем сигнал о состоянии камеры всем участникам
+            console.log(`📤 [toggleVideo] Отправляем сигнал camera_state: ${newEnabledState}`);
+            this.videoCallManager.sendCameraState(newEnabledState);
             
             this.videoCallManager.uiManager.updateControlButtons();
             console.log(`✅ [toggleVideo] updateControlButtons вызван`);

@@ -61,6 +61,12 @@ class VideoCallManager {
         this.previousStream = null; // Для восстановления после демонстрации экрана
         this.hasVideoTrack = false;
         
+        // КРИТИЧНО: Храним состояние камер для каждого пользователя (включая локальную)
+        // Ключ: userId, значение: { cameraEnabled: boolean }
+        this.cameraStates = new Map();
+        // Локальное состояние камеры
+        this.localCameraEnabled = false;
+        
         // Конфигурация ICE серверов (УПРОЩЕННАЯ - только рабочие серверы)
         this.configuration = {
             iceServers: [
@@ -194,8 +200,28 @@ class VideoCallManager {
                 this.handleICECandidate(data);
             });
             
+            // КРИТИЧНО: Обработка сигнала состояния камеры
+            this.socket.on('camera_state', (data) => {
+                console.log(`\n📹📹📹 ========== [SOCKET] ПОЛУЧЕН camera_state от ${data.user_id} ==========`);
+                console.log(`📥 [SOCKET] Camera state data:`, {
+                    user_id: data.user_id,
+                    cameraEnabled: data.cameraEnabled
+                });
+                this.handleCameraState(data);
+            });
+            
             this.socket.on('chat_message', (data) => {
                 this.handleChatMessage(data);
+            });
+            
+            // КРИТИЧНО: Обработка сигнала состояния камеры
+            this.socket.on('camera_state', (data) => {
+                console.log(`\n📹📹📹 ========== [SOCKET] ПОЛУЧЕН camera_state от ${data.user_id} ==========`);
+                console.log(`📥 [SOCKET] Camera state data:`, {
+                    user_id: data.user_id,
+                    cameraEnabled: data.cameraEnabled
+                });
+                this.handleCameraState(data);
             });
             
             this.socket.on('error', (data) => {
@@ -206,6 +232,36 @@ class VideoCallManager {
         } catch (error) {
             console.error('Error setting up socket connection:', error);
         }
+    }
+    
+    // КРИТИЧНО: Отправка состояния камеры всем участникам
+    sendCameraState(cameraEnabled) {
+        if (!this.socket || !this.roomId) {
+            console.warn(`⚠️ [sendCameraState] Нет socket или roomId, не отправляем состояние камеры`);
+            return;
+        }
+        
+        console.log(`📤 [sendCameraState] Отправляем camera_state: ${cameraEnabled}`);
+        this.socket.emit('camera_state', {
+            room_id: this.roomId,
+            cameraEnabled: cameraEnabled
+        });
+        console.log(`✅ [sendCameraState] Сигнал отправлен`);
+    }
+    
+    // КРИТИЧНО: Обработка получения состояния камеры от другого пользователя
+    handleCameraState(data) {
+        const userId = data.user_id;
+        const cameraEnabled = data.cameraEnabled;
+        
+        console.log(`📥 [handleCameraState] Получено состояние камеры от ${userId}: ${cameraEnabled ? 'включена' : 'выключена'}`);
+        
+        // Сохраняем состояние камеры для этого пользователя
+        this.cameraStates.set(userId, { cameraEnabled: cameraEnabled });
+        
+        // НЕМЕДЛЕННО обновляем UI
+        console.log(`🔄 [handleCameraState] Вызываем updateVideoOverlays() для обновления UI`);
+        this.uiManager.updateVideoOverlays();
     }
     
     async checkMediaDevices() {
@@ -1019,6 +1075,12 @@ class VideoCallManager {
             // 2. ПОТОМ создавай peer connection
             console.log('🔄 Создаем peer connection для нового пользователя:', data.user_id);
             this.webrtcManager.setupPeerConnection(data.user_id);
+            
+            // КРИТИЧНО: Отправляем текущее состояние камеры новому пользователю
+            if (this.localCameraEnabled !== undefined) {
+                console.log(`📤 [handleUserJoined] Отправляем текущее состояние камеры новому пользователю ${data.user_id}: ${this.localCameraEnabled}`);
+                this.sendCameraState(this.localCameraEnabled);
+            }
             
             // 3. И только ПОСЛЕ этого создавай offer
             console.log(`⏰ [handleUserJoined] Устанавливаем таймаут 200ms для создания OFFER для ${data.user_id}...`);
