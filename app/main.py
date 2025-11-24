@@ -204,6 +204,33 @@ def handle_join_room(data):
             emit('error', {'message': 'Room is inactive'}, room=request.sid)
             return
 
+        # КРИТИЧНО: Проверяем уникальность имени животного
+        # Если имя животного уже занято, автоматически добавляем номер
+        animals = [
+            'жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка',
+            'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру',
+            'дельфин', 'акула', 'орёл', 'ястреб', 'лис', 'барсук', 'енот', 'бобр', 'выдра', 'бабочка'
+        ]
+        
+        # Проверяем, является ли имя животным
+        is_animal = any(user_name.lower().startswith(animal.lower()) for animal in animals)
+        
+        if is_animal and 'participants' in room:
+            # Получаем все занятые имена животных
+            used_names = set()
+            for sid, participant in room['participants'].items():
+                if participant.get('name'):
+                    used_names.add(participant['name'].lower())
+            
+            # Если имя занято, добавляем номер
+            if user_name.lower() in used_names:
+                counter = 1
+                original_name = user_name
+                while user_name.lower() in used_names:
+                    user_name = f"{original_name}{counter}"
+                    counter += 1
+                logger.info(f"Имя {original_name} занято, автоматически изменено на {user_name}")
+
         # Добавляем участника в комнату
         join_room(room_id)
 

@@ -5,8 +5,11 @@ class NotificationManager {
     }
 
     getRandomAnimalName() {
-        const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
-                        'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
+        const animals = [
+            'жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка',
+            'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру',
+            'дельфин', 'акула', 'орёл', 'ястреб', 'лис', 'барсук', 'енот', 'бобр', 'выдра', 'бабочка'
+        ];
         
         // Если есть videoCallManager, используем его систему уникальности
         if (window.videoCallManager && window.videoCallManager.getUniqueAnimalName) {
@@ -201,12 +204,17 @@ class NotificationManager {
     showUserNameModal(onConfirm, onCancel) {
         const modal = document.createElement('div');
         modal.className = 'user-name-modal';
+        
+        // КРИТИЧНО: Получаем уникальное имя животного (проверяет занятые имена)
+        const suggestedName = this.getRandomAnimalName();
+        
         modal.innerHTML = `
             <div class="modal-overlay">
                 <div class="modal-content">
                     <h3>Присоединиться к видеозвонку</h3>
                     <p>Введите ваше имя для присоединения к комнате</p>
-                    <input type="text" id="userNameInput" placeholder="Ваше имя" maxlength="20" value="${this.getRandomAnimalName()}">
+                    <input type="text" id="userNameInput" placeholder="Ваше имя" maxlength="20" value="${suggestedName}">
+                    <div id="nameWarning" style="color: var(--error); font-size: 0.875rem; margin-top: 8px; display: none;"></div>
                     <div class="modal-buttons">
                         <button id="cancelJoin" class="btn btn-secondary">Отмена</button>
                         <button id="confirmJoin" class="btn btn-primary">Присоединиться</button>
@@ -218,8 +226,37 @@ class NotificationManager {
         document.body.appendChild(modal);
         
         const userNameInput = document.getElementById('userNameInput');
+        const nameWarning = document.getElementById('nameWarning');
         userNameInput.focus();
         userNameInput.select();
+        
+        // КРИТИЧНО: Проверяем уникальность имени при вводе
+        const checkNameUniqueness = () => {
+            const userName = userNameInput.value.trim();
+            if (!userName) {
+                nameWarning.style.display = 'none';
+                return true;
+            }
+            
+            // Проверяем, занято ли имя (только для животных)
+            if (window.videoCallManager && window.videoCallManager.isAnimalName) {
+                if (window.videoCallManager.isAnimalName(userName)) {
+                    if (window.videoCallManager.usedAnimalNames && window.videoCallManager.usedAnimalNames.has(userName)) {
+                        nameWarning.textContent = `⚠️ Имя "${userName}" уже занято. Выберите другое.`;
+                        nameWarning.style.display = 'block';
+                        userNameInput.style.borderColor = 'var(--error)';
+                        return false;
+                    }
+                }
+            }
+            
+            nameWarning.style.display = 'none';
+            userNameInput.style.borderColor = '';
+            return true;
+        };
+        
+        userNameInput.addEventListener('input', checkNameUniqueness);
+        userNameInput.addEventListener('blur', checkNameUniqueness);
         
         document.getElementById('confirmJoin').addEventListener('click', () => {
             const userName = userNameInput.value.trim();
@@ -228,6 +265,13 @@ class NotificationManager {
                 userNameInput.focus();
                 return;
             }
+            
+            // КРИТИЧНО: Проверяем уникальность перед подтверждением
+            if (!checkNameUniqueness()) {
+                userNameInput.focus();
+                return;
+            }
+            
             document.body.removeChild(modal);
             onConfirm(userName);
         });

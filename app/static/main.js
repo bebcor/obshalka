@@ -18,8 +18,11 @@ class VideoCallManager {
         
         // Метод для получения уникального базового никнейма
         this.getUniqueAnimalName = function() {
-            const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
-                            'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
+            const animals = [
+                'жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка',
+                'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру',
+                'дельфин', 'акула', 'орёл', 'ястреб', 'лис', 'барсук', 'енот', 'бобр', 'выдра', 'бабочка'
+            ];
             
             // Находим свободное имя
             const available = animals.filter(name => !this.usedAnimalNames.has(name));
@@ -46,8 +49,11 @@ class VideoCallManager {
         // Метод для проверки, является ли имя базовым (животным)
         this.isAnimalName = function(name) {
             if (!name) return false;
-            const animals = ['жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка', 
-                            'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру'];
+            const animals = [
+                'жираф', 'бегемот', 'бульдог', 'собака', 'кот', 'носорог', 'сова', 'тигр', 'лев', 'рыбка',
+                'медведь', 'волк', 'лиса', 'заяц', 'олень', 'панда', 'коала', 'обезьяна', 'слон', 'кенгуру',
+                'дельфин', 'акула', 'орёл', 'ястреб', 'лис', 'барсук', 'енот', 'бобр', 'выдра', 'бабочка'
+            ];
             // Проверяем базовое имя или имя с номером
             return animals.some(animal => name.toLowerCase().startsWith(animal.toLowerCase()));
         };
@@ -982,9 +988,21 @@ class VideoCallManager {
             }
         });
         
-        // Добавляем текущего пользователя в список, если его там нет
-        const hasCurrentUser = data.participants.some(p => p.socket_id === this.socketId);
-        if (!hasCurrentUser && this.userName) {
+        // КРИТИЧНО: Находим текущего пользователя в списке участников
+        const currentUser = data.participants.find(p => p.socket_id === this.socketId);
+        if (currentUser && currentUser.name) {
+            // Если сервер изменил имя (например, добавил номер), обновляем локальное имя
+            if (this.userName !== currentUser.name) {
+                console.log(`🔄 [handleRoomInfo] Имя изменено сервером: "${this.userName}" → "${currentUser.name}"`);
+                this.userName = currentUser.name;
+            }
+            this.userNames.set(this.socketId, this.userName);
+            // Если это базовый никнейм (животное), отмечаем как занятый
+            if (this.isAnimalName(this.userName)) {
+                this.usedAnimalNames.add(this.userName);
+            }
+        } else if (!currentUser && this.userName) {
+            // Добавляем текущего пользователя в список, если его там нет
             this.userNames.set(this.socketId, this.userName);
             // Если это базовый никнейм (животное), отмечаем как занятый
             if (this.isAnimalName(this.userName)) {
