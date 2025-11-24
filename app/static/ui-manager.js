@@ -589,11 +589,31 @@ class UIManager {
                                 console.log(`   - videoElement.videoWidth: ${videoElement.videoWidth}`);
                                 console.log(`   - videoElement.videoHeight: ${videoElement.videoHeight}`);
                                 
-                                // Проверяем что видео действительно загрузилось
+                                // Проверяем что видео действительно загрузилось И соединение готово
+                                // КРИТИЧНО: Проверяем isConnectionReady перед показом видео
+                                const checkConnectionReady = () => {
+                                    const peerConn = this.videoCallManager.webrtcManager.peerConnections.get(userId);
+                                    if (peerConn) {
+                                        const iceState = peerConn.iceConnectionState;
+                                        const connState = peerConn.connectionState;
+                                        return (iceState === 'connected' || iceState === 'completed') && 
+                                               (connState === 'connected');
+                                    }
+                                    return false;
+                                };
+                                
                                 if (videoElement.readyState >= 2) { // HAVE_CURRENT_DATA или выше
-                                    console.log(`✅ [${userId}] Видео готово к показу, скрываем overlay`);
-                                    overlay.style.display = 'none';
-                                    videoElement.style.setProperty('display', 'block', 'important');
+                                    const connectionReady = checkConnectionReady();
+                                    if (connectionReady) {
+                                        console.log(`✅ [${userId}] Видео готово к показу, соединение готово - скрываем overlay`);
+                                        overlay.style.display = 'none';
+                                        videoElement.style.setProperty('display', 'block', 'important');
+                                    } else {
+                                        console.log(`⏳ [${userId}] Видео готово, но соединение еще не готово - показываем overlay`);
+                                        overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
+                                        overlay.style.display = 'block';
+                                        videoElement.style.setProperty('display', 'none', 'important');
+                                    }
                                 } else {
                                     console.log(`⚠️ [${userId}] Видео еще не готово (readyState=${videoElement.readyState}), ждем canplay`);
                                 }
@@ -602,8 +622,27 @@ class UIManager {
                             const handleCanPlay = () => {
                                 console.log(`✅ [${userId}] Видео может воспроизводиться (canplay)`);
                                 console.log(`   - videoElement.readyState: ${videoElement.readyState}`);
-                                overlay.style.display = 'none';
-                                videoElement.style.setProperty('display', 'block', 'important');
+                                
+                                // КРИТИЧНО: Проверяем isConnectionReady перед показом видео
+                                const peerConn = this.videoCallManager.webrtcManager.peerConnections.get(userId);
+                                let connectionReady = false;
+                                if (peerConn) {
+                                    const iceState = peerConn.iceConnectionState;
+                                    const connState = peerConn.connectionState;
+                                    connectionReady = (iceState === 'connected' || iceState === 'completed') && 
+                                                     (connState === 'connected');
+                                }
+                                
+                                if (connectionReady) {
+                                    console.log(`✅ [${userId}] Соединение готово - показываем видео`);
+                                    overlay.style.display = 'none';
+                                    videoElement.style.setProperty('display', 'block', 'important');
+                                } else {
+                                    console.log(`⏳ [${userId}] Соединение еще не готово - показываем overlay`);
+                                    overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
+                                    overlay.style.display = 'block';
+                                    videoElement.style.setProperty('display', 'none', 'important');
+                                }
                             };
                             
                             const handleError = (error) => {
@@ -644,15 +683,26 @@ class UIManager {
                             videoElement.style.setProperty('display', 'none', 'important');
                         } else {
                             console.log(`ℹ️ [${userId}] srcObject уже установлен, проверяем готовность`);
-                            // Если srcObject уже установлен, проверяем готовность
-                            if (videoElement.readyState >= 2) {
-                                console.log(`✅ [${userId}] Видео готово (readyState=${videoElement.readyState}), показываем`);
+                            // Если srcObject уже установлен, проверяем готовность видео И соединения
+                            if (videoElement.readyState >= 2 && isConnectionReady) {
+                                console.log(`✅ [${userId}] Видео готово (readyState=${videoElement.readyState}) И соединение готово - показываем`);
                                 overlay.style.display = 'none';
                                 videoElement.style.setProperty('display', 'block', 'important');
                             } else {
-                                console.log(`⏳ [${userId}] Видео еще не готово (readyState=${videoElement.readyState}), показываем overlay`);
-                                if (!isConnectionReady) {
+                                // Видео не готово ИЛИ соединение не готово - показываем overlay
+                                if (videoElement.readyState >= 2 && !isConnectionReady) {
+                                    console.log(`⏳ [${userId}] Видео готово, но соединение не готово - показываем overlay "Установка соединения..."`);
                                     overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
+                                } else if (videoElement.readyState < 2) {
+                                    console.log(`⏳ [${userId}] Видео еще не готово (readyState=${videoElement.readyState}), показываем overlay`);
+                                    if (!isConnectionReady) {
+                                        overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
+                                    }
+                                } else {
+                                    console.log(`⏳ [${userId}] Показываем overlay (readyState=${videoElement.readyState}, isConnectionReady=${isConnectionReady})`);
+                                    if (!isConnectionReady) {
+                                        overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
+                                    }
                                 }
                                 overlay.style.display = 'block';
                                 videoElement.style.setProperty('display', 'none', 'important');
