@@ -220,16 +220,7 @@ class WebRTCManager {
                     console.log(`   - enabled: ${incomingTrack.enabled}`);
                     console.log(`   - muted: ${incomingTrack.muted}`);
                     console.log(`   - readyState: ${incomingTrack.readyState}`);
-                    // Принудительно обновляем UI и пытаемся воспроизвести
                     this.videoCallManager.uiManager.updateVideoOverlays();
-                    
-                    const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                    if (videoElement && incomingTrack.kind === 'video') {
-                        console.log(`🔄 [ontrack] Пытаемся воспроизвести видео для ${targetUserId} после unmute`);
-                        videoElement.play().catch((err) => {
-                            console.warn(`⚠️ [ontrack] Ошибка play после unmute для ${targetUserId}:`, err);
-                        });
-                    }
                 };
                 
                 incomingTrack.onmute = () => {
@@ -248,6 +239,35 @@ class WebRTCManager {
                     }
                     this.videoCallManager.uiManager.updateVideoOverlays();
                 };
+                
+                // КРИТИЧНО: Отслеживаем изменение enabled через Proxy или периодическую проверку
+                // WebRTC не предоставляет событие для изменения enabled
+                if (incomingTrack.kind === 'video') {
+                    let lastEnabled = incomingTrack.enabled;
+                    console.log(`🔍 [ontrack] Начальное состояние enabled для видео трека ${targetUserId}: ${lastEnabled}`);
+                    
+                    // Используем периодическую проверку для отслеживания изменения enabled
+                    const checkEnabledInterval = setInterval(() => {
+                        if (incomingTrack.readyState === 'ended') {
+                            clearInterval(checkEnabledInterval);
+                            return;
+                        }
+                        
+                        const currentEnabled = incomingTrack.enabled;
+                        if (currentEnabled !== lastEnabled) {
+                            console.log(`\n🔄 [ontrack ${targetUserId}] enabled ИЗМЕНИЛСЯ: ${lastEnabled} -> ${currentEnabled}`);
+                            lastEnabled = currentEnabled;
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                        }
+                    }, 100); // Проверяем каждые 100ms для быстрой реакции
+                    
+                    // Очищаем интервал когда трек заканчивается
+                    const originalOnEnded = incomingTrack.onended;
+                    incomingTrack.onended = () => {
+                        clearInterval(checkEnabledInterval);
+                        if (originalOnEnded) originalOnEnded();
+                    };
+                }
                 
                 // Обновляем UI - карточка создастся только если есть видео
                 console.log(`🔄 [ontrack] Обновляем UI для ${targetUserId}`);
