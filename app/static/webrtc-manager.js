@@ -196,7 +196,8 @@ class WebRTCManager {
                             // Удаляем если:
                             // 1. Трек ended (полностью завершен)
                             // 2. Трек enabled=false (камера выключена пользователем кнопкой)
-                            // ВАЖНО: muted - это временное состояние при инициализации, НЕ используем его для определения выключенной камеры
+                            // 3. Трек muted=true И трек уже был в потоке (камера выключена, источник недоступен)
+                            // ВАЖНО: muted=true может быть временным при инициализации, НО если трек уже в потоке и стал muted - это выключение камеры
                             if (receiverTrack.readyState === 'ended') {
                                 shouldRemove = true;
                                 reason = 'receiver track ended';
@@ -204,8 +205,13 @@ class WebRTCManager {
                                 // КРИТИЧНО: Если enabled=false, камера выключена пользователем - удаляем трек из потока
                                 shouldRemove = true;
                                 reason = 'receiver track disabled (camera off)';
+                            } else if (receiverTrack.muted && streamTracks.some(t => t.id === streamTrack.id)) {
+                                // КРИТИЧНО: Если muted=true И трек уже был в потоке - камера выключена, источник недоступен
+                                // Это означает, что трек был активен, но теперь источник недоступен
+                                shouldRemove = true;
+                                reason = 'receiver track muted (camera off, source unavailable)';
                             } else {
-                                // Трек live и enabled - оставляем в потоке (muted игнорируем как временное состояние)
+                                // Трек live и enabled - оставляем в потоке
                                 shouldRemove = false;
                                 reason = 'receiver track active (enabled=true)';
                             }

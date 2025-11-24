@@ -198,8 +198,13 @@ class UIManager {
                     const videoReceiver = receivers.find(receiver => {
                         const track = receiver.track;
                         // КРИТИЧНО: Проверяем что трек enabled - если enabled=false, камера выключена
-                        // ВАЖНО: muted - это временное состояние при инициализации, НЕ используем его
-                        return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
+                        // ВАЖНО: Если muted=true И трек уже был в потоке - камера выключена, источник недоступен
+                        const isInStream = stream.getVideoTracks().some(t => t.id === track?.id);
+                        return track && 
+                               track.kind === 'video' && 
+                               track.readyState === 'live' && 
+                               track.enabled &&
+                               (!track.muted || !isInStream); // Если muted, но трек еще не в потоке - это временное состояние
                     });
                     if (videoReceiver && videoReceiver.track) {
                         // Есть активный видео трек (enabled=true) - создаем карточку
@@ -229,7 +234,14 @@ class UIManager {
                     const receivers = peerConnection.getReceivers();
                     const hasActiveVideoReceiver = receivers.some(r => {
                         const track = r.track;
-                        return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
+                        // ВАЖНО: Трек активен только если enabled=true И (!muted ИЛИ трек еще не был в потоке)
+                        // Если muted=true И трек уже был в потоке - камера выключена
+                        const isInStream = stream.getVideoTracks().some(t => t.id === track?.id);
+                        return track && 
+                               track.kind === 'video' && 
+                               track.readyState === 'live' && 
+                               track.enabled &&
+                               (!track.muted || !isInStream); // Если muted, но трек еще не в потоке - это временное состояние
                     });
                     
                     // Если нет активного видео трека в receivers, удаляем карточку
@@ -597,11 +609,13 @@ class UIManager {
             const hasActiveVideoTrackInReceivers = peerConnection && receivers.some(r => {
                 const track = r.track;
                 // КРИТИЧНО: Проверяем что трек enabled - если enabled=false, камера выключена
-                // muted - это временное состояние при инициализации, НЕ используем его
+                // ВАЖНО: Если muted=true И трек уже был в потоке - камера выключена, источник недоступен
+                const isInStream = stream.getVideoTracks().some(t => t.id === track?.id);
                 return track && 
                        track.kind === 'video' && 
                        track.readyState === 'live' && 
-                       track.enabled;
+                       track.enabled &&
+                       (!track.muted || !isInStream); // Если muted, но трек еще не в потоке - это временное состояние
             });
             
             // ПРОВЕРКА ИЗМЕНЕНИЯ СОСТОЯНИЯ: обновляем UI только если состояние изменилось
