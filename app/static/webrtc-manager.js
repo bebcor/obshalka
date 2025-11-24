@@ -109,7 +109,7 @@ class WebRTCManager {
             // Обработчик ICE-кандидатов
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
-                    console.log('New ICE candidate for', targetUserId, ':', {
+                    console.log('📡 New ICE candidate for', targetUserId, ':', {
                         type: event.candidate.type,
                         protocol: event.candidate.protocol,
                         address: event.candidate.address,
@@ -360,6 +360,8 @@ class WebRTCManager {
         
             await peerConnection.setLocalDescription(offer);
             console.log(`✅ Local description set for ${targetUserId}`);
+            console.log(`📊 Signaling state after setLocalDescription: ${peerConnection.signalingState}`);
+            console.log(`📊 Offer SDP length: ${offer.sdp?.length || 0}`);
         
             console.log('📤 Sending offer to:', targetUserId);
         
@@ -367,7 +369,8 @@ class WebRTCManager {
                 target_user_id: targetUserId,
                 offer: offer
             });
-            console.log(`📤 Offer sent to ${targetUserId}`);
+            console.log(`✅ Offer sent to ${targetUserId}`);
+            console.log(`📊 Waiting for answer from ${targetUserId}...`);
         
         } catch (error) {
             console.error('Error creating offer:', error);
@@ -626,12 +629,16 @@ class WebRTCManager {
             }, 2000);
         
             console.log('📤 [handleWebRTCOffer] Sending answer to:', data.sender_id);
+            console.log('📤 [handleWebRTCOffer] Answer SDP length:', answer.sdp ? answer.sdp.length : 0);
+            console.log('📤 [handleWebRTCOffer] Answer type:', answer.type);
             
             // Отправляем ответ обратно инициатору через signaling-сервер
             this.videoCallManager.socket.emit('webrtc_answer', {
                 target_user_id: data.sender_id,
                 answer: answer
             });
+            
+            console.log('✅ [handleWebRTCOffer] Answer sent successfully to:', data.sender_id);
         
         } catch (error) {
             console.error('Error handling WebRTC offer:', error);
@@ -641,7 +648,8 @@ class WebRTCManager {
     async handleWebRTCAnswer(data) {
         try {
             console.log('📥 [handleWebRTCAnswer] Received ANSWER from:', data.sender_id);
-            console.log('📥 [handleWebRTCAnswer] Answer SDP:', data.answer.sdp.substring(0, 100) + '...');
+            console.log('📥 [handleWebRTCAnswer] Answer SDP length:', data.answer?.sdp?.length || 0);
+            console.log('📥 [handleWebRTCAnswer] Answer type:', data.answer?.type);
         
             if (!this.videoCallManager.remoteUsers.has(data.sender_id)) {
                 console.error('❌ [handleWebRTCAnswer] No peer connection for:', data.sender_id);
@@ -650,10 +658,15 @@ class WebRTCManager {
         
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
             console.log('📥 [handleWebRTCAnswer] Setting remote description, current signalingState:', peerConnection.signalingState);
+            console.log('📥 [handleWebRTCAnswer] Current remoteDescription type:', peerConnection.remoteDescription?.type);
             
             // ВАЖНО: Проверяем signalingState - answer можно устанавливать только в have-local-offer
             if (peerConnection.signalingState !== 'have-local-offer') {
                 console.warn(`⚠️ [handleWebRTCAnswer] SignalingState is ${peerConnection.signalingState}, expected have-local-offer, skipping`);
+                // Если состояние stable, возможно answer уже был установлен
+                if (peerConnection.signalingState === 'stable') {
+                    console.log('✅ [handleWebRTCAnswer] Connection already stable, answer was already processed');
+                }
                 return;
             }
             
@@ -668,8 +681,13 @@ class WebRTCManager {
                 console.log('🔄 [handleWebRTCAnswer] Replacing old remote description with answer');
             }
             
-            await peerConnection.setRemoteDescription(data.answer);
-            console.log('✅ [handleWebRTCAnswer] Remote description set successfully, new signalingState:', peerConnection.signalingState);
+            try {
+                await peerConnection.setRemoteDescription(data.answer);
+                console.log('✅ [handleWebRTCAnswer] Remote description set successfully, new signalingState:', peerConnection.signalingState);
+            } catch (error) {
+                console.error('❌ [handleWebRTCAnswer] Error setting remote description:', error);
+                throw error;
+            }
             
             // ВАЖНО: Добавляем отложенные ICE кандидаты после установки remote description
             if (peerConnection._pendingIceCandidates && peerConnection._pendingIceCandidates.length > 0) {
