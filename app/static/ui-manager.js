@@ -296,7 +296,8 @@ class UIManager {
                             // КРИТИЧНО: Проверяем состояние Promise сразу
                             // Если Promise уже rejected, нужно обработать ошибку немедленно
                             if (playPromise instanceof Promise) {
-                                // Проверяем, не отклонен ли Promise уже
+                                // КРИТИЧНО: Проверяем состояние Promise синхронно
+                                // Если Promise уже rejected, catch может не сработать
                                 let promiseHandled = false;
                                 
                                 // Добавляем таймаут для Promise - если он не разрешится за 5 секунд, логируем
@@ -306,8 +307,9 @@ class UIManager {
                                     }
                                 }, 5000);
                                 
-                                // Обрабатываем Promise
-                                playPromise
+                                // КРИТИЧНО: Обрабатываем Promise с немедленной проверкой состояния
+                                // Используем setTimeout(0) чтобы убедиться, что catch сработает даже для уже rejected Promise
+                                Promise.resolve(playPromise)
                                     .then(() => {
                                         promiseHandled = true;
                                         clearTimeout(timeoutId);
@@ -370,6 +372,16 @@ class UIManager {
                                             message: videoElement.error.message,
                                             networkState: videoElement.networkState,
                                             readyState: videoElement.readyState
+                                        });
+                                    }
+                                    
+                                    // КРИТИЧНО: Если Promise все еще не обработан, проверяем его состояние
+                                    if (!promiseHandled) {
+                                        // Пытаемся получить результат Promise
+                                        playPromise.catch(() => {}).then(() => {
+                                            if (!promiseHandled) {
+                                                console.warn(`⚠️ [updateVideoOverlays] Promise от play() все еще не обработан для ${userId}`);
+                                            }
                                         });
                                     }
                                 }, 50);
