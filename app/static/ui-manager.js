@@ -473,10 +473,38 @@ class UIManager {
             
             // КРИТИЧНО: Проверяем состояние трека ЕЩЕ РАЗ перед показом карточки
             // Трек мог стать muted между проверкой hasActiveVideo и показом карточки
+            // ВСЕГДА используем трек из receiver если он есть - он более актуален
             const trackToCheck = trackFromReceiver || trackFromStream;
-            const finalIsTrackMuted = trackToCheck ? trackToCheck.muted : true;
-            const finalIsTrackLive = trackToCheck ? trackToCheck.readyState === 'live' : false;
-            const finalIsTrackEnabled = trackToCheck ? trackToCheck.enabled : false;
+            console.log(`🔍 [${userId}] Выбор трека для финальной проверки:`);
+            console.log(`   - trackFromReceiver: ${trackFromReceiver ? 'ЕСТЬ' : 'НЕТ'}`);
+            console.log(`   - trackFromStream: ${trackFromStream ? 'ЕСТЬ' : 'НЕТ'}`);
+            console.log(`   - trackToCheck: ${trackToCheck ? 'ЕСТЬ' : 'НЕТ'}`);
+            if (trackToCheck) {
+                console.log(`   - trackToCheck.muted: ${trackToCheck.muted}`);
+                console.log(`   - trackToCheck.enabled: ${trackToCheck.enabled}`);
+                console.log(`   - trackToCheck.readyState: ${trackToCheck.readyState}`);
+            }
+            
+            // КРИТИЧНО: Если есть receiver, используем его состояние - оно более актуальное
+            let finalIsTrackMuted = true;
+            let finalIsTrackLive = false;
+            let finalIsTrackEnabled = false;
+            
+            if (trackFromReceiver) {
+                // Используем состояние из receiver - оно более актуальное
+                finalIsTrackMuted = trackFromReceiver.muted;
+                finalIsTrackLive = trackFromReceiver.readyState === 'live';
+                finalIsTrackEnabled = trackFromReceiver.enabled;
+                console.log(`   ✅ Используем состояние из receiver (muted=${finalIsTrackMuted}, enabled=${finalIsTrackEnabled}, live=${finalIsTrackLive})`);
+            } else if (trackFromStream) {
+                // Используем состояние из потока если receiver нет
+                finalIsTrackMuted = trackFromStream.muted;
+                finalIsTrackLive = trackFromStream.readyState === 'live';
+                finalIsTrackEnabled = trackFromStream.enabled;
+                console.log(`   ⚠️ Используем состояние из потока (receiver не найден) (muted=${finalIsTrackMuted}, enabled=${finalIsTrackEnabled}, live=${finalIsTrackLive})`);
+            } else {
+                console.log(`   ❌ Нет трека для проверки`);
+            }
             
             // КРИТИЧНО: Проверяем состояние соединения - используем только для определения когда устанавливать srcObject
             // Карточка должна показываться даже если соединение еще устанавливается (показываем overlay)
