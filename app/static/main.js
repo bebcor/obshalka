@@ -969,9 +969,6 @@ class VideoCallManager {
             } else {
                 console.warn('⚠️ [handleRoomInfo] Локальный поток не доступен, OFFER не создаются');
             }
-                    }
-                });
-            }
             // Убеждаемся, что локальная карточка правильно обновлена после запуска медиа
             this.uiManager.updateVideoOverlays();
         } catch (error) {
