@@ -242,13 +242,22 @@ class VideoCallManager {
                 // Показываем сообщение об ошибке
                 this.notificationManager.show(data.message || 'Ошибка сервера', 'error');
                 
-                // Если это ошибка переполнения комнаты, возвращаем на стартовый экран
+                // Если это ошибка переполнения комнаты, делаем редирект на стартовую страницу
+                // Только если мы не на стартовой странице
                 if (data.message && data.message.includes('переполнена')) {
-                    setTimeout(() => {
-                        if (this.roomManager) {
-                            this.roomManager.showWelcomeScreen();
+                    const currentPath = window.location.pathname;
+                    // Если мы не на стартовой странице, делаем редирект
+                    if (currentPath !== '/' && !currentPath.match(/^\/r\//)) {
+                        setTimeout(() => {
+                            // Редирект на стартовую страницу
+                            window.location.href = '/';
+                        }, 2000);
+                    } else {
+                        // Если мы уже на стартовой странице, просто очищаем URL от room_id
+                        if (currentPath.match(/^\/r\//)) {
+                            window.history.replaceState({}, '', '/');
                         }
-                    }, 2000);
+                    }
                 }
             });
             
@@ -439,7 +448,7 @@ class VideoCallManager {
         });
     }
 
-    setupWelcomeScreen() {
+    async setupWelcomeScreen() {
         // Если мы на странице отключения, не показываем welcomeScreen
         if (this.isDisconnected) {
             console.log('⚠️ На странице отключения, не показываем welcomeScreen');
@@ -451,12 +460,50 @@ class VideoCallManager {
         const roomMatch = path.match(/^\/r\/([A-Za-z0-9_-]{3,50})$/);
         
         if (roomMatch) {
-            // Если есть room_id в URL, сразу показываем основную страницу
-            this.uiManager.showMainScreen();
-            return;
+            const roomId = roomMatch[1];
+            // КРИТИЧНО: Сначала проверяем, не переполнена ли комната
+            try {
+                const response = await fetch(`/api/check_room/${roomId}`);
+                const data = await response.json();
+                
+                if (!data.exists) {
+                    // Комната не найдена - показываем welcome screen
+                    this.showWelcomeScreenUI();
+                    this.notificationManager.show('Комната не найдена', 'error');
+                    // Очищаем URL от room_id
+                    window.history.replaceState({}, '', '/');
+                    return;
+                }
+                
+                // Проверяем количество участников
+                if (data.participants_count >= 8) {
+                    // Комната переполнена - показываем welcome screen с сообщением
+                    this.showWelcomeScreenUI();
+                    this.notificationManager.show('Комната переполнена, ищите другую', 'error');
+                    // Очищаем URL от room_id
+                    window.history.replaceState({}, '', '/');
+                    return;
+                }
+                
+                // Комната доступна - показываем основную страницу
+                this.uiManager.showMainScreen();
+                return;
+            } catch (error) {
+                console.error('Ошибка при проверке комнаты:', error);
+                // При ошибке показываем welcome screen
+                this.showWelcomeScreenUI();
+                this.notificationManager.show('Не удалось проверить комнату', 'error');
+                // Очищаем URL от room_id
+                window.history.replaceState({}, '', '/');
+                return;
+            }
         }
 
         // Иначе показываем стартовое окно
+        this.showWelcomeScreenUI();
+    }
+    
+    showWelcomeScreenUI() {
         const welcomeScreen = document.getElementById('welcomeScreen');
         const mainContainer = document.getElementById('mainContainer');
         
