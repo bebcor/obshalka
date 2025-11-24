@@ -314,6 +314,35 @@ class UIManager {
                 }
             }
             
+            // КРИТИЧНО: Дополнительная проверка - если трек muted, но карточка существует, удаляем ее
+            if (trackFromReceiver && trackFromReceiver.muted && participantCard) {
+                console.log(`\n⚠️⚠️⚠️ [${userId}] ОБНАРУЖЕН MUTED ТРЕК ПРИ СУЩЕСТВУЮЩЕЙ КАРТОЧКЕ - ПРИНУДИТЕЛЬНОЕ УДАЛЕНИЕ ⚠️⚠️⚠️`);
+                console.log(`   - track.muted (из receiver): ${trackFromReceiver.muted}`);
+                console.log(`   - participantCard exists: ${!!participantCard}`);
+                
+                // Немедленно очищаем srcObject и удаляем карточку
+                if (videoElement && videoElement.srcObject) {
+                    console.log(`   🔄 Очищаем srcObject...`);
+                    videoElement.pause();
+                    videoElement.srcObject = null;
+                    videoElement.load();
+                }
+                
+                if (participantCard && participantCard.parentNode) {
+                    console.log(`   🔄 Удаляем карточку...`);
+                    participantCard.remove();
+                    console.log(`   ✅ Карточка удалена`);
+                }
+                
+                // Удаляем трек из потока
+                if (stream.getTracks().includes(trackFromStream || trackFromReceiver)) {
+                    stream.removeTrack(trackFromStream || trackFromReceiver);
+                }
+                
+                console.log(`⚠️⚠️⚠️ [${userId}] ПРИНУДИТЕЛЬНОЕ УДАЛЕНИЕ ЗАВЕРШЕНО ⚠️⚠️⚠️\n`);
+                return; // Прерываем обработку этого участника
+            }
+            
             if (hasActiveVideo) {
                 console.log(`✅ [${userId}] ЕСТЬ АКТИВНОЕ ВИДЕО - показываем карточку`);
                 
@@ -349,14 +378,31 @@ class UIManager {
                     const afterDisplay = window.getComputedStyle(participantCard).display;
                     console.log(`   - participantCard display: ${beforeDisplay} -> ${afterDisplay}`);
                     
-                    // Устанавливаем поток если нужно
-                    const hadSrcObject = !!videoElement.srcObject;
-                    if (videoElement.srcObject !== stream) {
-                        console.log(`🔄 [${userId}] Устанавливаем srcObject (было: ${hadSrcObject ? 'SET' : 'NULL'})`);
-                        videoElement.srcObject = stream;
-                        console.log(`   - videoElement.srcObject установлен: ${!!videoElement.srcObject}`);
+                    // КРИТИЧНО: Устанавливаем srcObject ТОЛЬКО если трек НЕ muted
+                    // Если трек muted - данные не приходят, srcObject не устанавливаем чтобы не было черной плашки
+                    const trackToCheck = trackFromReceiver || trackFromStream;
+                    const isTrackMuted = trackToCheck ? trackToCheck.muted : false;
+                    
+                    if (isTrackMuted) {
+                        console.log(`⚠️ [${userId}] ТРЕК MUTED - НЕ УСТАНАВЛИВАЕМ srcObject (чтобы избежать черной плашки)`);
+                        // Если srcObject уже установлен - очищаем его
+                        if (videoElement.srcObject) {
+                            console.log(`   🔄 Очищаем srcObject так как трек muted...`);
+                            videoElement.pause();
+                            videoElement.srcObject = null;
+                            videoElement.load();
+                            console.log(`   ✅ srcObject очищен`);
+                        }
                     } else {
-                        console.log(`ℹ️ [${userId}] srcObject уже установлен, пропускаем`);
+                        // Трек не muted - устанавливаем srcObject
+                        const hadSrcObject = !!videoElement.srcObject;
+                        if (videoElement.srcObject !== stream) {
+                            console.log(`🔄 [${userId}] Устанавливаем srcObject (было: ${hadSrcObject ? 'SET' : 'NULL'})`);
+                            videoElement.srcObject = stream;
+                            console.log(`   - videoElement.srcObject установлен: ${!!videoElement.srcObject}`);
+                        } else {
+                            console.log(`ℹ️ [${userId}] srcObject уже установлен, пропускаем`);
+                        }
                     }
                     
                     // Видео включено - показываем видео
@@ -711,12 +757,13 @@ class UIManager {
                     this.updateVideoOverlays();
                 };
                 
-                // КРИТИЧНО: Отслеживаем изменение enabled через периодическую проверку
+                // КРИТИЧНО: Отслеживаем изменение enabled И muted через периодическую проверку
                 // WebRTC не предоставляет событие для изменения enabled
                 if (track.kind === 'video') {
-                    console.log(`⏰ [createRemoteVideoElement ${userId}] Настраиваем периодическую проверку enabled для видео трека`);
+                    console.log(`⏰ [createRemoteVideoElement ${userId}] Настраиваем периодическую проверку enabled и muted для видео трека`);
                     let lastEnabledState = track.enabled;
-                    console.log(`   - Начальное enabled: ${lastEnabledState}`);
+                    let lastMutedState = track.muted;
+                    console.log(`   - Начальное enabled: ${lastEnabledState}, muted: ${lastMutedState}`);
                     
                     // Проверяем каждые 100ms для быстрой реакции
                     const enabledCheckInterval = setInterval(() => {
@@ -727,22 +774,60 @@ class UIManager {
                         }
                         
                         const currentEnabled = track.enabled;
+                        const currentMuted = track.muted;
+                        
+                        // Проверяем изменение enabled
                         if (currentEnabled !== lastEnabledState) {
                             console.log(`\n🔄🔄🔄 [checkEnabled ${userId}] enabled ИЗМЕНИЛСЯ: ${lastEnabledState} -> ${currentEnabled} 🔄🔄🔄`);
                             console.log(`   - track.id: ${track.id}`);
                             console.log(`   - track.readyState: ${track.readyState}`);
                             console.log(`   - track.muted: ${track.muted}`);
                             lastEnabledState = currentEnabled;
-                                        this.updateVideoOverlays();
-                                    }
-                }, 100);
+                            this.updateVideoOverlays();
+                        }
+                        
+                        // КРИТИЧНО: Проверяем изменение muted - если стал muted=true, немедленно удаляем карточку
+                        if (currentMuted !== lastMutedState) {
+                            console.log(`\n🔇🔇🔇 [checkEnabled ${userId}] muted ИЗМЕНИЛСЯ: ${lastMutedState} -> ${currentMuted} 🔇🔇🔇`);
+                            console.log(`   - track.id: ${track.id}`);
+                            console.log(`   - track.enabled: ${track.enabled}`);
+                            console.log(`   - track.readyState: ${track.readyState}`);
+                            lastMutedState = currentMuted;
+                            
+                            if (currentMuted) {
+                                // Трек стал muted - немедленно очищаем и удаляем
+                                console.log(`🗑️ [checkEnabled ${userId}] ТРЕК СТАЛ MUTED - НЕМЕДЛЕННАЯ ОЧИСТКА`);
+                                
+                                const videoElement = document.getElementById(`remoteVideo-${userId}`);
+                                if (videoElement && videoElement.srcObject) {
+                                    videoElement.pause();
+                                    videoElement.srcObject = null;
+                                    videoElement.load();
+                                    console.log(`   ✅ srcObject очищен`);
+                                }
+                                
+                                if (stream.getTracks().includes(track)) {
+                                    stream.removeTrack(track);
+                                    console.log(`   ✅ Трек удален из потока`);
+                                }
+                                
+                                const participantCard = document.getElementById(`participant-${userId}`);
+                                if (participantCard && participantCard.parentNode) {
+                                    participantCard.remove();
+                                    console.log(`   ✅ Карточка удалена`);
+                                }
+                            }
+                            
+                            this.updateVideoOverlays();
+                        }
+                    }, 100);
                     
-                    console.log(`✅ [createRemoteVideoElement ${userId}] Интервал проверки enabled установлен (100ms)`);
+                    console.log(`✅ [createRemoteVideoElement ${userId}] Интервал проверки enabled и muted установлен (100ms)`);
                     
                     // Очищаем интервал когда трек заканчивается
                     const originalOnEnded = track.onended;
                     track.onended = () => {
-                        console.log(`⏰ [${userId}] Трек завершился, очищаем интервал проверки enabled`);
+                        console.log(`⏰ [${userId}] Трек завершился, очищаем интервал проверки enabled и muted`);
                         clearInterval(enabledCheckInterval);
                         if (originalOnEnded) originalOnEnded();
                     };
