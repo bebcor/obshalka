@@ -120,7 +120,7 @@ class MediaDevicesManager {
         modal.innerHTML = `
             <div class="modal-overlay">
                 <div class="modal-content">
-                    <h3 style="display: flex; align-items: center; gap: 8px;"><img src="/static/images/photo_camera.png" alt="Камера" style="width: 24px; height: 24px; flex-shrink: 0; display: block;"> <span>Выберите камеру</span></h3>
+                    <h3 style="display: flex; align-items: center; gap: 8px;"><img src="/static/images/camera.png" alt="Камера" style="width: 24px; height: 24px; flex-shrink: 0; display: block;"> <span>Выберите камеру</span></h3>
                     <div class="camera-list">
                         ${this.availableCameras.map((camera, index) => `
                             <div class="camera-item" data-device-id="${camera.deviceId}">

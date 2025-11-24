@@ -1083,10 +1083,16 @@ input[type="text"]::placeholder {
 
 .btn-settings img {
     flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    display: block;
+    object-fit: contain;
 }
 
 .btn-settings span {
     white-space: nowrap;
+    flex: 1;
+    min-width: 0;
 }
 
 .btn-settings:hover {

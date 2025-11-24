@@ -479,11 +479,14 @@ class UIManager {
                     // Если enabled=false, камера выключена пользователем - не добавляем трек
                     // ВАЖНО: muted - это временное состояние при инициализации, НЕ используем его
                     const trackInStream = stream.getTracks().find(t => t.id === track.id);
-                    if (!trackInStream && track.enabled && track.readyState === 'live') {
-                        console.log(`✅ [${userId}] Добавляем видео трек из receivers в поток (enabled=${track.enabled})`);
+                    const wasInStream = stream.getVideoTracks().some(t => t.id === track.id);
+                    // КРИТИЧНО: Добавляем трек только если enabled И (!muted ИЛИ трек еще не был в потоке)
+                    // Если muted=true И трек уже был в потоке - камера выключена, источник недоступен
+                    if (!trackInStream && track.enabled && track.readyState === 'live' && (!track.muted || !wasInStream)) {
+                        console.log(`✅ [${userId}] Добавляем видео трек из receivers в поток (enabled=${track.enabled}, muted=${track.muted})`);
                         stream.addTrack(track);
-                    } else if (!trackInStream && !track.enabled) {
-                        console.log(`❌ [${userId}] НЕ добавляем видео трек в поток - камера выключена (enabled=${track.enabled})`);
+                    } else if (!trackInStream && (!track.enabled || (track.muted && wasInStream))) {
+                        console.log(`❌ [${userId}] НЕ добавляем видео трек в поток - камера выключена (enabled=${track.enabled}, muted=${track.muted}, wasInStream=${wasInStream})`);
                     }
                 }
             } else {
