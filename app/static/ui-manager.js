@@ -93,11 +93,18 @@ class UIManager {
     }
     
     _updateVideoOverlaysInternal() {
+        console.log(`\n🟡 ========== НАЧАЛО updateVideoOverlays ==========`);
+        console.log(`📊 [updateVideoOverlays] Вызов функции`);
+        
         // ЗАЩИТА ОТ РЕКУРСИИ: если уже выполняется обновление, пропускаем
         if (this._updatingVideoOverlays) {
+            console.log(`⚠️ [updateVideoOverlays] Уже выполняется, пропускаем (защита от рекурсии)`);
             return;
         }
         this._updatingVideoOverlays = true;
+        console.log(`✅ [updateVideoOverlays] Флаг _updatingVideoOverlays установлен`);
+        
+        console.log(`📊 [updateVideoOverlays] Количество remoteStreams: ${this.videoCallManager.remoteStreams.size}`);
         
         try {
             const localVideo = document.getElementById('localVideo');
@@ -182,15 +189,47 @@ class UIManager {
         
         // ДЛЯ УДАЛЕННЫХ УЧАСТНИКОВ
         this.videoCallManager.remoteStreams.forEach((stream, userId) => {
+            console.log(`\n🔵 ========== ОБРАБОТКА УЧАСТНИКА ${userId} ==========`);
+            
             const videoElement = document.getElementById(`remoteVideo-${userId}`);
             let participantCard = document.getElementById(`participant-${userId}`);
             const overlay = participantCard?.querySelector('.video-overlay');
             
+            console.log(`📊 [${userId}] Состояние DOM элементов:`);
+            console.log(`   - videoElement exists: ${!!videoElement}`);
+            console.log(`   - participantCard exists: ${!!participantCard}`);
+            console.log(`   - overlay exists: ${!!overlay}`);
+            if (videoElement) {
+                console.log(`   - videoElement.srcObject: ${videoElement.srcObject ? 'SET' : 'NULL'}`);
+                console.log(`   - videoElement.style.display: ${videoElement.style.display || 'not set'}`);
+                console.log(`   - videoElement.paused: ${videoElement.paused}`);
+            }
+            if (participantCard) {
+                const computedStyle = window.getComputedStyle(participantCard);
+                console.log(`   - participantCard.style.display: ${participantCard.style.display || 'not set'}`);
+                console.log(`   - participantCard.computed.display: ${computedStyle.display}`);
+                console.log(`   - participantCard.parentNode: ${participantCard.parentNode ? participantCard.parentNode.id || 'exists' : 'NULL'}`);
+            }
+            
             // ПРОВЕРКА: Есть ли активные видео треки (readyState === 'live' И enabled === true)
             const videoTracks = stream.getVideoTracks();
-            const hasActiveVideo = videoTracks.length > 0 && 
-                                   videoTracks[0].readyState === 'live' && 
-                                   videoTracks[0].enabled;
+            console.log(`📹 [${userId}] Проверка видео треков:`);
+            console.log(`   - videoTracks.length: ${videoTracks.length}`);
+            
+            let hasActiveVideo = false;
+            if (videoTracks.length > 0) {
+                const track = videoTracks[0];
+                console.log(`   - track.id: ${track.id}`);
+                console.log(`   - track.enabled: ${track.enabled}`);
+                console.log(`   - track.readyState: ${track.readyState}`);
+                console.log(`   - track.muted: ${track.muted}`);
+                console.log(`   - track.label: ${track.label}`);
+                
+                hasActiveVideo = track.readyState === 'live' && track.enabled;
+                console.log(`   - hasActiveVideo: ${hasActiveVideo} (readyState='live': ${track.readyState === 'live'}, enabled: ${track.enabled})`);
+            } else {
+                console.log(`   - НЕТ видео треков`);
+            }
             
             // ОБРАБОТКА АУДИО: создаем скрытый audio элемент если есть аудио треки
             const audioTracks = stream.getAudioTracks();
@@ -244,14 +283,23 @@ class UIManager {
             }
             
             if (hasActiveVideo) {
+                console.log(`✅ [${userId}] ЕСТЬ АКТИВНОЕ ВИДЕО - показываем карточку`);
+                
                 // ЕСТЬ АКТИВНОЕ ВИДЕО - создаем карточку если нет, показываем видео
                 if (!participantCard) {
+                    console.log(`🆕 [${userId}] Карточка не существует, создаем...`);
                     this.createRemoteVideoElement(userId, stream);
                     participantCard = document.getElementById(`participant-${userId}`);
+                    console.log(`✅ [${userId}] Карточка создана: ${!!participantCard}`);
+                } else {
+                    console.log(`ℹ️ [${userId}] Карточка уже существует`);
                 }
                 
                 if (participantCard && overlay && videoElement) {
+                    console.log(`🔄 [${userId}] Показываем карточку и видео`);
+                    
                     // Показываем карточку
+                    const beforeDisplay = window.getComputedStyle(participantCard).display;
                     participantCard.style.setProperty('display', 'block', 'important');
                     participantCard.style.removeProperty('visibility');
                     participantCard.style.removeProperty('opacity');
@@ -259,77 +307,167 @@ class UIManager {
                     participantCard.style.removeProperty('height');
                     participantCard.style.removeProperty('overflow');
                     participantCard.style.removeProperty('pointer-events');
+                    const afterDisplay = window.getComputedStyle(participantCard).display;
+                    console.log(`   - participantCard display: ${beforeDisplay} -> ${afterDisplay}`);
                     
                     // Устанавливаем поток если нужно
+                    const hadSrcObject = !!videoElement.srcObject;
                     if (videoElement.srcObject !== stream) {
+                        console.log(`🔄 [${userId}] Устанавливаем srcObject (было: ${hadSrcObject ? 'SET' : 'NULL'})`);
                         videoElement.srcObject = stream;
+                        console.log(`   - videoElement.srcObject установлен: ${!!videoElement.srcObject}`);
+                    } else {
+                        console.log(`ℹ️ [${userId}] srcObject уже установлен, пропускаем`);
                     }
                     
                     // Видео включено - показываем видео
                     overlay.style.display = 'none';
                     videoElement.style.setProperty('display', 'block', 'important');
                     videoElement.setAttribute('playsinline', 'true');
-                    videoElement.play().catch(error => {
+                    console.log(`   - overlay скрыт, videoElement показан`);
+                    
+                    videoElement.play().then(() => {
+                        console.log(`✅ [${userId}] videoElement.play() успешно`);
+                    }).catch(error => {
                         if (error.name !== 'AbortError') {
-                            console.warn(`⚠️ Ошибка play для ${userId}:`, error);
+                            console.warn(`⚠️ [${userId}] Ошибка play:`, error);
+                        } else {
+                            console.log(`ℹ️ [${userId}] play() AbortError (нормально)`);
                         }
                     });
+                } else {
+                    console.warn(`⚠️ [${userId}] Не все элементы найдены: participantCard=${!!participantCard}, overlay=${!!overlay}, videoElement=${!!videoElement}`);
                 }
             } else {
                 // НЕТ АКТИВНОГО ВИДЕО - удаляем карточку полностью
-                // КРИТИЧНО: Очищаем srcObject ДО удаления карточки, чтобы не было черной плашки
-                console.log(`🗑️ [updateVideoOverlays] НЕТ АКТИВНОГО ВИДЕО для ${userId}, удаляем карточку`);
+                console.log(`\n❌ [${userId}] НЕТ АКТИВНОГО ВИДЕО - УДАЛЯЕМ КАРТОЧКУ`);
+                console.log(`   📊 Детали проверки:`);
                 console.log(`   - videoTracks.length: ${videoTracks.length}`);
                 if (videoTracks.length > 0) {
-                    console.log(`   - videoTracks[0].enabled: ${videoTracks[0].enabled}`);
-                    console.log(`   - videoTracks[0].readyState: ${videoTracks[0].readyState}`);
+                    const track = videoTracks[0];
+                    console.log(`   - track.id: ${track.id}`);
+                    console.log(`   - track.enabled: ${track.enabled} ❌ (должно быть true)`);
+                    console.log(`   - track.readyState: ${track.readyState} ${track.readyState === 'live' ? '✅' : '❌'}`);
+                    console.log(`   - track.muted: ${track.muted}`);
+                    console.log(`   - hasActiveVideo = ${track.readyState === 'live'} && ${track.enabled} = ${hasActiveVideo}`);
+                } else {
+                    console.log(`   - НЕТ видео треков в потоке`);
                 }
                 
                 if (videoElement) {
-                    console.log(`🗑️ [updateVideoOverlays] Очищаем видео элемент для ${userId}`);
+                    console.log(`\n🗑️ [${userId}] ШАГ 1: Очищаем videoElement`);
+                    const hadSrcObject = !!videoElement.srcObject;
+                    const wasPaused = videoElement.paused;
+                    const beforeDisplay = videoElement.style.display || window.getComputedStyle(videoElement).display;
+                    
+                    console.log(`   - Состояние ДО очистки:`);
+                    console.log(`     * srcObject: ${hadSrcObject ? 'SET' : 'NULL'}`);
+                    console.log(`     * paused: ${wasPaused}`);
+                    console.log(`     * display: ${beforeDisplay}`);
+                    
                     // Останавливаем воспроизведение
                     videoElement.pause();
+                    console.log(`   ✅ videoElement.pause() вызван`);
+                    
                     // Очищаем поток
                     videoElement.srcObject = null;
+                    console.log(`   ✅ videoElement.srcObject = null`);
+                    
                     // Полная очистка видео элемента
                     videoElement.load();
+                    console.log(`   ✅ videoElement.load() вызван`);
+                    
                     // Скрываем элемент
                     videoElement.style.setProperty('display', 'none', 'important');
-                    // Дополнительная очистка - убираем все атрибуты
-                    videoElement.removeAttribute('src');
-                    videoElement.removeAttribute('srcObject');
-                    // Убеждаемся что элемент не виден
                     videoElement.style.setProperty('visibility', 'hidden', 'important');
                     videoElement.style.setProperty('opacity', '0', 'important');
                     videoElement.style.setProperty('width', '0', 'important');
                     videoElement.style.setProperty('height', '0', 'important');
+                    console.log(`   ✅ Все стили скрытия установлены`);
+                    
+                    // Дополнительная очистка - убираем все атрибуты
+                    videoElement.removeAttribute('src');
+                    videoElement.removeAttribute('srcObject');
+                    console.log(`   ✅ Атрибуты удалены`);
+                    
+                    const afterDisplay = window.getComputedStyle(videoElement).display;
+                    const afterSrcObject = !!videoElement.srcObject;
+                    console.log(`   - Состояние ПОСЛЕ очистки:`);
+                    console.log(`     * srcObject: ${afterSrcObject ? 'SET ❌' : 'NULL ✅'}`);
+                    console.log(`     * display: ${afterDisplay}`);
+                    
+                    if (afterSrcObject) {
+                        console.error(`   ❌❌❌ КРИТИЧЕСКАЯ ОШИБКА: srcObject все еще установлен после очистки!`);
+                    }
+                } else {
+                    console.log(`   ℹ️ videoElement не найден, пропускаем очистку`);
                 }
                 
-                if (participantCard && participantCard.parentNode) {
-                    console.log(`🗑️ [updateVideoOverlays] Удаляем карточку ${userId} из DOM`);
-                    // Убеждаемся что srcObject очищен перед удалением
-                    if (videoElement) {
-                        if (videoElement.srcObject) {
-                            console.log(`⚠️ [updateVideoOverlays] srcObject все еще установлен для ${userId}, очищаем`);
-                            videoElement.srcObject = null;
-                            videoElement.load();
+                if (participantCard) {
+                    console.log(`\n🗑️ [${userId}] ШАГ 2: Удаляем participantCard из DOM`);
+                    const hadParent = !!participantCard.parentNode;
+                    const parentId = participantCard.parentNode ? (participantCard.parentNode.id || 'no-id') : 'none';
+                    const beforeComputedDisplay = window.getComputedStyle(participantCard).display;
+                    
+                    console.log(`   - Состояние ДО удаления:`);
+                    console.log(`     * parentNode: ${hadParent ? `exists (${parentId})` : 'NULL'}`);
+                    console.log(`     * computed display: ${beforeComputedDisplay}`);
+                    console.log(`     * inline display: ${participantCard.style.display || 'not set'}`);
+                    
+                    if (hadParent) {
+                        // Убеждаемся что srcObject очищен перед удалением
+                        if (videoElement) {
+                            if (videoElement.srcObject) {
+                                console.error(`   ⚠️ КРИТИЧНО: srcObject все еще установлен перед удалением карточки!`);
+                                console.log(`   🔄 Принудительно очищаем srcObject...`);
+                                videoElement.srcObject = null;
+                                videoElement.load();
+                                console.log(`   ✅ srcObject принудительно очищен`);
+                            }
+                            
+                            // Дополнительная проверка - если элемент все еще в DOM, удаляем его
+                            if (videoElement.parentNode) {
+                                console.log(`   🗑️ Удаляем videoElement из DOM (parent: ${videoElement.parentNode.id || 'no-id'})`);
+                                videoElement.remove();
+                                console.log(`   ✅ videoElement удален из DOM`);
+                            } else {
+                                console.log(`   ℹ️ videoElement уже не в DOM`);
+                            }
                         }
-                        // Дополнительная проверка - если элемент все еще в DOM, удаляем его
-                        if (videoElement.parentNode) {
-                            console.log(`🗑️ [updateVideoOverlays] Удаляем videoElement из DOM для ${userId}`);
-                            videoElement.remove();
+                        
+                        participantCard.remove();
+                        console.log(`   ✅ participantCard.remove() вызван`);
+                        
+                        // Проверяем что карточка действительно удалена
+                        const stillExists = document.getElementById(`participant-${userId}`);
+                        if (stillExists) {
+                            console.error(`   ❌❌❌ КРИТИЧЕСКАЯ ОШИБКА: Карточка все еще существует после remove()!`);
+                        } else {
+                            console.log(`   ✅ Карточка успешно удалена из DOM`);
+                        }
+                    } else {
+                        console.warn(`   ⚠️ Карточка не имеет parentNode, но существует в памяти`);
+                        console.log(`   🔄 Пытаемся удалить через remove()...`);
+                        try {
+                            participantCard.remove();
+                            console.log(`   ✅ remove() вызван (даже без parentNode)`);
+                        } catch (e) {
+                            console.error(`   ❌ Ошибка при remove():`, e);
                         }
                     }
-                    participantCard.remove();
-                    console.log(`✅ [updateVideoOverlays] Карточка ${userId} удалена из DOM`);
-                } else if (participantCard) {
-                    console.log(`⚠️ [updateVideoOverlays] Карточка ${userId} не имеет parentNode, но существует`);
+                } else {
+                    console.log(`   ℹ️ participantCard не найден, пропускаем удаление`);
                 }
+                
+                console.log(`\n🔵 ========== КОНЕЦ ОБРАБОТКИ ${userId} ==========\n`);
             }
         });
+        
+        console.log(`\n🟡 ========== КОНЕЦ updateVideoOverlays ==========\n`);
         } finally {
             // Сбрасываем флаг после завершения обновления
             this._updatingVideoOverlays = false;
+            console.log(`✅ [updateVideoOverlays] Флаг _updatingVideoOverlays сброшен`);
         }
     }
 
@@ -407,28 +545,36 @@ class UIManager {
     }
 
     createRemoteVideoElement(userId, stream) {
+        console.log(`\n🟢 ========== СОЗДАНИЕ КАРТОЧКИ ДЛЯ ${userId} ==========`);
+        console.log(`📊 [createRemoteVideoElement ${userId}] Начало создания карточки`);
+        
         // УБЕЖДАЕМСЯ, что participantsGrid существует
         let participantsGrid = document.getElementById('participantsGrid');
+        console.log(`📊 [createRemoteVideoElement ${userId}] participantsGrid: ${participantsGrid ? 'exists' : 'NOT FOUND'}`);
         
         if (!participantsGrid) {
-            console.warn("⚠️ participantsGrid не найден, создаем...");
+            console.warn(`⚠️ [createRemoteVideoElement ${userId}] participantsGrid не найден, создаем...`);
             const videoContainer = document.querySelector('.video-container');
+            console.log(`   - videoContainer: ${videoContainer ? 'exists' : 'NOT FOUND'}`);
             if (videoContainer) {
                 participantsGrid = document.createElement('div');
                 participantsGrid.id = 'participantsGrid';
                 participantsGrid.className = 'participants-grid';
                 videoContainer.appendChild(participantsGrid);
-                console.log("✅ participantsGrid создан");
+                console.log(`✅ [createRemoteVideoElement ${userId}] participantsGrid создан`);
             } else {
-                console.error("❌ Не удалось создать participantsGrid: video-container не найден");
+                console.error(`❌ [createRemoteVideoElement ${userId}] Не удалось создать participantsGrid: video-container не найден`);
                 return;
             }
         }
 
-        if (document.getElementById(`participant-${userId}`)) {
-            console.log('Participant card already exists for:', userId);
+        const existingCard = document.getElementById(`participant-${userId}`);
+        if (existingCard) {
+            console.log(`⚠️ [createRemoteVideoElement ${userId}] Participant card already exists, возвращаемся`);
+            console.log(`   - existingCard.parentNode: ${existingCard.parentNode ? existingCard.parentNode.id || 'exists' : 'NULL'}`);
             return;
         }
+        console.log(`✅ [createRemoteVideoElement ${userId}] Карточка не существует, продолжаем создание`);
         
         const participantCard = document.createElement('div');
         participantCard.className = 'participant-card remote-participant';
@@ -449,6 +595,7 @@ class UIManager {
             this.videoCallManager.userNames.set(userId, userName);
         }
         
+        console.log(`📝 [createRemoteVideoElement ${userId}] Создаем HTML структуру карточки`);
         participantCard.innerHTML = `
             <video id="remoteVideo-${userId}" autoplay playsinline></video>
             <div class="participant-info">
@@ -463,9 +610,11 @@ class UIManager {
                 <p>Ожидание видео...</p>
             </div>
         `;
+        console.log(`✅ [createRemoteVideoElement ${userId}] HTML структура создана`);
         
         // Скрываем карточку по умолчанию - она появится только если есть активное видео
         // ВАЖНО: Используем setProperty с important чтобы гарантировать скрытие
+        console.log(`🔒 [createRemoteVideoElement ${userId}] Скрываем карточку по умолчанию`);
         participantCard.style.setProperty('display', 'none', 'important');
         participantCard.style.setProperty('visibility', 'hidden', 'important');
         participantCard.style.setProperty('opacity', '0', 'important');
@@ -473,49 +622,98 @@ class UIManager {
         participantCard.style.setProperty('height', '0', 'important');
         participantCard.style.setProperty('overflow', 'hidden', 'important');
         participantCard.style.setProperty('pointer-events', 'none', 'important');
+        console.log(`✅ [createRemoteVideoElement ${userId}] Все стили скрытия установлены`);
         
         participantsGrid.appendChild(participantCard);
+        console.log(`✅ [createRemoteVideoElement ${userId}] Карточка добавлена в participantsGrid`);
         
         // ВАЖНО: Проверяем, что карточка действительно добавлена в DOM
         const isInDOM = participantsGrid.contains(participantCard);
-        console.log(`🔍 Карточка ${userId} добавлена в DOM: ${isInDOM}, parent: ${participantCard.parentElement?.id || 'null'}`);
+        const computedDisplay = window.getComputedStyle(participantCard).display;
+        console.log(`🔍 [createRemoteVideoElement ${userId}] Проверка добавления в DOM:`);
+        console.log(`   - isInDOM: ${isInDOM}`);
+        console.log(`   - parent: ${participantCard.parentElement?.id || 'null'}`);
+        console.log(`   - computed display: ${computedDisplay}`);
+        console.log(`   - inline display: ${participantCard.style.display}`);
         
         const videoElement = document.getElementById(`remoteVideo-${userId}`);
         if (videoElement) {
+            console.log(`✅ [createRemoteVideoElement ${userId}] videoElement найден после создания`);
+            console.log(`   - videoElement.id: ${videoElement.id}`);
+            console.log(`   - videoElement.srcObject: ${videoElement.srcObject ? 'SET ❌' : 'NULL ✅'}`);
+            console.log(`   - videoElement.style.display: ${videoElement.style.display || 'not set'}`);
+            
             // КРИТИЧНО: НЕ устанавливаем srcObject здесь!
             // Карточка скрыта, и установка srcObject создаст черную плашку
             // srcObject будет установлен в updateVideoOverlays когда карточка покажется
+            console.log(`🔒 [createRemoteVideoElement ${userId}] НЕ устанавливаем srcObject (карточка скрыта)`);
             
             // ДОБАВЛЯЕМ ОБРАБОТЧИКИ ДЛЯ СЛЕДЕНИЯ ЗА СОСТОЯНИЕМ ТРЕКОВ
+            console.log(`📡 [createRemoteVideoElement ${userId}] Добавляем обработчики событий для треков`);
+            const tracks = stream.getTracks();
+            console.log(`   - Всего треков в потоке: ${tracks.length}`);
+            tracks.forEach((track, index) => {
+                console.log(`   - Трек ${index}: kind=${track.kind}, id=${track.id}, enabled=${track.enabled}, readyState=${track.readyState}`);
+            });
+            
             stream.getTracks().forEach(track => {
+                console.log(`📡 [createRemoteVideoElement ${userId}] Настраиваем обработчики для трека ${track.kind} (${track.id})`);
+                
                 // Удаляем старые обработчики если есть
                 track.onended = null;
                 track.onmute = null;
                 track.onunmute = null;
                 
                 track.onended = () => {
-                    console.log(`Трек ${track.kind} завершился для пользователя ${userId}`);
+                    console.log(`\n🔴 [${userId}] СОБЫТИЕ: Трек ${track.kind} завершился`);
+                    console.log(`   - track.id: ${track.id}`);
+                    console.log(`   - track.enabled: ${track.enabled}`);
+                    console.log(`   - track.readyState: ${track.readyState}`);
                     this.updateVideoOverlays();
                 };
                 
                 track.onmute = () => {
-                    console.log(`Трек ${track.kind} заглушен для пользователя ${userId}`);
+                    console.log(`\n🔇 [${userId}] СОБЫТИЕ: Трек ${track.kind} заглушен`);
+                    console.log(`   - track.id: ${track.id}`);
+                    console.log(`   - track.enabled: ${track.enabled}`);
+                    console.log(`   - track.readyState: ${track.readyState}`);
+                    console.log(`   - track.muted: ${track.muted}`);
                     this.updateVideoOverlays();
                 };
                 
                 track.onunmute = () => {
-                    console.log(`Трек ${track.kind} включен для пользователя ${userId}`);
+                    console.log(`\n🔊 [${userId}] СОБЫТИЕ: Трек ${track.kind} включен`);
+                    console.log(`   - track.id: ${track.id}`);
+                    console.log(`   - track.enabled: ${track.enabled}`);
+                    console.log(`   - track.readyState: ${track.readyState}`);
+                    console.log(`   - track.muted: ${track.muted}`);
                     this.updateVideoOverlays();
                 };
                 
                 // КРИТИЧНО: Отслеживаем изменение enabled через периодическую проверку
                 // потому что событие изменения enabled может не сработать
                 if (track.kind === 'video') {
+                    console.log(`⏰ [createRemoteVideoElement ${userId}] Настраиваем периодическую проверку enabled для видео трека`);
+                    let lastEnabledState = track.enabled;
+                    
                     const checkEnabled = () => {
+                        const currentEnabled = track.enabled;
                         const participantCard = document.getElementById(`participant-${userId}`);
-                        if (!participantCard || !participantCard.parentNode) {
-                            // Карточка уже удалена, прекращаем проверку
+                        const cardExists = !!participantCard && !!participantCard.parentNode;
+                        
+                        console.log(`⏰ [checkEnabled ${userId}] Проверка состояния:`);
+                        console.log(`   - track.enabled: ${currentEnabled} (было: ${lastEnabledState})`);
+                        console.log(`   - track.readyState: ${track.readyState}`);
+                        console.log(`   - participantCard exists: ${cardExists}`);
+                        
+                        if (!cardExists) {
+                            console.log(`   ℹ️ Карточка уже удалена, прекращаем проверку`);
                             return;
+                        }
+                        
+                        if (currentEnabled !== lastEnabledState) {
+                            console.log(`🔄 [checkEnabled ${userId}] enabled изменился: ${lastEnabledState} -> ${currentEnabled}`);
+                            lastEnabledState = currentEnabled;
                         }
                         
                         const videoTracks = stream.getVideoTracks();
@@ -523,9 +721,11 @@ class UIManager {
                                                videoTracks[0].readyState === 'live' && 
                                                videoTracks[0].enabled;
                         
+                        console.log(`   - hasActiveVideo: ${hasActiveVideo}`);
+                        
                         if (!hasActiveVideo) {
                             // Видео выключено - обновляем UI
-                            console.log(`🔄 [checkEnabled] Видео выключено для ${userId}, обновляем UI`);
+                            console.log(`🔄 [checkEnabled ${userId}] Видео выключено, вызываем updateVideoOverlays()`);
                             this.updateVideoOverlays();
                         }
                     };
@@ -533,20 +733,27 @@ class UIManager {
                     // Проверяем каждые 500ms
                     const enabledCheckInterval = setInterval(() => {
                         if (!stream.getTracks().includes(track) || track.readyState === 'ended') {
+                            console.log(`⏰ [checkEnabled ${userId}] Трек завершен, очищаем интервал`);
                             clearInterval(enabledCheckInterval);
                             return;
                         }
                         checkEnabled();
                     }, 500);
                     
+                    console.log(`✅ [createRemoteVideoElement ${userId}] Интервал проверки enabled установлен (500ms)`);
+                    
                     // Очищаем интервал когда трек заканчивается
+                    const originalOnEnded = track.onended;
                     track.onended = () => {
+                        console.log(`⏰ [${userId}] Трек завершился, очищаем интервал проверки enabled`);
                         clearInterval(enabledCheckInterval);
+                        if (originalOnEnded) originalOnEnded();
                         console.log(`Трек ${track.kind} завершился для пользователя ${userId}`);
                         this.updateVideoOverlays();
                     };
                 }
             });
+            console.log(`✅ [createRemoteVideoElement ${userId}] Все обработчики событий установлены`);
             
             // ВАЖНО: Обновляем состояние после создания видео элемента
             setTimeout(() => {
@@ -554,8 +761,10 @@ class UIManager {
                     this.videoCallManager.checkEmptyState();
                 }
             }, 100);
+            
+            console.log(`\n🟢 ========== КОНЕЦ СОЗДАНИЯ КАРТОЧКИ ${userId} ==========\n`);
         } else {
-            console.error('❌ Video element not found after creation for:', userId);
+            console.error(`❌❌❌ [createRemoteVideoElement ${userId}] КРИТИЧЕСКАЯ ОШИБКА: Video element not found after creation!`);
         }
     }
 

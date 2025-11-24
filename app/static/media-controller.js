@@ -229,21 +229,42 @@ class MediaController {
 
         if (videoTracks.length > 0) {
             const videoTrack = videoTracks[0];
+            const oldEnabledState = videoTrack.enabled;
             const newEnabledState = !videoTrack.enabled;
+            
+            console.log(`\n🎥 ========== TOGGLE VIDEO ==========`);
+            console.log(`📊 [toggleVideo] Состояние ДО переключения:`);
+            console.log(`   - videoTrack.id: ${videoTrack.id}`);
+            console.log(`   - videoTrack.enabled: ${oldEnabledState}`);
+            console.log(`   - videoTrack.readyState: ${videoTrack.readyState}`);
+            console.log(`   - videoTrack.muted: ${videoTrack.muted}`);
+            console.log(`📊 [toggleVideo] Новое состояние:`);
+            console.log(`   - newEnabledState: ${newEnabledState}`);
+            
             videoTrack.enabled = newEnabledState;
+            console.log(`✅ [toggleVideo] videoTrack.enabled установлен в ${newEnabledState}`);
             
             // ОБНОВЛЯЕМ ФЛАГ
             this.videoCallManager.hasVideoTrack = newEnabledState;
+            console.log(`✅ [toggleVideo] hasVideoTrack установлен в ${newEnabledState}`);
             
             // КРИТИЧЕСКИ ВАЖНО: вызываем replaceTrack для обновления соединения
-            console.log('🔄 [toggleVideo] Обновляем видео трек в соединениях:', newEnabledState);
+            console.log(`🔄 [toggleVideo] Обновляем видео трек в соединениях: ${newEnabledState ? 'ENABLED' : 'DISABLED'}`);
             await this.updateVideoTracksInConnections(newEnabledState ? videoTrack : null);
+            console.log(`✅ [toggleVideo] updateVideoTracksInConnections завершен`);
             
             this.videoCallManager.uiManager.updateControlButtons();
+            console.log(`✅ [toggleVideo] updateControlButtons вызван`);
+            
             // Обновляем UI - WebRTC автоматически обновит треки на другой стороне
+            console.log(`🔄 [toggleVideo] Вызываем updateVideoOverlays()...`);
             this.videoCallManager.uiManager.updateVideoOverlays();
+            console.log(`✅ [toggleVideo] updateVideoOverlays() завершен`);
+            
             this.videoCallManager.checkEmptyState();
             this.videoCallManager.notificationManager.show(newEnabledState ? 'Камера включена' : 'Камера выключена', 'info');
+            
+            console.log(`\n🎥 ========== КОНЕЦ TOGGLE VIDEO ==========\n`);
         }
     }
 
