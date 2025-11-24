@@ -326,507 +326,53 @@ class WebRTCManager {
             // Обработчик получения удаленных треков
             console.log('🔄 [setupPeerConnection] Устанавливаем обработчик ontrack для:', targetUserId);
             peerConnection.ontrack = (event) => {
+                const track = event.track;
                 console.log('🎥 [ontrack] Remote track received from:', targetUserId, 
-                            'Track kind:', event.track.kind, 
-                            'Track id:', event.track.id,
-                            'Track readyState:', event.track.readyState,
-                            'Track enabled:', event.track.enabled,
-                            'Track muted:', event.track.muted,
+                            'Track kind:', track.kind, 
+                            'Track id:', track.id,
+                            'Track readyState:', track.readyState,
+                            'Track enabled:', track.enabled,
                             'Streams count:', event.streams.length);
             
-                // КРИТИЧНО: После получения трека через ontrack, ПРИНУДИТЕЛЬНО проверяем все receivers
-                // Это нужно чтобы убедиться что все треки добавлены в поток и обновить UI
-                const checkAllReceivers = () => {
-                    const allReceivers = peerConnection.getReceivers();
-                    console.log(`🔍 [ontrack] Проверяем все receivers для ${targetUserId}:`, allReceivers.length);
-                    let tracksUpdated = false;
-                    
-                    allReceivers.forEach((receiver, index) => {
-                        const track = receiver.track;
-                        if (track && track.readyState === 'live') {
-                            const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
-                            if (!remoteStream) return;
-                            
-                            // КРИТИЧНО: Для видео треков проверяем что трек enabled
-                            // Если enabled=false, камера выключена пользователем - не добавляем трек
-                            // ВАЖНО: muted - это временное состояние при инициализации, НЕ используем его
-                            if (track.kind === 'video' && !track.enabled) {
-                                console.log(`❌ [ontrack] НЕ добавляем видео трек ${track.id} для ${targetUserId} - enabled=false (камера выключена)`);
-                                // Удаляем трек из потока если он там есть
-                                const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
-                                if (existingTrack) {
-                                    console.log(`🗑️ [ontrack] Удаляем disabled видео трек ${track.id} из потока для ${targetUserId}`);
-                                    remoteStream.removeTrack(existingTrack);
-                                    tracksUpdated = true;
-                                }
-                                return; // Пропускаем этот трек
-                            }
-                            
-                            const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
-                            if (!existingTrack) {
-                                console.log(`✅ [ontrack] Добавляем пропущенный трек ${track.kind} ${track.id} для ${targetUserId}`);
-                                remoteStream.addTrack(track);
-                                tracksUpdated = true;
-                            } else if (existingTrack !== track) {
-                                // Трек заменен - обновляем
-                                console.log(`🔄 [ontrack] Трек ${track.kind} ${track.id} заменен для ${targetUserId}`);
-                                remoteStream.removeTrack(existingTrack);
-                                remoteStream.addTrack(track);
-                                tracksUpdated = true;
-                            }
-                            
-                            if (track.kind === 'video') {
-                                const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                                if (videoElement) {
-                                    if (videoElement.srcObject !== remoteStream) {
-                                        videoElement.srcObject = remoteStream;
-                                    }
-                                    videoElement.play().catch(() => {});
-                                }
-                            }
-                        }
-                    });
-                    
-                    if (tracksUpdated) {
-                        // Сбрасываем кэш и обновляем UI
-                        if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
-                            this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
-                        }
-                        this.videoCallManager.uiManager.updateVideoOverlays();
+                // УПРОЩЕННАЯ ЛОГИКА: Используем поток из event.streams[0] если он есть
+                // WebRTC УЖЕ создал правильный поток за нас!
+                let remoteStream;
+                if (event.streams && event.streams.length > 0) {
+                    // Используем поток, который WebRTC создал
+                    remoteStream = event.streams[0];
+                    console.log(`✅ [ontrack] Используем поток из event.streams[0] для ${targetUserId}`);
+                } else {
+                    // Если потока нет - создаем свой (на всякий случай)
+                    remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
+                    if (!remoteStream) {
+                        remoteStream = new MediaStream();
+                        console.log(`✅ [ontrack] Создан новый remoteStream для ${targetUserId}`);
                     }
-                };
-                
-                // Проверяем сразу и через небольшую задержку
-                checkAllReceivers();
-                setTimeout(checkAllReceivers, 100);
-                setTimeout(checkAllReceivers, 300);
-            
-                // Создаем или получаем удаленный поток для этого пользователя
-                // КРИТИЧНО: remoteStream должен быть ОТДЕЛЬНЫМ потоком, НЕ localStream
-                if (!this.videoCallManager.remoteStreams.has(targetUserId)) {
-                    const remoteStream = new MediaStream();
-                    // ВАЖНО: Проверяем, что remoteStream не содержит треков из localStream
-                    console.log(`✅ [ontrack] Создан новый remoteStream для ${targetUserId}`);
-                    this.videoCallManager.remoteStreams.set(targetUserId, remoteStream);
-                    // ВАЖНО: НЕ создаем карточку сразу - она будет создана только когда появится активный видео трек
-                    // this.videoCallManager.uiManager.createRemoteVideoElement(targetUserId, remoteStream);
                 }
-            
-                // УПРОЩЕННАЯ ЛОГИКА: ontrack только добавляет трек в поток
-                // Вся логика скрытия/показа карточек и управления srcObject - в updateVideoOverlays()
-                const remoteStream = this.videoCallManager.remoteStreams.get(targetUserId);
+                
+                // Сохраняем поток
+                this.videoCallManager.remoteStreams.set(targetUserId, remoteStream);
                 
                 // КРИТИЧНО: Проверяем, что remoteStream НЕ является localStream
                 if (remoteStream === this.videoCallManager.localStream) {
                     console.error(`❌ [ontrack] КРИТИЧЕСКАЯ ОШИБКА: remoteStream это localStream для ${targetUserId}!`);
-                    // Создаем новый правильный remoteStream
-                    const newRemoteStream = new MediaStream();
-                    this.videoCallManager.remoteStreams.set(targetUserId, newRemoteStream);
-                    // Обновляем videoElement
-                    const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                    if (videoElement) {
-                        videoElement.srcObject = newRemoteStream;
-                    }
-                    return; // Выходим, не обрабатываем трек с неправильным потоком
+                    remoteStream = new MediaStream();
+                    this.videoCallManager.remoteStreams.set(targetUserId, remoteStream);
                 }
-                const track = event.track;
                 
-                // Если трек null (replaceTrack(null) был вызван), удаляем все видео треки из потока
+                // Если трек null - удаляем все видео треки
                 if (!track) {
                     console.log(`🗑️ [ontrack] Трек null получен для ${targetUserId}, удаляем все видео треки из потока`);
                     const videoTracks = remoteStream.getVideoTracks();
                     videoTracks.forEach(vt => remoteStream.removeTrack(vt));
-                    // Обновляем UI - updateVideoOverlays скроет карточку
                     this.videoCallManager.uiManager.updateVideoOverlays();
                     this.videoCallManager.checkEmptyState();
                     return;
                 }
                 
-                // Если трек уже есть в потоке, обновляем его
-                const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
-                if (existingTrack && existingTrack !== track) {
-                    remoteStream.removeTrack(existingTrack);
-                }
-                
-                // УПРОЩЕННАЯ ЛОГИКА: Добавляем треки в поток ВСЕГДА если live (даже если disabled!)
-                // Управление отображением через enabled/muted, а не через удаление треков
-                if (!remoteStream.getTracks().some(t => t.id === track.id)) {
-                    if (track.kind === 'video') {
-                        // КРИТИЧНО: Добавляем ТОЛЬКО если enabled=true И НЕ muted (камера включена)
-                        // Если enabled=false - камера выключена пользователем
-                        // Если muted=true - источник недоступен (камера выключена)
-                        // ВАЖНО: muted=true означает что источник недоступен - НЕ добавляем такой трек
-                        if (track.readyState === 'live' && track.enabled && !track.muted) {
-                            // ВАЖНО: Создаем карточку только когда появляется активный видео трек (enabled=true, muted=false)
-                            const participantCard = document.getElementById(`participant-${targetUserId}`);
-                            if (!participantCard) {
-                                console.log(`✅ [ontrack] Создаем карточку для ${targetUserId} - появился активный видео трек (enabled=true, muted=false)`);
-                                this.videoCallManager.uiManager.createRemoteVideoElement(targetUserId, remoteStream);
-                            }
-                            
-                            remoteStream.addTrack(track);
-                            console.log(`✅ [ontrack] Видео трек ${track.id} для ${targetUserId} добавлен в поток (enabled=${track.enabled}, muted=${track.muted})`);
-                            console.log(`✅ [ontrack] RemoteStream теперь имеет ${remoteStream.getTracks().length} треков:`, remoteStream.getTracks().map(t => `${t.kind}:${t.id}:enabled=${t.enabled}:muted=${t.muted}:readyState=${t.readyState}`));
-                            
-                            // КРИТИЧНО: Убеждаемся, что videoElement существует и обновляем его srcObject
-                            const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                            if (videoElement) {
-                                if (videoElement.srcObject !== remoteStream) {
-                                    console.log(`🔄 [ontrack] Устанавливаем srcObject для videoElement ${targetUserId}`);
-                                    videoElement.srcObject = remoteStream;
-                                }
-                                // Пробуем воспроизвести видео (даже если disabled - для будущей активации)
-                                videoElement.play().catch(err => {
-                                    if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
-                                        console.warn(`⚠️ [ontrack] Ошибка play для ${targetUserId}:`, err);
-                                    }
-                                });
-                            }
-                            
-                            // КРИТИЧНО: Сбрасываем кэш состояния для принудительного обновления UI
-                            // Это нужно чтобы UI обновился даже если трек пришел с muted=true
-                            if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
-                                this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
-                            }
-                            
-                            // КРИТИЧНО: Принудительно проверяем ВСЕ receivers и обновляем поток
-                            // Это нужно чтобы убедиться что все треки добавлены в поток
-                            const allReceivers = peerConnection.getReceivers();
-                            allReceivers.forEach(receiver => {
-                                const receiverTrack = receiver.track;
-                                if (receiverTrack && receiverTrack.readyState === 'live') {
-                                    if (!remoteStream.getTracks().some(t => t.id === receiverTrack.id)) {
-                                        remoteStream.addTrack(receiverTrack);
-                                        console.log(`✅ [ontrack] Добавлен трек ${receiverTrack.kind} ${receiverTrack.id} из receivers для ${targetUserId}`);
-                                    }
-                                }
-                            });
-                            
-                            // Обновляем videoElement (используем уже объявленную переменную выше)
-                            if (videoElement) {
-                                if (videoElement.srcObject !== remoteStream) {
-                                    videoElement.srcObject = remoteStream;
-                                }
-                                videoElement.play().catch(() => {});
-                            }
-                            
-                            // КРИТИЧНО: Сбрасываем кэш и обновляем UI принудительно
-                            // Это нужно чтобы UI обновился даже если трек пришел с muted=true
-                            if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
-                                this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
-                            }
-                            
-                            // Обновляем UI сразу и через небольшую задержку для надежности
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                            setTimeout(() => {
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                            }, 100);
-                            setTimeout(() => {
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                            }, 300);
-                        } else {
-                            console.log(`⚠️ [ontrack] Видео трек ${track.id} для ${targetUserId} не live (readyState=${track.readyState}), не добавляем в поток`);
-                        }
-                    } else if (track.kind === 'audio') {
-                        // Для аудио: добавляем если live
-                        if (track.readyState === 'live') {
-                            remoteStream.addTrack(track);
-                            console.log(`✅ [ontrack] Аудио трек ${track.id} для ${targetUserId} добавлен в поток`);
-                            // Обновляем UI
-                            setTimeout(() => {
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                            }, 100);
-                        } else {
-                            console.log(`⚠️ [ontrack] Аудио трек ${track.id} для ${targetUserId} не live (readyState=${track.readyState}), не добавляем в поток`);
-                        }
-                    }
-                    
-                    // Простые обработчики: только добавляют/удаляют треки из потока
-                    track.onended = () => {
-                        console.log(`🗑️ [ontrack] Трек ${track.kind} завершился для ${targetUserId}`);
-                        if (remoteStream.getTracks().includes(track)) {
-                            remoteStream.removeTrack(track);
-                        }
-                        this.videoCallManager.uiManager.updateVideoOverlays();
-                        this.videoCallManager.checkEmptyState();
-                    };
-                    
-                    track.onmute = () => {
-                        console.log(`🔇 [ontrack] Трек ${track.kind} muted для ${targetUserId}`);
-                        // НЕ удаляем трек из потока при mute - просто обновляем UI
-                        // Трек остается в потоке, управление через enabled/muted
-                        if (track.kind === 'video') {
-                            // Обновляем UI чтобы показать оверлей "камера выключена"
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                        }
-                    };
-                    
-                    track.onunmute = () => {
-                        console.log(`🔊 [ontrack] Трек ${track.kind} unmuted для ${targetUserId}`);
-                        // Для видео треков: убеждаемся что трек в потоке
-                        if (track.kind === 'video' && track.readyState === 'live') {
-                            // Если трека нет в потоке - добавляем его
-                            if (!remoteStream.getTracks().includes(track)) {
-                                console.log(`✅ [ontrack] Добавляем видео трек в поток после unmute для ${targetUserId}`);
-                                remoteStream.addTrack(track);
-                            }
-                            
-                            // КРИТИЧНО: Принудительно проверяем ВСЕ receivers и обновляем поток
-                            const allReceivers = peerConnection.getReceivers();
-                            allReceivers.forEach(receiver => {
-                                const receiverTrack = receiver.track;
-                                if (receiverTrack && receiverTrack.kind === 'video' && receiverTrack.readyState === 'live') {
-                                    if (!remoteStream.getTracks().some(t => t.id === receiverTrack.id)) {
-                                        remoteStream.addTrack(receiverTrack);
-                                    }
-                                }
-                            });
-                            
-                            // Обновляем videoElement
-                            const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                            if (videoElement) {
-                                if (videoElement.srcObject !== remoteStream) {
-                                    videoElement.srcObject = remoteStream;
-                                }
-                                videoElement.play().catch(() => {});
-                            }
-                            
-                            // КРИТИЧНО: Сбрасываем кэш состояния для принудительного обновления UI
-                            if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
-                                this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
-                            }
-                            
-                            // Обновляем UI несколько раз для надежности
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                            setTimeout(() => {
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                            }, 50);
-                            setTimeout(() => {
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                            }, 200);
-                        }
-                    };
-                    
-                    
-                    // Отслеживаем изменения enabled через периодическую проверку
-                    // ВАЖНО: Работает для всех треков, даже если они не были добавлены в поток
-                    let lastEnabled = track.enabled;
-                    let lastMuted = track.muted;
-                    const checkEnabled = () => {
-                        // Проверяем, что трек все еще существует (не ended)
-                        if (track.readyState === 'ended') {
-                            return; // Трек завершился
-                        }
-                        
-                        // Проверяем изменения enabled и muted
-                        // КРИТИЧНО: muted не влияет на активность - это временное состояние браузера
-                        if (track.enabled !== lastEnabled || track.muted !== lastMuted) {
-                            console.log(`🔄 [ontrack] Трек ${track.kind} состояние изменилось для ${targetUserId}: enabled ${lastEnabled}->${track.enabled}, muted ${lastMuted}->${track.muted}`);
-                            const wasMuted = lastMuted;
-                            const isNowActive = track.enabled && track.readyState === 'live';
-                            lastEnabled = track.enabled;
-                            lastMuted = track.muted;
-                            
-                            // Проверяем состояние в receivers и синхронизируем
-                            const checkResult = this.checkAndSyncTrackWithReceivers(targetUserId, track);
-                            
-                            // ВАЖНО: НЕ удаляем треки если они просто disabled или muted!
-                            // Удаляем ТОЛЬКО если трек ended
-                            // Управление отображением через enabled/muted, а не через удаление треков
-                            if (track.readyState === 'ended') {
-                                // Трек ended - удаляем из потока
-                                if (track.kind === 'video' && remoteStream.getTracks().includes(track)) {
-                                    remoteStream.removeTrack(track);
-                                    this.videoCallManager.uiManager.updateVideoOverlays();
-                                    this.videoCallManager.checkEmptyState();
-                                }
-                            } else if (track.kind === 'video' && track.readyState === 'live') {
-                                // Трек live - проверяем enabled
-                                if (track.enabled) {
-                                    // Трек enabled - убеждаемся что он в потоке
-                                    if (!remoteStream.getTracks().includes(track)) {
-                                        // Трека нет в потоке - добавляем его
-                                        remoteStream.addTrack(track);
-                                    }
-                                } else {
-                                    // Трек disabled - удаляем из потока (камера выключена)
-                                    if (remoteStream.getTracks().includes(track)) {
-                                        remoteStream.removeTrack(track);
-                                        console.log(`🗑️ [ontrack checkEnabled] Видео трек удален из потока для ${targetUserId} - камера выключена (enabled=false)`);
-                                        this.videoCallManager.uiManager.updateVideoOverlays();
-                                    }
-                                }
-                                
-                                // КРИТИЧНО: Если трек стал активным (muted изменился с true на false) - принудительно обновляем UI
-                                // Это нужно для обновления UI когда трек становится unmuted
-                                if (wasMuted && !track.muted && isNowActive) {
-                                    console.log(`✅ [ontrack checkEnabled] Видео трек стал активным для ${targetUserId}, принудительно обновляем UI`);
-                                    
-                                    // Принудительно проверяем все receivers
-                                    const allReceivers = peerConnection.getReceivers();
-                                    allReceivers.forEach(receiver => {
-                                        const receiverTrack = receiver.track;
-                                        if (receiverTrack && receiverTrack.readyState === 'live') {
-                                            if (!remoteStream.getTracks().some(t => t.id === receiverTrack.id)) {
-                                                remoteStream.addTrack(receiverTrack);
-                                            }
-                                        }
-                                    });
-                                    
-                                    // Обновляем videoElement
-                                    const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                                    if (videoElement) {
-                                        if (videoElement.srcObject !== remoteStream) {
-                                            videoElement.srcObject = remoteStream;
-                                        }
-                                        videoElement.play().catch(() => {});
-                                    }
-                                    
-                                    // Сбрасываем кэш состояния для принудительного обновления
-                                    if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
-                                        this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
-                                    }
-                                }
-                                
-                                // КРИТИЧНО: Обновляем UI при ЛЮБОМ изменении состояния (enabled/muted)
-                                // Это нужно чтобы показывать/скрывать видео или оверлей
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                                // Еще раз через небольшую задержку для надежности
-                                setTimeout(() => {
-                                    this.videoCallManager.uiManager.updateVideoOverlays();
-                                }, 50);
-                                setTimeout(() => {
-                                    this.videoCallManager.uiManager.updateVideoOverlays();
-                                }, 200);
-                            }
-                        }
-                        
-                        // Продолжаем проверять пока трек live (независимо от того, в потоке он или нет)
-                        if (track.readyState === 'live') {
-                            setTimeout(checkEnabled, 100); // Уменьшил интервал для более быстрой реакции
-                        }
-                    };
-                    
-                    // Запускаем проверку enabled для всех треков
-                    if (track.readyState === 'live') {
-                        setTimeout(checkEnabled, 100); // Уменьшил интервал для более быстрой реакции
-                    }
-                    
-                    // ВАЖНО: Периодически проверяем состояние трека и обновляем UI
-                    // Это нужно для синхронизации когда трек становится активным/неактивным
-                    let lastPeriodicEnabled = track.enabled;
-                    let lastPeriodicMuted = track.muted;
-                    const periodicCheck = () => {
-                        // Проверяем, что трек все еще существует (не ended)
-                        if (track.readyState === 'ended') {
-                            return; // Трек завершился
-                        }
-                        
-                        // Проверяем изменения enabled/muted
-                        // КРИТИЧНО: muted не влияет на активность - это временное состояние браузера
-                        if (track.enabled !== lastPeriodicEnabled || track.muted !== lastPeriodicMuted) {
-                            console.log(`🔄 [periodicCheck] Состояние трека ${track.kind} изменилось для ${targetUserId}: enabled ${lastPeriodicEnabled}->${track.enabled}, muted ${lastPeriodicMuted}->${track.muted}`);
-                            const wasMuted = lastPeriodicMuted;
-                            const isNowActive = track.enabled && track.readyState === 'live';
-                            lastPeriodicEnabled = track.enabled;
-                            lastPeriodicMuted = track.muted;
-                            
-                            // Убеждаемся что трек в потоке (если live и enabled)
-                            if (track.kind === 'video' && track.readyState === 'live') {
-                                if (track.enabled && !remoteStream.getTracks().includes(track)) {
-                                    remoteStream.addTrack(track);
-                                } else if (!track.enabled && remoteStream.getTracks().includes(track)) {
-                                    // Трек disabled - удаляем из потока (камера выключена)
-                                    remoteStream.removeTrack(track);
-                                    console.log(`🗑️ [periodicCheck] Видео трек удален из потока для ${targetUserId} - камера выключена (enabled=false)`);
-                                    this.videoCallManager.uiManager.updateVideoOverlays();
-                                }
-                            }
-                            
-                            // КРИТИЧНО: Если трек стал активным (muted изменился с true на false) - принудительно обновляем UI
-                            // Это нужно для обновления UI когда трек становится unmuted
-                            if (track.kind === 'video' && wasMuted && !track.muted && isNowActive) {
-                                console.log(`✅ [periodicCheck] Видео трек стал активным для ${targetUserId}, принудительно обновляем UI`);
-                                
-                                // Принудительно проверяем все receivers
-                                const allReceivers = peerConnection.getReceivers();
-                                allReceivers.forEach(receiver => {
-                                    const receiverTrack = receiver.track;
-                                    if (receiverTrack && receiverTrack.readyState === 'live') {
-                                        if (!remoteStream.getTracks().some(t => t.id === receiverTrack.id)) {
-                                            remoteStream.addTrack(receiverTrack);
-                                        }
-                                    }
-                                });
-                                
-                                // Обновляем videoElement
-                                const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
-                                if (videoElement) {
-                                    if (videoElement.srcObject !== remoteStream) {
-                                        videoElement.srcObject = remoteStream;
-                                    }
-                                    videoElement.play().catch(() => {});
-                                }
-                                
-                                // Сбрасываем кэш состояния для принудительного обновления
-                                if (this.videoCallManager.uiManager._lastVideoOverlaysState) {
-                                    this.videoCallManager.uiManager._lastVideoOverlaysState.delete(targetUserId);
-                                }
-                            }
-                            
-                            // Обновляем UI при изменении состояния
-                            this.videoCallManager.uiManager.updateVideoOverlays();
-                            // Еще раз через небольшую задержку для надежности
-                            setTimeout(() => {
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                            }, 50);
-                            setTimeout(() => {
-                                this.videoCallManager.uiManager.updateVideoOverlays();
-                            }, 200);
-                        }
-                        
-                        // Продолжаем проверять пока трек live
-                        if (track.readyState === 'live') {
-                            setTimeout(periodicCheck, 200); // Уменьшил интервал для более быстрой реакции
-                        }
-                    };
-                    
-                    // Запускаем периодическую проверку для всех треков
-                    if (track.readyState === 'live') {
-                        setTimeout(periodicCheck, 500);
-                    }
-                }
-                
-                // ВАЖНО: Обновляем UI - updateVideoOverlays проверит receivers и покажет/скроет карточку
-                // ВАЖНО: Для видео треков обновляем UI с небольшой задержкой, чтобы трек успел активироваться
-                if (track.kind === 'video') {
-                    // Для видео треков - обновляем сразу и с задержкой
-                    // ВАЖНО: Если трек был добавлен в поток, сразу обновляем UI
-                    const wasAdded = remoteStream.getTracks().some(t => t.id === track.id);
-                    if (wasAdded) {
-                        this.videoCallManager.uiManager.updateVideoOverlays();
-                    }
-                    
-                    setTimeout(() => {
-                        this.videoCallManager.uiManager.updateVideoOverlays();
-                        this.videoCallManager.checkEmptyState();
-                    }, 200);
-                    // Дополнительная проверка через 500мс для случая первого подключения
-                    setTimeout(() => {
-                        this.videoCallManager.uiManager.updateVideoOverlays();
-                    }, 500);
-                    // Еще одна проверка через 1000мс для надежности
-                    setTimeout(() => {
-                        this.videoCallManager.uiManager.updateVideoOverlays();
-                    }, 1000);
-                } else {
-                    // Для аудио треков - обновляем сразу
-                    this.videoCallManager.uiManager.updateVideoOverlays();
-                    setTimeout(() => {
-                        this.videoCallManager.uiManager.updateVideoOverlays();
-                        this.videoCallManager.checkEmptyState();
-                    }, 100);
-                }
+                // WebRTC САМ управляет треками в потоке!
+                // Просто обновляем UI - WebRTC автоматически добавит/удалит треки
+                this.videoCallManager.uiManager.updateVideoOverlays();
             };
         
             // Обработчик изменения состояния соединения
@@ -839,30 +385,10 @@ class WebRTCManager {
                     console.log('✅ WebRTC connection established!');
                     // КРИТИЧНО: После установки соединения синхронизируем треки
                     // Это нужно чтобы увидеть видео другого пользователя
-                    // Делаем это несколько раз с разными задержками для надежности
-                    setTimeout(() => {
-                        this.syncTracksAfterUserJoined(targetUserId);
-                    }, 200);
-                    setTimeout(() => {
-                        this.syncTracksAfterUserJoined(targetUserId);
-                    }, 1000);
-                    setTimeout(() => {
-                        this.syncTracksAfterUserJoined(targetUserId);
-                    }, 3000);
-                } else if (state === 'disconnected') {
-                    this.videoCallManager.notificationManager.show('Звонок отключен', 'warning');
-                } else if (state === 'failed') {
-                    console.error('❌ Connection failed - attempting ICE restart...');
-                    this.videoCallManager.notificationManager.show('Обнаружены проблемы с соединением', 'warning');
-                
-                    // Пытаемся перезапустить ICE через 3 секунды
-                    setTimeout(() => {
-                        if (this.videoCallManager.remoteUsers.has(targetUserId) && 
-                            peerConnection.connectionState === 'failed') {
-                            console.log('🔄 Attempting ICE restart for', targetUserId);
-                            this.createOffer(targetUserId);
-                        }
-                    }, 3000);
+                    this.syncTracksAfterUserJoined(targetUserId);
+                } else if (state === 'disconnected' || state === 'failed') {
+                    console.log('❌ WebRTC connection lost');
+                    this.videoCallManager.notificationManager.show('Соединение потеряно', 'error');
                 }
             };
         
@@ -875,41 +401,25 @@ class WebRTCManager {
                     console.log('✅ ICE connection successful!');
                     // КРИТИЧНО: После установки ICE соединения синхронизируем треки
                     // Это нужно чтобы увидеть видео другого пользователя
-                    // Делаем это несколько раз с разными задержками для надежности
-                    setTimeout(() => {
-                        this.syncTracksAfterUserJoined(targetUserId);
-                    }, 200);
-                    setTimeout(() => {
-                        this.syncTracksAfterUserJoined(targetUserId);
-                    }, 1000);
-                    setTimeout(() => {
-                        this.syncTracksAfterUserJoined(targetUserId);
-                    }, 3000);
-                } else if (iceState === 'disconnected') {
-                    console.warn('⚠️ ICE connection disconnected');
-                } else if (iceState === 'failed') {
-                    console.error('❌ ICE connection failed - attempting restart');
-                    // Пытаемся перезапустить ICE через renegotiation
-                    setTimeout(() => {
-                        if (this.videoCallManager.remoteUsers.has(targetUserId)) {
-                            const pc = this.videoCallManager.remoteUsers.get(targetUserId);
-                            if (pc.iceConnectionState === 'failed' && pc.signalingState === 'stable') {
-                                console.log('🔄 Attempting ICE restart via renegotiation for', targetUserId);
-                                this.createOffer(targetUserId).catch(err => {
-                                    console.error('Error during ICE restart:', err);
-                                });
-                            }
-                        }
-                    }, 2000);
+                    this.syncTracksAfterUserJoined(targetUserId);
+                } else if (iceState === 'disconnected' || iceState === 'failed') {
+                    console.log('❌ ICE connection lost');
                 }
             };
         
             // Обработчик необходимости переговоров (renegotiation)
             peerConnection.onnegotiationneeded = () => {
-                console.log('Negotiation needed for:', targetUserId);
                 // Не запускаем автоматически, чтобы избежать конфликтов
                 // Будем запускать вручную когда нужно
             };
+        
+            // Обработчик изменения состояния ICE gathering
+            peerConnection.onicegatheringstatechange = () => {
+                console.log('ICE gathering state for', targetUserId, ':', 
+                            peerConnection.iceGatheringState);
+            };
+        
+            // Сохраняем соединение в Map
         
             // Обработчик изменения состояния ICE gathering
             peerConnection.onicegatheringstatechange = () => {

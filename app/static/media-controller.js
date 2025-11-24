@@ -228,41 +228,20 @@ class MediaController {
         }
 
         if (videoTracks.length > 0) {
-            const enabled = !videoTracks[0].enabled;
-            videoTracks[0].enabled = enabled;
+            const videoTrack = videoTracks[0];
+            const enabled = !videoTrack.enabled;
+            videoTrack.enabled = enabled;
             
             // ОБНОВЛЯЕМ ФЛАГ
             this.videoCallManager.hasVideoTrack = enabled;
             
-            // ЕСЛИ выключаем камеру - удаляем видео-трек из соединений
-            if (!enabled) {
-                console.log('🔄 [toggleVideo] Выключаем камеру, вызываем updateVideoTracksInConnections(null)');
-                await this.updateVideoTracksInConnections(null);
-                // ВАЖНО: Карточки других участников скроются автоматически когда придет трек null в ontrack
-                // Принудительно обновляем UI после небольшой задержки, чтобы изменения применились
-                setTimeout(() => {
-                    this.videoCallManager.uiManager.updateVideoOverlays();
-                    this.videoCallManager.checkEmptyState();
-                }, 100);
-            } else {
-                // ЕСЛИ включаем камеру - добавляем видео-трек в соединения
-                console.log('🎥 Включаем камеру, обновляем треки в соединениях...');
-                await this.updateVideoTracksInConnections(videoTracks[0]);
-                // ВАЖНО: После обновления треков нужно обновить UI с задержкой
-                // чтобы дать треку время активироваться
-                setTimeout(() => {
-                    this.videoCallManager.uiManager.updateVideoOverlays();
-                    this.videoCallManager.checkEmptyState();
-                }, 200);
-            }
+            // WebRTC САМ разошлет изменение track.enabled другим участникам!
+            // Не нужно вызывать replaceTrack(null) - просто enabled=false достаточно
             
             this.videoCallManager.uiManager.updateControlButtons();
-            // ВАЖНО: Обновляем UI сразу и с задержкой для надежности
+            // Обновляем UI - WebRTC автоматически обновит треки на другой стороне
             this.videoCallManager.uiManager.updateVideoOverlays();
-            setTimeout(() => {
-                this.videoCallManager.uiManager.updateVideoOverlays();
-                this.videoCallManager.checkEmptyState();
-            }, 300);
+            this.videoCallManager.checkEmptyState();
             this.videoCallManager.notificationManager.show(enabled ? 'Камера включена' : 'Камера выключена', 'info');
         }
     }
