@@ -618,15 +618,15 @@ class WebRTCManager {
                     
                     console.log(`🔍 [syncTracksAfterUserJoined ${targetUserId}] Receiver ${index}: kind=${track.kind}, enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
                     
-                    // КРИТИЧНО: Добавляем треки ТОЛЬКО если enabled=true
+                    // КРИТИЧНО: Добавляем треки ТОЛЬКО если enabled=true И НЕ muted
                     // Если enabled=false - устройство выключено пользователем
-                    // ВАЖНО: muted - это временное состояние браузера, не влияет на добавление трека
-                    if (track.readyState === 'live' && track.enabled) {
-                        // ВАЖНО: Создаем карточку только когда появляется активный видео трек (enabled=true)
+                    // Если muted=true - камера выключена, данные не приходят, карточку НЕ создаем
+                    if (track.readyState === 'live' && track.enabled && !track.muted) {
+                        // ВАЖНО: Создаем карточку только когда появляется активный видео трек (enabled=true И НЕ muted)
                         if (track.kind === 'video') {
                             const participantCard = document.getElementById(`participant-${targetUserId}`);
                             if (!participantCard) {
-                                console.log(`✅ [syncTracksAfterUserJoined] Создаем карточку для ${targetUserId} - появился активный видео трек (enabled=true)`);
+                                console.log(`✅ [syncTracksAfterUserJoined] Создаем карточку для ${targetUserId} - появился активный видео трек (enabled=true, muted=false)`);
                                 this.videoCallManager.uiManager.createRemoteVideoElement(targetUserId, remoteStream);
                             }
                             // Добавляем трек в поток только если enabled
@@ -732,11 +732,11 @@ class WebRTCManager {
                 let tracksAdded = false;
                 receiverTracks.forEach(track => {
                     if (!streamTracks.some(t => t.id === track.id)) {
-                        // КРИТИЧНО: Для видео треков проверяем что трек enabled
+                        // КРИТИЧНО: Для видео треков проверяем что трек enabled И НЕ muted
                         // Если enabled=false - камера выключена пользователем
-                        // ВАЖНО: muted - это временное состояние браузера, не влияет на добавление трека
-                        if (track.kind === 'video' && !track.enabled) {
-                            console.log(`❌ [syncTracksAfterUserJoined periodic] НЕ добавляем видео трек ${track.id} для ${targetUserId} - enabled=${track.enabled} (камера выключена)`);
+                        // Если muted=true - камера выключена, данные не приходят, карточку НЕ создаем
+                        if (track.kind === 'video' && (!track.enabled || track.muted)) {
+                            console.log(`❌ [syncTracksAfterUserJoined periodic] НЕ добавляем видео трек ${track.id} для ${targetUserId} - enabled=${track.enabled}, muted=${track.muted} (камера выключена)`);
                             return; // Пропускаем этот трек
                         }
                         
