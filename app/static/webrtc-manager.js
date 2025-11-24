@@ -379,9 +379,36 @@ class WebRTCManager {
             
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
             
+            // Проверяем состояние соединения
+            if (peerConnection.signalingState === 'closed' || peerConnection.connectionState === 'closed') {
+                console.warn('⚠️ [handleWebRTCOffer] Connection is closed, recreating for', data.sender_id);
+                // Пересоздаем соединение
+                peerConnection.close();
+                this.videoCallManager.remoteUsers.delete(data.sender_id);
+                this.setupPeerConnection(data.sender_id);
+                // Повторяем обработку offer
+                return this.handleWebRTCOffer(data);
+            }
+            
             // Устанавливаем полученное предложение (offer) как удаленное описание
             await peerConnection.setRemoteDescription(data.offer);
             console.log('✅ [handleWebRTCOffer] Remote description установлено для', data.sender_id);
+            
+            // Добавляем отложенные ICE кандидаты после установки remote description
+            if (peerConnection._pendingIceCandidates && peerConnection._pendingIceCandidates.length > 0) {
+                console.log(`🔄 [handleWebRTCOffer] Adding ${peerConnection._pendingIceCandidates.length} pending ICE candidates`);
+                for (const candidate of peerConnection._pendingIceCandidates) {
+                    try {
+                        await peerConnection.addIceCandidate(candidate);
+                    } catch (err) {
+                        // Игнорируем ошибки "Unknown ufrag" - это нормально
+                        if (!err.message || !err.message.includes('Unknown ufrag')) {
+                            console.warn('⚠️ [handleWebRTCOffer] Error adding pending ICE candidate:', err);
+                        }
+                    }
+                }
+                peerConnection._pendingIceCandidates = [];
+            }
             
             // Создаем answer
             const answer = await peerConnection.createAnswer();
@@ -414,10 +441,40 @@ class WebRTCManager {
             }
             
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
+            
+            // Проверяем состояние соединения
+            if (peerConnection.signalingState === 'closed' || peerConnection.connectionState === 'closed') {
+                console.warn('⚠️ [handleWebRTCAnswer] Connection is closed, ignoring answer');
+                return;
+            }
+            
             await peerConnection.setRemoteDescription(data.answer);
             console.log('✅ [handleWebRTCAnswer] Remote description set successfully для', data.sender_id);
             
+            // Добавляем отложенные ICE кандидаты после установки remote description
+            if (peerConnection._pendingIceCandidates && peerConnection._pendingIceCandidates.length > 0) {
+                console.log(`🔄 [handleWebRTCAnswer] Adding ${peerConnection._pendingIceCandidates.length} pending ICE candidates`);
+                for (const candidate of peerConnection._pendingIceCandidates) {
+                    try {
+                        await peerConnection.addIceCandidate(candidate);
+                    } catch (err) {
+                        // Игнорируем ошибки "Unknown ufrag" - это нормально
+                        if (!err.message || !err.message.includes('Unknown ufrag')) {
+                            console.warn('⚠️ [handleWebRTCAnswer] Error adding pending ICE candidate:', err);
+                        }
+                    }
+                }
+                peerConnection._pendingIceCandidates = [];
+            }
+            
         } catch (error) {
+            // Обрабатываем ошибку ICE restart - это означает что соединение было пересоздано
+            if (error.message && error.message.includes('ICE restart')) {
+                console.warn('⚠️ [handleWebRTCAnswer] ICE restart detected, connection may have been recreated');
+                // Не выбрасываем ошибку дальше - это нормальная ситуация
+                return;
+            }
+            
             console.error('❌ [handleWebRTCAnswer] Ошибка обработки answer от', data.sender_id, ':', error);
             console.error('   - Error name:', error.name);
             console.error('   - Error message:', error.message);
@@ -729,16 +786,23 @@ class WebRTCManager {
             console.log(`🔵 [handleICECandidate] ========== КОНЕЦ ==========`);
             
         } catch (error) {
+            // Игнорируем ошибки "Unknown ufrag" - это нормально если кандидат пришел до установки remote description
+            if (error.message && error.message.includes('Unknown ufrag')) {
+                console.warn('⚠️ [handleICECandidate] Unknown ufrag (candidate arrived before remote description), storing for later');
+                // Сохраняем кандидата для добавления позже
+                if (!peerConnection._pendingIceCandidates) {
+                    peerConnection._pendingIceCandidates = [];
+                }
+                peerConnection._pendingIceCandidates.push(data.candidate);
+                console.log(`📦 [handleICECandidate] Кандидат сохранен. Всего отложенных: ${peerConnection._pendingIceCandidates.length}`);
+                console.log(`🔵 [handleICECandidate] ========== КОНЕЦ (отложено) ==========`);
+                return;
+            }
+            
             console.error(`❌ [handleICECandidate] Ошибка обработки ICE кандидата для ${data.sender_id}:`, error);
             console.error(`   - Error name: ${error.name}`);
             console.error(`   - Error message: ${error.message}`);
             console.log(`🔵 [handleICECandidate] ========== КОНЕЦ (ОШИБКА) ==========`);
-            // Игнорируем ошибки "Unknown ufrag" - это нормально если кандидат пришел до установки remote description
-            if (error.message && error.message.includes('Unknown ufrag')) {
-                console.warn('⚠️ [handleICECandidate] Unknown ufrag (candidate arrived before remote description), ignoring');
-            } else {
-                console.error('Error adding ICE candidate:', error);
-            }
         }
     }
 
