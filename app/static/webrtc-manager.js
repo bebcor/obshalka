@@ -1226,9 +1226,6 @@ class WebRTCManager {
                                     tracksUpdated = true;
                                     console.log(`🔄 [handleWebRTCOffer] Видео трек ${track.id} для ${data.sender_id} заменен в потоке`);
                                 }
-                            } else {
-                                console.log(`❌ [handleWebRTCOffer] НЕ создаем карточку и НЕ добавляем трек для ${data.sender_id} - видео трек неактивен (enabled=${track.enabled}, muted=${track.muted})`);
-                            }
                                 
                                 // КРИТИЧНО: Убеждаемся, что videoElement существует и обновляем его srcObject
                                 const videoElement = document.getElementById(`remoteVideo-${data.sender_id}`);
@@ -1237,15 +1234,15 @@ class WebRTCManager {
                                         console.log(`🔄 [handleWebRTCOffer] Устанавливаем srcObject для videoElement ${data.sender_id}`);
                                         videoElement.srcObject = remoteStream;
                                     }
-                                    // Пробуем воспроизвести видео (даже если disabled - для будущей активации)
+                                    // Пробуем воспроизвести видео
                                     videoElement.play().catch(err => {
                                         if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
                                             console.warn(`⚠️ [handleWebRTCOffer] Ошибка play для ${data.sender_id}:`, err);
                                         }
                                     });
                                 }
-                            } else if (track.readyState !== 'live') {
-                                console.log(`⚠️ [handleWebRTCOffer] Видео трек ${track.id} не live (readyState=${track.readyState}), не добавляем в поток`);
+                            } else {
+                                console.log(`❌ [handleWebRTCOffer] НЕ создаем карточку и НЕ добавляем трек для ${data.sender_id} - видео трек неактивен (enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState})`);
                             }
                         } else if (track.kind === 'audio') {
                             // Для аудио: добавляем если live
@@ -1262,8 +1259,6 @@ class WebRTCManager {
                                     tracksUpdated = true;
                                     console.log(`🔄 [handleWebRTCOffer] Аудио трек ${track.id} для ${data.sender_id} заменен в потоке`);
                                 }
-                            } else if (track.readyState !== 'live') {
-                                console.log(`⚠️ [handleWebRTCOffer] Аудио трек ${track.id} не live (readyState=${track.readyState}), не добавляем в поток`);
                             }
                         }
                     });
@@ -1412,9 +1407,6 @@ class WebRTCManager {
                                     tracksUpdated = true;
                                     console.log(`🔄 [handleWebRTCAnswer] Видео трек ${track.id} для ${data.sender_id} заменен в потоке`);
                                 }
-                            } else {
-                                console.log(`❌ [handleWebRTCAnswer] НЕ создаем карточку и НЕ добавляем трек для ${data.sender_id} - видео трек неактивен (enabled=${track.enabled}, muted=${track.muted})`);
-                            }
                                 
                                 // КРИТИЧНО: Убеждаемся, что videoElement существует и обновляем его srcObject
                                 const videoElement = document.getElementById(`remoteVideo-${data.sender_id}`);
@@ -1423,15 +1415,15 @@ class WebRTCManager {
                                         console.log(`🔄 [handleWebRTCAnswer] Устанавливаем srcObject для videoElement ${data.sender_id}`);
                                         videoElement.srcObject = remoteStream;
                                     }
-                                    // Пробуем воспроизвести видео (даже если disabled - для будущей активации)
+                                    // Пробуем воспроизвести видео
                                     videoElement.play().catch(err => {
                                         if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
                                             console.warn(`⚠️ [handleWebRTCAnswer] Ошибка play для ${data.sender_id}:`, err);
                                         }
                                     });
                                 }
-                            } else if (track.readyState !== 'live') {
-                                console.log(`⚠️ [handleWebRTCAnswer] Видео трек ${track.id} не live (readyState=${track.readyState}), не добавляем в поток`);
+                            } else {
+                                console.log(`❌ [handleWebRTCAnswer] НЕ создаем карточку и НЕ добавляем трек для ${data.sender_id} - видео трек неактивен (enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState})`);
                             }
                         } else if (track.kind === 'audio') {
                             // Для аудио: добавляем если live
@@ -1448,8 +1440,6 @@ class WebRTCManager {
                                     tracksUpdated = true;
                                     console.log(`🔄 [handleWebRTCAnswer] Аудио трек ${track.id} для ${data.sender_id} заменен в потоке`);
                                 }
-                            } else if (track.readyState !== 'live') {
-                                console.log(`⚠️ [handleWebRTCAnswer] Аудио трек ${track.id} не live (readyState=${track.readyState}), не добавляем в поток`);
                             }
                         }
                     });
