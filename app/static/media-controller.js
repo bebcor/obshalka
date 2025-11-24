@@ -235,8 +235,12 @@ class MediaController {
             // ОБНОВЛЯЕМ ФЛАГ
             this.videoCallManager.hasVideoTrack = enabled;
             
-            // WebRTC САМ разошлет изменение track.enabled другим участникам!
-            // Не нужно вызывать replaceTrack(null) - просто enabled=false достаточно
+            // ВАЖНО: обновляем соединения (как было в сложной логике)
+            if (videoTrack.enabled) {
+                await this.updateVideoTracksInConnections(videoTrack);
+            } else {
+                await this.updateVideoTracksInConnections(null);
+            }
             
             this.videoCallManager.uiManager.updateControlButtons();
             // Обновляем UI - WebRTC автоматически обновит треки на другой стороне

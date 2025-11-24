@@ -145,7 +145,33 @@ class WebRTCManager {
                 // Сохраняем поток
                 this.videoCallManager.remoteStreams.set(targetUserId, remoteStream);
                 
-                // Обновляем UI - WebRTC сам управляет треками в потоке
+                // ВАЖНО: добавляем трек сразу, даже если muted
+                const incomingTrack = event.track;
+                if (!remoteStream.getTracks().includes(incomingTrack)) {
+                    remoteStream.addTrack(incomingTrack);
+                }
+                
+                // КРИТИЧЕСКИ ВАЖНО: обработчики событий
+                incomingTrack.onunmute = () => {
+                    console.log(`✅ Трек ${incomingTrack.kind} UNMUTED для ${targetUserId}`);
+                    // Принудительно обновляем UI
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                };
+                
+                incomingTrack.onmute = () => {
+                    console.log(`🔇 Трек ${incomingTrack.kind} MUTED для ${targetUserId}`);
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                };
+                
+                incomingTrack.onended = () => {
+                    console.log(`❌ Трек ${incomingTrack.kind} ENDED для ${targetUserId}`);
+                    if (remoteStream.getTracks().includes(incomingTrack)) {
+                        remoteStream.removeTrack(incomingTrack);
+                    }
+                    this.videoCallManager.uiManager.updateVideoOverlays();
+                };
+                
+                // Обновляем UI
                 this.videoCallManager.uiManager.updateVideoOverlays();
             };
         

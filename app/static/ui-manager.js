@@ -184,6 +184,8 @@ class UIManager {
             let participantCard = document.getElementById(`participant-${userId}`);
             
             // ПРОСТАЯ ПРОВЕРКА: Есть ли активные видео треки?
+            // УБРАТЬ проверку на muted - показываем даже если muted
+            // track.enabled - оставить, это выключение камеры пользователем
             const videoTracks = stream.getVideoTracks();
             const hasActiveVideo = videoTracks.some(track => 
                 track && track.readyState === 'live' && track.enabled
@@ -208,7 +210,22 @@ class UIManager {
                     }
                     videoElement.style.setProperty('display', 'block', 'important');
                     videoElement.setAttribute('playsinline', 'true');
-                    videoElement.play().catch(() => {}); // Игнорируем ошибки play
+                    
+                    // ВАЖНО: пытаемся воспроизвести даже если трек muted
+                    // Периодически пытаемся воспроизвести (как было в сложной логике)
+                    let playAttempts = 0;
+                    const tryPlay = () => {
+                        if (playAttempts < 10 && videoElement.srcObject) {
+                            videoElement.play().catch(error => {
+                                if (error.name !== 'AbortError') {
+                                    console.warn(`⚠️ Ошибка play для ${userId} (попытка ${playAttempts + 1}):`, error);
+                                }
+                                playAttempts++;
+                                setTimeout(tryPlay, 500);
+                            });
+                        }
+                    };
+                    tryPlay();
                 }
             } else {
                 // Нет активного видео - удаляем карточку
@@ -380,7 +397,6 @@ class UIManager {
             // УПРОЩЕНО: Скрываем видео элемент по умолчанию
             videoElement.style.setProperty('display', 'none', 'important');
             videoElement.srcObject = null;
-            
         }
     }
 
