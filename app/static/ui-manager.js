@@ -291,6 +291,13 @@ class UIManager {
                     this.createRemoteVideoElement(userId, stream);
                     participantCard = document.getElementById(`participant-${userId}`);
                     console.log(`✅ [${userId}] Карточка создана: ${!!participantCard}`);
+                    
+                    // КРИТИЧНО: Обновляем переменные после создания карточки
+                    if (participantCard) {
+                        videoElement = document.getElementById(`remoteVideo-${userId}`);
+                        overlay = participantCard.querySelector('.video-overlay');
+                        console.log(`🔄 [${userId}] Обновлены переменные после создания: videoElement=${!!videoElement}, overlay=${!!overlay}`);
+                    }
                 } else {
                     console.log(`ℹ️ [${userId}] Карточка уже существует`);
                 }
@@ -640,6 +647,7 @@ class UIManager {
                 if (track.kind === 'video') {
                     console.log(`⏰ [createRemoteVideoElement ${userId}] Настраиваем периодическую проверку enabled для видео трека`);
                     let lastEnabledState = track.enabled;
+                    console.log(`   - Начальное enabled: ${lastEnabledState}`);
                     
                     // Проверяем каждые 100ms для быстрой реакции
                     const enabledCheckInterval = setInterval(() => {
@@ -651,7 +659,10 @@ class UIManager {
                         
                         const currentEnabled = track.enabled;
                         if (currentEnabled !== lastEnabledState) {
-                            console.log(`\n🔄 [checkEnabled ${userId}] enabled ИЗМЕНИЛСЯ: ${lastEnabledState} -> ${currentEnabled}`);
+                            console.log(`\n🔄🔄🔄 [checkEnabled ${userId}] enabled ИЗМЕНИЛСЯ: ${lastEnabledState} -> ${currentEnabled} 🔄🔄🔄`);
+                            console.log(`   - track.id: ${track.id}`);
+                            console.log(`   - track.readyState: ${track.readyState}`);
+                            console.log(`   - track.muted: ${track.muted}`);
                             lastEnabledState = currentEnabled;
                             this.updateVideoOverlays();
                         }

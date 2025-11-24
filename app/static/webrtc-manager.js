@@ -240,7 +240,7 @@ class WebRTCManager {
                     this.videoCallManager.uiManager.updateVideoOverlays();
                 };
                 
-                // КРИТИЧНО: Отслеживаем изменение enabled через Proxy или периодическую проверку
+                // КРИТИЧНО: Отслеживаем изменение enabled через периодическую проверку
                 // WebRTC не предоставляет событие для изменения enabled
                 if (incomingTrack.kind === 'video') {
                     let lastEnabled = incomingTrack.enabled;
@@ -249,13 +249,17 @@ class WebRTCManager {
                     // Используем периодическую проверку для отслеживания изменения enabled
                     const checkEnabledInterval = setInterval(() => {
                         if (incomingTrack.readyState === 'ended') {
+                            console.log(`⏰ [ontrack ${targetUserId}] Трек завершен, очищаем интервал проверки enabled`);
                             clearInterval(checkEnabledInterval);
                             return;
                         }
                         
                         const currentEnabled = incomingTrack.enabled;
                         if (currentEnabled !== lastEnabled) {
-                            console.log(`\n🔄 [ontrack ${targetUserId}] enabled ИЗМЕНИЛСЯ: ${lastEnabled} -> ${currentEnabled}`);
+                            console.log(`\n🔄🔄🔄 [ontrack ${targetUserId}] enabled ИЗМЕНИЛСЯ: ${lastEnabled} -> ${currentEnabled} 🔄🔄🔄`);
+                            console.log(`   - track.id: ${incomingTrack.id}`);
+                            console.log(`   - track.readyState: ${incomingTrack.readyState}`);
+                            console.log(`   - track.muted: ${incomingTrack.muted}`);
                             lastEnabled = currentEnabled;
                             this.videoCallManager.uiManager.updateVideoOverlays();
                         }
