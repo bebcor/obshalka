@@ -213,18 +213,23 @@ class RoomManager {
         this.showUserNameModal();
     }
 
-    showUserNameModal() {
+    async showUserNameModal() {
         this.videoCallManager.notificationManager.showUserNameModal(
-            (userName) => {
+            async (userName) => {
                 this.videoCallManager.userName = userName;
                 
-                // НЕ устанавливаем isInCall здесь - это будет сделано в handleRoomInfo после подтверждения сервера
+                // КРИТИЧНО: 1. СНАЧАЛА создай локальный поток
+                if (!this.videoCallManager.localStream) {
+                    console.log('🔄 Создаем локальный поток перед присоединением к комнате...');
+                    await this.videoCallManager.mediaController.startAudioOnly();
+                }
+                
+                // 2. ПОТОМ присоединяйся к комнате
+                console.log('✅ Локальный поток готов, присоединяемся к комнате');
                 this.videoCallManager.socket.emit('join_room', {
                     room_id: this.videoCallManager.roomId,
                     user_name: this.videoCallManager.userName
                 });
-                
-                // Медиа теперь включаются автоматически в handleRoomInfo после подтверждения от сервера
             },
             () => {
                 this.videoCallManager.notificationManager.show('Присоединение отменено', 'info');

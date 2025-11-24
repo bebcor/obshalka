@@ -91,30 +91,19 @@ class WebRTCManager {
             // Создаем новый peer connection
             const peerConnection = new RTCPeerConnection(configuration);
         
-            // ДОБАВЛЯЕМ ТОЛЬКО АКТИВНЫЕ ТРЕКИ из текущего локального потока
+            // КРИТИЧНО: ГАРАНТИРУЕМ что локальные треки добавлены
             if (this.videoCallManager.localStream) {
+                console.log('✅ Добавляем локальные треки в соединение для:', targetUserId);
                 this.videoCallManager.localStream.getTracks().forEach(track => {
-                    // ВАЖНО: Добавляем все треки, которые есть в потоке
-                    // Для видео добавляем если трек enabled (независимо от isSharingScreen)
-                    // Для аудио всегда добавляем
-                    const isSharingScreen = this.videoCallManager.isSharingScreen || false;
-                    const shouldAdd = track.kind === 'audio' || 
-                                     (track.kind === 'video' && track.enabled);
-                    
-                    if (shouldAdd) {
-                        console.log(`Adding ${track.kind} track to connection for ${targetUserId}, enabled: ${track.enabled}`);
-                        try {
-                            peerConnection.addTrack(track, this.videoCallManager.localStream);
-                            console.log(`✅ ${track.kind} track added successfully`);
-                        } catch (error) {
-                            console.error(`❌ Error adding ${track.kind} track:`, error);
-                        }
-                    } else {
-                        console.log(`⚠️ Skipping ${track.kind} track (enabled: ${track.enabled})`);
+                    try {
+                        peerConnection.addTrack(track, this.videoCallManager.localStream);
+                        console.log(`✅ Добавлен ${track.kind} трек`);
+                    } catch (error) {
+                        console.error(`❌ Ошибка добавления ${track.kind} трека:`, error);
                     }
                 });
             } else {
-                console.log('⚠️ No local stream available for peer connection');
+                console.warn('⚠️ Локальный поток недоступен при создании соединения');
             }
         
             // Обработчик ICE-кандидатов
@@ -360,6 +349,19 @@ class WebRTCManager {
             console.log('📥 [handleWebRTCOffer] Current signaling state:', this.videoCallManager.remoteUsers.has(data.sender_id) ? 
                 this.videoCallManager.remoteUsers.get(data.sender_id).signalingState : 'no connection');
         
+            // КРИТИЧНО: ЕСЛИ нет локального потока - сначала создай его
+            if (!this.videoCallManager.localStream) {
+                console.log('🔄 Нет локального потока, создаем перед обработкой offer...');
+                await this.videoCallManager.mediaController.startAudioOnly();
+                
+                // ПЕРЕСОЗДАЙ соединение с правильными треками
+                if (this.videoCallManager.remoteUsers.has(data.sender_id)) {
+                    this.videoCallManager.remoteUsers.get(data.sender_id).close();
+                    this.videoCallManager.remoteUsers.delete(data.sender_id);
+                }
+                this.setupPeerConnection(data.sender_id);
+            }
+            
             // Если соединение с этим пользователем еще не создано, создаем его
             if (!this.videoCallManager.remoteUsers.has(data.sender_id)) {
                 console.log('🔄 Peer connection не существует для', data.sender_id, ', создаем...');

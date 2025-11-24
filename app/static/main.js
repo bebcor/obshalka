@@ -938,7 +938,7 @@ class VideoCallManager {
         }
     }
 
-    handleUserJoined(data) {
+    async handleUserJoined(data) {
         console.log('👤 User joined:', data);
         console.log('👤 Current socketId:', this.socketId);
         console.log('👤 Joined user_id:', data.user_id);
@@ -960,20 +960,17 @@ class VideoCallManager {
         }
         
         if (data.user_id !== this.socketId) {
-            console.log('🔄 Создаем peer connection для нового пользователя:', data.user_id);
-            
-            // ВАЖНО: Создаем peer connection сразу
-            this.webrtcManager.setupPeerConnection(data.user_id);
-            
-            // ВАЖНО: Если у нас уже есть локальный поток - добавляем треки в новое соединение
-            if (this.localStream) {
-                console.log('🔄 Новый пользователь присоединился, добавляем треки в соединение...');
-                this.webrtcManager.addTracksToPeerConnection(data.user_id);
+            // КРИТИЧНО: 1. СНАЧАЛА убедись что локальный поток есть
+            if (!this.localStream) {
+                console.log('🔄 Сначала запускаем локальный поток...');
+                await this.mediaController.startAudioOnly();
             }
             
-            // ВАЖНО: Создаем offer СРАЗУ после создания соединения
-            // Это нужно чтобы установить соединение и начать обмен медиа
-            // Небольшая задержка чтобы треки успели добавиться
+            // 2. ПОТОМ создавай peer connection
+            console.log('🔄 Создаем peer connection для нового пользователя:', data.user_id);
+            this.webrtcManager.setupPeerConnection(data.user_id);
+            
+            // 3. И только ПОСЛЕ этого создавай offer
             setTimeout(() => {
                 if (this.remoteUsers.has(data.user_id)) {
                     const peerConnection = this.remoteUsers.get(data.user_id);
