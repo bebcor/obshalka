@@ -204,9 +204,9 @@ def handle_join_room(data):
             emit('error', {'message': 'Room is inactive'}, room=request.sid)
             return
 
-        # КРИТИЧНО: Проверяем лимит участников (30 человек)
+        # КРИТИЧНО: Проверяем лимит участников (8 человек)
         participants_count = len(room.get('participants', {}))
-        if participants_count >= 30:
+        if participants_count >= 8:
             emit('error', {'message': 'Комната переполнена, ищите другую'}, room=request.sid)
             logger.warning(f"Room {room_id} is full ({participants_count} participants)")
             return
