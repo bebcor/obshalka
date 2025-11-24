@@ -453,14 +453,14 @@ class UIManager {
                         console.log(`🔍 [updateVideoOverlays ${userId}] Receiver ${index}: kind=${track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
                         if (track && track.readyState === 'live') {
                             // Для видео: добавляем ТОЛЬКО если live И enabled (камера включена)
-                            // ВАЖНО: muted - это временное состояние при инициализации, НЕ используем его
+                            // ВАЖНО: muted=true означает что источник недоступен - НЕ добавляем такой трек
                             if (track.kind === 'video') {
-                                // КРИТИЧНО: Если enabled=false, камера выключена - не добавляем трек
-                                if (track.enabled) {
-                                    console.log(`✅ [updateVideoOverlays ${userId}] Добавляем видео трек ${track.id} из receiver ${index} в поток (поток был пустой, enabled=${track.enabled})`);
+                                // КРИТИЧНО: Если enabled=false ИЛИ muted=true, камера выключена - не добавляем трек
+                                if (track.enabled && !track.muted) {
+                                    console.log(`✅ [updateVideoOverlays ${userId}] Добавляем видео трек ${track.id} из receiver ${index} в поток (поток был пустой, enabled=${track.enabled}, muted=${track.muted})`);
                                     stream.addTrack(track);
                                 } else {
-                                    console.log(`❌ [updateVideoOverlays ${userId}] НЕ добавляем видео трек ${track.id} из receiver ${index} - enabled=false (камера выключена)`);
+                                    console.log(`❌ [updateVideoOverlays ${userId}] НЕ добавляем видео трек ${track.id} из receiver ${index} - enabled=${track.enabled}, muted=${track.muted} (камера выключена)`);
                                 }
                                 // КРИТИЧНО: Устанавливаем srcObject и вызываем play() сразу
                                 const videoElement = document.getElementById(`remoteVideo-${userId}`);
@@ -511,18 +511,16 @@ class UIManager {
                     const isActive = track.enabled && track.readyState === 'live';
                     hasActiveVideo = isActive; // hasActiveVideo = true только если трек активен (enabled=true)
                     
-                    // КРИТИЧНО: Добавляем трек в поток ТОЛЬКО если он enabled (камера включена)
-                    // Если enabled=false, камера выключена пользователем - не добавляем трек
-                    // ВАЖНО: muted - это временное состояние при инициализации, НЕ используем его
+                    // КРИТИЧНО: Добавляем трек в поток ТОЛЬКО если он enabled И НЕ muted
+                    // Если enabled=false - камера выключена пользователем
+                    // Если muted=true - источник недоступен (камера выключена)
+                    // ВАЖНО: muted=true означает что источник недоступен - НЕ добавляем такой трек
                     const trackInStream = stream.getTracks().find(t => t.id === track.id);
-                    const wasInStream = stream.getVideoTracks().some(t => t.id === track.id);
-                    // КРИТИЧНО: Добавляем трек только если enabled И (!muted ИЛИ трек еще не был в потоке)
-                    // Если muted=true И трек уже был в потоке - камера выключена, источник недоступен
-                    if (!trackInStream && track.enabled && track.readyState === 'live' && (!track.muted || !wasInStream)) {
+                    if (!trackInStream && track.enabled && track.readyState === 'live' && !track.muted) {
                         console.log(`✅ [${userId}] Добавляем видео трек из receivers в поток (enabled=${track.enabled}, muted=${track.muted})`);
                         stream.addTrack(track);
-                    } else if (!trackInStream && (!track.enabled || (track.muted && wasInStream))) {
-                        console.log(`❌ [${userId}] НЕ добавляем видео трек в поток - камера выключена (enabled=${track.enabled}, muted=${track.muted}, wasInStream=${wasInStream})`);
+                    } else if (!trackInStream) {
+                        console.log(`❌ [${userId}] НЕ добавляем видео трек в поток - камера выключена (enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState})`);
                     }
                 }
             } else {
@@ -563,16 +561,21 @@ class UIManager {
                 const receivers = peerConnection.getReceivers();
                 const videoReceiver = receivers.find(receiver => {
                     const track = receiver.track;
-                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
+                    // КРИТИЧНО: Проверяем что трек enabled И НЕ muted
+                    return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
                 });
                 if (videoReceiver && videoReceiver.track) {
                     const track = videoReceiver.track;
-                    const trackInStream = stream.getTracks().find(t => t.id === track.id);
-                    if (!trackInStream) {
-                        console.log(`✅ [updateVideoOverlays ${userId}] Добавляем активный видео трек из receivers в поток (финальная проверка)`);
-                        stream.addTrack(track);
-                        // Обновляем hasActiveVideoInStream после добавления
-                        hasActiveVideo = true; // Трек добавлен, видео активно
+                    // КРИТИЧНО: Проверяем что трек enabled И НЕ muted
+                    if (track.enabled && !track.muted) {
+                        const trackInStream = stream.getTracks().find(t => t.id === track.id);
+                        if (!trackInStream) {
+                            console.log(`✅ [updateVideoOverlays ${userId}] Добавляем активный видео трек из receivers в поток (финальная проверка, enabled=${track.enabled}, muted=${track.muted})`);
+                            stream.addTrack(track);
+                            // Обновляем hasActiveVideoInStream после добавления
+                            hasActiveVideo = true; // Трек добавлен, видео активно
+                        }
+                    }
                         // Обновляем finalVideoTracks для дальнейшей проверки
                         const updatedVideoTracks = stream.getVideoTracks();
                         const updatedHasActiveVideoInStream = updatedVideoTracks.length > 0 && 
@@ -606,11 +609,13 @@ class UIManager {
                             return track && track.kind === 'video' && track.readyState === 'live' && track.enabled;
                         });
                     if (videoReceiver && videoReceiver.track) {
-                        // Есть активный receiver, но его нет в потоке - добавляем
+                        // Есть активный receiver, но его нет в потоке - добавляем ТОЛЬКО если enabled И НЕ muted
                         const track = videoReceiver.track;
-                        console.log(`✅ [updateVideoOverlays ${userId}] Добавляем активный видео трек из receivers в поток (нет в потоке)`);
-                        stream.addTrack(track);
-                        hasActiveVideo = true;
+                        if (track.enabled && !track.muted) {
+                            console.log(`✅ [updateVideoOverlays ${userId}] Добавляем активный видео трек из receivers в поток (нет в потоке, enabled=${track.enabled}, muted=${track.muted})`);
+                            stream.addTrack(track);
+                            hasActiveVideo = true;
+                        }
                     } else {
                         // Нет активного видео - камера выключена
                         hasActiveVideo = false;
@@ -886,13 +891,17 @@ class UIManager {
                 });
                 if (videoReceiver && videoReceiver.track) {
                     const track = videoReceiver.track;
-                    const trackInStream = stream.getTracks().find(t => t.id === track.id);
-                    if (!trackInStream) {
-                        console.log(`✅ [updateVideoOverlays ${userId}] НАЙДЕН активный видео трек в receivers при финальной проверке, добавляем в поток`);
-                        stream.addTrack(track);
-                        foundActiveTrackInReceivers = true;
-                        // НЕ вызываем updateVideoOverlays здесь - это вызовет бесконечный цикл
-                        // Сбрасываем состояние для следующего обновления
+                    // КРИТИЧНО: Проверяем что трек enabled И НЕ muted
+                    if (track.enabled && !track.muted) {
+                        const trackInStream = stream.getTracks().find(t => t.id === track.id);
+                        if (!trackInStream) {
+                            console.log(`✅ [updateVideoOverlays ${userId}] НАЙДЕН активный видео трек в receivers при финальной проверке, добавляем в поток (enabled=${track.enabled}, muted=${track.muted})`);
+                            stream.addTrack(track);
+                            foundActiveTrackInReceivers = true;
+                            // НЕ вызываем updateVideoOverlays здесь - это вызовет бесконечный цикл
+                            // Сбрасываем состояние для следующего обновления
+                        }
+                    }
                         this._lastVideoOverlaysState.delete(userId);
                         return; // Выходим, не скрываем карточку
                     }
