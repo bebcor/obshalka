@@ -154,8 +154,13 @@ class WebRTCManager {
                 // КРИТИЧЕСКИ ВАЖНО: обработчики событий
                 incomingTrack.onunmute = () => {
                     console.log(`✅ Трек ${incomingTrack.kind} UNMUTED для ${targetUserId}`);
-                    // Принудительно обновляем UI
+                    // Принудительно обновляем UI и пытаемся воспроизвести
                     this.videoCallManager.uiManager.updateVideoOverlays();
+                    
+                    const videoElement = document.getElementById(`remoteVideo-${targetUserId}`);
+                    if (videoElement && incomingTrack.kind === 'video') {
+                        videoElement.play().catch(() => {});
+                    }
                 };
                 
                 incomingTrack.onmute = () => {
@@ -1027,6 +1032,19 @@ class WebRTCManager {
         
         // Начинаем периодическую проверку через 2 секунды
         setTimeout(periodicCheck, 2000);
+        
+        // КРИТИЧЕСКИ ВАЖНО: принудительно запускаем renegotiation
+        setTimeout(() => {
+            if (this.videoCallManager.remoteUsers.has(targetUserId)) {
+                const pc = this.videoCallManager.remoteUsers.get(targetUserId);
+                if (pc.signalingState === 'stable') {
+                    console.log(`🔄 Принудительный renegotiation для ${targetUserId}`);
+                    this.createOffer(targetUserId).catch(err => {
+                        console.error(`❌ Ошибка принудительного renegotiation для ${targetUserId}:`, err);
+                    });
+                }
+            }
+        }, 1000);
     }
 
     async handleICECandidate(data) {

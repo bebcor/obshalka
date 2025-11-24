@@ -229,18 +229,15 @@ class MediaController {
 
         if (videoTracks.length > 0) {
             const videoTrack = videoTracks[0];
-            const enabled = !videoTrack.enabled;
-            videoTrack.enabled = enabled;
+            const newEnabledState = !videoTrack.enabled;
+            videoTrack.enabled = newEnabledState;
             
             // ОБНОВЛЯЕМ ФЛАГ
-            this.videoCallManager.hasVideoTrack = enabled;
+            this.videoCallManager.hasVideoTrack = newEnabledState;
             
-            // ВАЖНО: обновляем соединения (как было в сложной логике)
-            if (videoTrack.enabled) {
-                await this.updateVideoTracksInConnections(videoTrack);
-            } else {
-                await this.updateVideoTracksInConnections(null);
-            }
+            // КРИТИЧЕСКИ ВАЖНО: вызываем replaceTrack для обновления соединения
+            console.log('🔄 [toggleVideo] Обновляем видео трек в соединениях:', newEnabledState);
+            await this.updateVideoTracksInConnections(newEnabledState ? videoTrack : null);
             
             this.videoCallManager.uiManager.updateControlButtons();
             // Обновляем UI - WebRTC автоматически обновит треки на другой стороне
@@ -622,8 +619,22 @@ class MediaController {
             console.log(`🔍 Пользователь ${userId}: videoSender=${videoSender ? 'есть' : 'нет'}, videoTrack=${videoTrack ? 'есть' : 'нет'}`);
             
             if (videoSender) {
-                console.log(`🔄 Обновляем видео-трек для пользователя: ${userId}`);
-                updatePromises.push(videoSender.replaceTrack(videoTrack));
+                console.log(`🔄 Заменяем видео трек для ${userId}`);
+                updatePromises.push(
+                    videoSender.replaceTrack(videoTrack).then(() => {
+                        console.log(`✅ Видео трек заменен для ${userId}`);
+                        
+                        // КРИТИЧЕСКИ ВАЖНО: запускаем renegotiation после замены трека
+                        if (peerConnection.signalingState === 'stable') {
+                            console.log(`🔄 Запускаем renegotiation для ${userId}`);
+                            this.videoCallManager.webrtcManager.createOffer(userId).catch(err => {
+                                console.error(`❌ Ошибка renegotiation для ${userId}:`, err);
+                            });
+                        }
+                    }).catch(error => {
+                        console.error(`❌ Ошибка замены видео трека для ${userId}:`, error);
+                    })
+                );
             } else if (videoTrack) {
                 // ЕСЛИ отправителя нет, но есть трек - добавляем
                 console.log(`🎯 Добавляем видео-трек для пользователя: ${userId}`);
