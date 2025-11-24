@@ -313,12 +313,35 @@ class UIManager {
                     }
                     
                     // КРИТИЧНО: Всегда обновляем srcObject если поток изменился
-                    if (hiddenAudio.srcObject !== stream) {
+                    // Также проверяем что srcObject содержит правильные аудио треки
+                    const needsUpdate = hiddenAudio.srcObject !== stream || 
+                                       !hiddenAudio.srcObject || 
+                                       (hiddenAudio.srcObject && hiddenAudio.srcObject.getAudioTracks().length === 0);
+                    
+                    if (needsUpdate) {
                         console.log(`🔄 [updateVideoOverlays] Устанавливаем srcObject для скрытого audio ${userId}`);
                         console.log(`   - Старый srcObject: ${hiddenAudio.srcObject ? 'SET' : 'NULL'}`);
+                        if (hiddenAudio.srcObject) {
+                            const oldTracks = hiddenAudio.srcObject.getAudioTracks();
+                            console.log(`   - Старый srcObject audioTracks.length: ${oldTracks.length}`);
+                        }
+                        console.log(`   - Новый stream audioTracks.length: ${stream.getAudioTracks().length}`);
+                        
                         hiddenAudio.srcObject = stream;
                         console.log(`   - Новый srcObject: ${hiddenAudio.srcObject ? 'SET' : 'NULL'}`);
                         console.log(`   - hiddenAudio.muted: ${hiddenAudio.muted}`);
+                        
+                        // Проверяем что srcObject содержит аудио треки
+                        if (hiddenAudio.srcObject) {
+                            const newTracks = hiddenAudio.srcObject.getAudioTracks();
+                            console.log(`   - Новый srcObject audioTracks.length: ${newTracks.length}`);
+                            if (newTracks.length > 0) {
+                                const newTrack = newTracks[0];
+                                console.log(`   - Новый audioTrack.enabled: ${newTrack.enabled}`);
+                                console.log(`   - Новый audioTrack.readyState: ${newTrack.readyState}`);
+                                console.log(`   - Новый audioTrack.muted: ${newTrack.muted}`);
+                            }
+                        }
                         
                         // КРИТИЧНО: Убеждаемся что muted = false
                         hiddenAudio.muted = false;
@@ -329,10 +352,20 @@ class UIManager {
                             console.log(`   - hiddenAudio.paused: ${hiddenAudio.paused}`);
                             console.log(`   - hiddenAudio.readyState: ${hiddenAudio.readyState}`);
                             console.log(`   - hiddenAudio.muted: ${hiddenAudio.muted}`);
+                            console.log(`   - hiddenAudio.volume: ${hiddenAudio.volume}`);
                         }).catch(error => {
                             console.error(`❌ [updateVideoOverlays] Ошибка play для скрытого audio ${userId}:`, error);
                             console.error(`   - error.name: ${error.name}`);
                             console.error(`   - error.message: ${error.message}`);
+                            // Пробуем еще раз через небольшую задержку
+                            setTimeout(() => {
+                                console.log(`🔄 [updateVideoOverlays] Повторная попытка play() для ${userId}`);
+                                hiddenAudio.play().then(() => {
+                                    console.log(`✅ [updateVideoOverlays] Скрытый audio воспроизводится после повтора для ${userId}`);
+                                }).catch(err => {
+                                    console.error(`❌ [updateVideoOverlays] Ошибка повторного play для ${userId}:`, err);
+                                });
+                            }, 100);
                         });
                     } else {
                         // Убеждаемся что audio воспроизводится и не muted
@@ -340,6 +373,19 @@ class UIManager {
                         console.log(`   - hiddenAudio.paused: ${hiddenAudio.paused}`);
                         console.log(`   - hiddenAudio.muted: ${hiddenAudio.muted}`);
                         console.log(`   - hiddenAudio.readyState: ${hiddenAudio.readyState}`);
+                        console.log(`   - hiddenAudio.srcObject: ${hiddenAudio.srcObject ? 'SET' : 'NULL'}`);
+                        
+                        // Проверяем что srcObject содержит аудио треки
+                        if (hiddenAudio.srcObject) {
+                            const srcAudioTracks = hiddenAudio.srcObject.getAudioTracks();
+                            console.log(`   - srcObject audioTracks.length: ${srcAudioTracks.length}`);
+                            if (srcAudioTracks.length > 0) {
+                                const srcAudioTrack = srcAudioTracks[0];
+                                console.log(`   - srcObject audioTrack.enabled: ${srcAudioTrack.enabled}`);
+                                console.log(`   - srcObject audioTrack.readyState: ${srcAudioTrack.readyState}`);
+                                console.log(`   - srcObject audioTrack.muted: ${srcAudioTrack.muted}`);
+                            }
+                        }
                         
                         // КРИТИЧНО: Убеждаемся что muted = false
                         if (hiddenAudio.muted) {
@@ -347,14 +393,29 @@ class UIManager {
                             hiddenAudio.muted = false;
                         }
                         
-                        if (hiddenAudio.paused) {
-                            console.log(`🔄 [updateVideoOverlays] Возобновляем воспроизведение скрытого audio ${userId}`);
-                            hiddenAudio.play().then(() => {
-                                console.log(`✅ [updateVideoOverlays] Скрытый audio возобновлен для ${userId}`);
-                            }).catch(error => {
-                                console.error(`❌ [updateVideoOverlays] Ошибка возобновления play для ${userId}:`, error);
-                            });
-                        }
+                        // КРИТИЧНО: Всегда вызываем play() чтобы убедиться что звук воспроизводится
+                        // readyState: 4 не гарантирует что звук реально воспроизводится
+                        console.log(`🔄 [updateVideoOverlays] Принудительно вызываем play() для скрытого audio ${userId}`);
+                        hiddenAudio.play().then(() => {
+                            console.log(`✅ [updateVideoOverlays] Скрытый audio воспроизводится для ${userId}`);
+                            console.log(`   - hiddenAudio.paused: ${hiddenAudio.paused}`);
+                            console.log(`   - hiddenAudio.readyState: ${hiddenAudio.readyState}`);
+                            console.log(`   - hiddenAudio.muted: ${hiddenAudio.muted}`);
+                            console.log(`   - hiddenAudio.volume: ${hiddenAudio.volume}`);
+                        }).catch(error => {
+                            console.error(`❌ [updateVideoOverlays] Ошибка play для скрытого audio ${userId}:`, error);
+                            console.error(`   - error.name: ${error.name}`);
+                            console.error(`   - error.message: ${error.message}`);
+                            // Пробуем еще раз через небольшую задержку
+                            setTimeout(() => {
+                                console.log(`🔄 [updateVideoOverlays] Повторная попытка play() для ${userId}`);
+                                hiddenAudio.play().then(() => {
+                                    console.log(`✅ [updateVideoOverlays] Скрытый audio воспроизводится после повтора для ${userId}`);
+                                }).catch(err => {
+                                    console.error(`❌ [updateVideoOverlays] Ошибка повторного play для ${userId}:`, err);
+                                });
+                            }, 100);
+                        });
                     }
                 } else {
                     // Нет активного аудио - удаляем скрытый audio элемент
