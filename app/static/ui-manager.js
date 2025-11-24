@@ -574,31 +574,31 @@ class UIManager {
                             stream.addTrack(track);
                             // Обновляем hasActiveVideoInStream после добавления
                             hasActiveVideo = true; // Трек добавлен, видео активно
-                        }
-                    }
-                        // Обновляем finalVideoTracks для дальнейшей проверки
-                        const updatedVideoTracks = stream.getVideoTracks();
-                        const updatedHasActiveVideoInStream = updatedVideoTracks.length > 0 && 
-                                                              updatedVideoTracks.some(t => 
-                                                                  t && 
-                                                                  t.readyState === 'live' && 
-                                                                  t.enabled
-                                                              );
-                        if (updatedHasActiveVideoInStream) {
-                            hasActiveVideo = true;
+                            // Обновляем finalVideoTracks для дальнейшей проверки
+                            const updatedVideoTracks = stream.getVideoTracks();
+                            const updatedHasActiveVideoInStream = updatedVideoTracks.length > 0 && 
+                                                                  updatedVideoTracks.some(t => 
+                                                                      t && 
+                                                                      t.readyState === 'live' && 
+                                                                      t.enabled &&
+                                                                      !t.muted
+                                                                  );
+                            if (updatedHasActiveVideoInStream) {
+                                hasActiveVideo = true;
+                            } else {
+                                hasActiveVideo = false;
+                            }
                         } else {
-                            hasActiveVideo = false;
+                            // Трек уже в потоке - проверяем его активность
+                            const isTrackActive = trackInStream.readyState === 'live' && trackInStream.enabled && !trackInStream.muted;
+                            hasActiveVideo = isTrackActive;
                         }
-                    } else {
-                        // Трек уже в потоке - проверяем его активность
-                        const isTrackActive = trackInStream.readyState === 'live' && trackInStream.enabled;
-                        hasActiveVideo = isTrackActive;
                     }
                 } else {
                     // Нет активного видео receiver - камера выключена
                     hasActiveVideo = false;
                 }
-                } else if (!hasActiveVideoInStream) {
+            } else if (!hasActiveVideoInStream) {
                     // В потоке нет активных видео треков - проверяем receivers еще раз
                     if (peerConnection) {
                         const receivers = peerConnection.getReceivers();
@@ -900,10 +900,9 @@ class UIManager {
                             foundActiveTrackInReceivers = true;
                             // НЕ вызываем updateVideoOverlays здесь - это вызовет бесконечный цикл
                             // Сбрасываем состояние для следующего обновления
+                            this._lastVideoOverlaysState.delete(userId);
+                            return; // Выходим, не скрываем карточку
                         }
-                    }
-                        this._lastVideoOverlaysState.delete(userId);
-                        return; // Выходим, не скрываем карточку
                     }
                 }
             }
