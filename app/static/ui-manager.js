@@ -617,39 +617,12 @@ class UIManager {
                                 console.log(`   - videoElement.videoWidth: ${videoElement.videoWidth}`);
                                 console.log(`   - videoElement.videoHeight: ${videoElement.videoHeight}`);
                                 
-                                // Проверяем что видео действительно загрузилось И соединение готово
-                                // КРИТИЧНО: Проверяем isConnectionReady перед показом видео
-                                const checkConnectionReady = () => {
-                                    // Проверяем что все объекты существуют
-                                    if (!this.videoCallManager || 
-                                        !this.videoCallManager.webrtcManager || 
-                                        !this.videoCallManager.webrtcManager.peerConnections) {
-                                        console.warn(`⚠️ [${userId}] webrtcManager или peerConnections не доступны`);
-                                        return false;
-                                    }
-                                    
-                                    const peerConn = this.videoCallManager.webrtcManager.peerConnections.get(userId);
-                                    if (peerConn) {
-                                        const iceState = peerConn.iceConnectionState;
-                                        const connState = peerConn.connectionState;
-                                        return (iceState === 'connected' || iceState === 'completed') && 
-                                               (connState === 'connected');
-                                    }
-                                    return false;
-                                };
-                                
+                                // Проверяем что видео действительно загрузилось
+                                // Показываем видео как только оно готово, независимо от состояния соединения
                                 if (videoElement.readyState >= 2) { // HAVE_CURRENT_DATA или выше
-                                    const connectionReady = checkConnectionReady();
-                                    if (connectionReady) {
-                                        console.log(`✅ [${userId}] Видео готово к показу, соединение готово - скрываем overlay`);
-                                        overlay.style.display = 'none';
-                                        videoElement.style.setProperty('display', 'block', 'important');
-                                    } else {
-                                        console.log(`⏳ [${userId}] Видео готово, но соединение еще не готово - показываем overlay`);
-                                        overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
-                                        overlay.style.display = 'block';
-                                        videoElement.style.setProperty('display', 'none', 'important');
-                                    }
+                                    console.log(`✅ [${userId}] Видео готово к показу - скрываем overlay`);
+                                    overlay.style.display = 'none';
+                                    videoElement.style.setProperty('display', 'block', 'important');
                                 } else {
                                     console.log(`⚠️ [${userId}] Видео еще не готово (readyState=${videoElement.readyState}), ждем canplay`);
                                 }
@@ -659,34 +632,10 @@ class UIManager {
                                 console.log(`✅ [${userId}] Видео может воспроизводиться (canplay)`);
                                 console.log(`   - videoElement.readyState: ${videoElement.readyState}`);
                                 
-                                // КРИТИЧНО: Проверяем isConnectionReady перед показом видео
-                                let connectionReady = false;
-                                
-                                // Проверяем что все объекты существуют
-                                if (this.videoCallManager && 
-                                    this.videoCallManager.webrtcManager && 
-                                    this.videoCallManager.webrtcManager.peerConnections) {
-                                    const peerConn = this.videoCallManager.webrtcManager.peerConnections.get(userId);
-                                    if (peerConn) {
-                                        const iceState = peerConn.iceConnectionState;
-                                        const connState = peerConn.connectionState;
-                                        connectionReady = (iceState === 'connected' || iceState === 'completed') && 
-                                                         (connState === 'connected');
-                                    }
-                                } else {
-                                    console.warn(`⚠️ [${userId}] webrtcManager или peerConnections не доступны в handleCanPlay`);
-                                }
-                                
-                                if (connectionReady) {
-                                    console.log(`✅ [${userId}] Соединение готово - показываем видео`);
-                                    overlay.style.display = 'none';
-                                    videoElement.style.setProperty('display', 'block', 'important');
-                                } else {
-                                    console.log(`⏳ [${userId}] Соединение еще не готово - показываем overlay`);
-                                    overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
-                                    overlay.style.display = 'block';
-                                    videoElement.style.setProperty('display', 'none', 'important');
-                                }
+                                // Показываем видео как только оно готово к воспроизведению
+                                console.log(`✅ [${userId}] Видео готово - показываем`);
+                                overlay.style.display = 'none';
+                                videoElement.style.setProperty('display', 'block', 'important');
                             };
                             
                             const handleError = (error) => {
@@ -727,27 +676,15 @@ class UIManager {
                             videoElement.style.setProperty('display', 'none', 'important');
                         } else {
                             console.log(`ℹ️ [${userId}] srcObject уже установлен, проверяем готовность`);
-                            // Если srcObject уже установлен, проверяем готовность видео И соединения
-                            if (videoElement.readyState >= 2 && isConnectionReady) {
-                                console.log(`✅ [${userId}] Видео готово (readyState=${videoElement.readyState}) И соединение готово - показываем`);
+                            // Если srcObject уже установлен, проверяем готовность видео
+                            // Показываем видео как только оно готово, независимо от состояния соединения
+                            if (videoElement.readyState >= 2) {
+                                console.log(`✅ [${userId}] Видео готово (readyState=${videoElement.readyState}) - показываем`);
                                 overlay.style.display = 'none';
                                 videoElement.style.setProperty('display', 'block', 'important');
                             } else {
-                                // Видео не готово ИЛИ соединение не готово - показываем overlay
-                                if (videoElement.readyState >= 2 && !isConnectionReady) {
-                                    console.log(`⏳ [${userId}] Видео готово, но соединение не готово - показываем overlay "Установка соединения..."`);
-                                    overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
-                                } else if (videoElement.readyState < 2) {
-                                    console.log(`⏳ [${userId}] Видео еще не готово (readyState=${videoElement.readyState}), показываем overlay`);
-                                    if (!isConnectionReady) {
-                                        overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
-                                    }
-                                } else {
-                                    console.log(`⏳ [${userId}] Показываем overlay (readyState=${videoElement.readyState}, isConnectionReady=${isConnectionReady})`);
-                                    if (!isConnectionReady) {
-                                        overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
-                                    }
-                                }
+                                // Видео еще не готово - показываем overlay
+                                console.log(`⏳ [${userId}] Видео еще не готово (readyState=${videoElement.readyState}), показываем overlay`);
                                 overlay.style.display = 'block';
                                 videoElement.style.setProperty('display', 'none', 'important');
                             }
