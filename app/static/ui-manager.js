@@ -668,26 +668,16 @@ class UIManager {
                             
                             console.log(`   - videoElement.srcObject установлен: ${!!videoElement.srcObject}`);
                             
-                            // Показываем overlay пока видео не загрузилось
-                            if (!isConnectionReady) {
-                                overlay.innerHTML = '<div class="overlay-icon"><img src="/static/images/user.png" alt="Пользователь"></div><p>Установка соединения...</p>';
-                            }
-                            overlay.style.display = 'block';
-                            videoElement.style.setProperty('display', 'none', 'important');
+                            // Показываем видео сразу - если оно не готово, будет черная плашка
+                            // Это нормально - видео появится когда данные начнут приходить
+                            overlay.style.display = 'none';
+                            videoElement.style.setProperty('display', 'block', 'important');
                         } else {
-                            console.log(`ℹ️ [${userId}] srcObject уже установлен, проверяем готовность`);
-                            // Если srcObject уже установлен, проверяем готовность видео
-                            // Показываем видео как только оно готово, независимо от состояния соединения
-                            if (videoElement.readyState >= 2) {
-                                console.log(`✅ [${userId}] Видео готово (readyState=${videoElement.readyState}) - показываем`);
-                                overlay.style.display = 'none';
-                                videoElement.style.setProperty('display', 'block', 'important');
-                            } else {
-                                // Видео еще не готово - показываем overlay
-                                console.log(`⏳ [${userId}] Видео еще не готово (readyState=${videoElement.readyState}), показываем overlay`);
-                                overlay.style.display = 'block';
-                                videoElement.style.setProperty('display', 'none', 'important');
-                            }
+                            console.log(`ℹ️ [${userId}] srcObject уже установлен - показываем видео`);
+                            // Показываем видео сразу - если оно не готово, будет черная плашка
+                            // Это нормально - видео появится когда данные начнут приходить
+                            overlay.style.display = 'none';
+                            videoElement.style.setProperty('display', 'block', 'important');
                         }
                         
                         // Пытаемся воспроизвести если еще не воспроизводится
