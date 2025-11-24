@@ -220,6 +220,36 @@ class UIManager {
                 }
             }
             
+            // КРИТИЧНО: Если карточка существует, проверяем сразу есть ли активный видео трек
+            // Если нет - удаляем карточку и очищаем srcObject немедленно
+            if (participantCard) {
+                const peerConnection = this.videoCallManager.remoteUsers.get(userId);
+                if (peerConnection) {
+                    const receivers = peerConnection.getReceivers();
+                    const hasActiveVideoReceiver = receivers.some(r => {
+                        const track = r.track;
+                        return track && track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted;
+                    });
+                    
+                    // Если нет активного видео трека в receivers, удаляем карточку
+                    if (!hasActiveVideoReceiver) {
+                        console.log(`❌ [updateVideoOverlays ${userId}] Карточка существует, но нет активного видео трека - удаляем карточку`);
+                        if (videoElement) {
+                            videoElement.style.setProperty('display', 'none', 'important');
+                            videoElement.pause();
+                            videoElement.srcObject = null;
+                            try {
+                                videoElement.load();
+                            } catch (e) {}
+                        }
+                        if (participantCard.parentNode) {
+                            participantCard.remove();
+                        }
+                        return; // Выходим, карточка удалена
+                    }
+                }
+            }
+            
             // ВАЖНО: Проверяем, что peer connection существует и треки в receivers соответствуют трекам в stream
             const peerConnection = this.videoCallManager.remoteUsers.get(userId);
             if (peerConnection) {
@@ -228,7 +258,7 @@ class UIManager {
                 const activeReceiverTrackIds = new Set();
                 receivers.forEach(receiver => {
                     const track = receiver.track;
-                    if (track && track.enabled && track.readyState === 'live') {
+                    if (track && track.enabled && track.readyState === 'live' && !track.muted) {
                         activeReceiverTrackIds.add(track.id);
                     }
                 });
