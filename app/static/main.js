@@ -163,14 +163,34 @@ class VideoCallManager {
             });
             
             this.socket.on('webrtc_offer', (data) => {
+                console.log(`🔴 [SOCKET] ========== ПОЛУЧЕН webrtc_offer от ${data.sender_id} ==========`);
+                console.log(`📥 [SOCKET] Offer data:`, {
+                    sender_id: data.sender_id,
+                    hasOffer: !!data.offer,
+                    offerType: data.offer?.type,
+                    offerSdpLength: data.offer?.sdp?.length || 0
+                });
                 this.handleWebRTCOffer(data);
             });
             
             this.socket.on('webrtc_answer', (data) => {
+                console.log(`🔴 [SOCKET] ========== ПОЛУЧЕН webrtc_answer от ${data.sender_id} ==========`);
+                console.log(`📥 [SOCKET] Answer data:`, {
+                    sender_id: data.sender_id,
+                    hasAnswer: !!data.answer,
+                    answerType: data.answer?.type,
+                    answerSdpLength: data.answer?.sdp?.length || 0
+                });
                 this.handleWebRTCAnswer(data);
             });
             
             this.socket.on('ice_candidate', (data) => {
+                console.log(`🔴 [SOCKET] ========== ПОЛУЧЕН ice_candidate от ${data.sender_id} ==========`);
+                console.log(`📥 [SOCKET] ICE candidate data:`, {
+                    sender_id: data.sender_id,
+                    hasCandidate: !!data.candidate,
+                    candidateType: data.candidate?.type
+                });
                 this.handleICECandidate(data);
             });
             
@@ -894,17 +914,30 @@ class VideoCallManager {
             // ВАЖНО: После запуска медиа добавляем треки в существующие peer connections
             // и отправляем offers для всех существующих участников
             if (this.localStream) {
-                console.log('🔄 Медиа запущены, обновляем треки в существующих соединениях...');
-                data.participants.forEach(participant => {
+                console.log('🔄 [handleRoomInfo] Медиа запущены, обновляем треки в существующих соединениях...');
+                console.log(`📊 [handleRoomInfo] Всего участников: ${data.participants.length}`);
+                data.participants.forEach((participant, idx) => {
+                    console.log(`📊 [handleRoomInfo] Участник ${idx}: ${participant.socket_id} (${participant.name}), isSelf: ${participant.socket_id === this.socketId}`);
                     if (participant.socket_id !== this.socketId) {
+                        console.log(`🔄 [handleRoomInfo] Обрабатываем участника ${participant.socket_id}...`);
+                        console.log(`   - Соединение существует: ${this.remoteUsers.has(participant.socket_id)}`);
+                        
                         // Добавляем треки в существующее соединение
                         this.webrtcManager.addTracksToPeerConnection(participant.socket_id);
                         // ВАЖНО: Ждем немного перед созданием offer, чтобы треки успели добавиться
                         setTimeout(() => {
+                            console.log(`⏰ [handleRoomInfo] Таймаут 300ms для ${participant.socket_id}, проверяем соединение...`);
                             if (this.remoteUsers.has(participant.socket_id)) {
                                 const peerConnection = this.remoteUsers.get(participant.socket_id);
+                                console.log(`📊 [handleRoomInfo] Состояние соединения для ${participant.socket_id}:`);
+                                console.log(`   - signalingState: ${peerConnection.signalingState}`);
+                                console.log(`   - connectionState: ${peerConnection.connectionState}`);
+                                console.log(`   - iceConnectionState: ${peerConnection.iceConnectionState}`);
+                                
                                 if (peerConnection.signalingState === 'stable') {
+                                    console.log(`✅ [handleRoomInfo] Signaling state stable, создаем OFFER для ${participant.socket_id}...`);
                                     this.webrtcManager.createOffer(participant.socket_id).then(() => {
+                                        console.log(`✅ [handleRoomInfo] OFFER создан для ${participant.socket_id}`);
                                         // КРИТИЧНО: После создания offer синхронизируем треки для существующих участников
                                         // Делаем это несколько раз с разными задержками для надежности
                                         console.log(`🔄 [handleRoomInfo] Синхронизируем треки для ${participant.socket_id}`);
@@ -920,11 +953,22 @@ class VideoCallManager {
                                         syncExisting(3000);
                                         syncExisting(5000);
                                     }).catch(err => {
-                                        console.error(`Ошибка создания offer для ${participant.socket_id}:`, err);
+                                        console.error(`❌ [handleRoomInfo] Ошибка создания offer для ${participant.socket_id}:`, err);
+                                        console.error(`   - Error name: ${err.name}`);
+                                        console.error(`   - Error message: ${err.message}`);
                                     });
+                                } else {
+                                    console.warn(`⚠️ [handleRoomInfo] Signaling state не stable (${peerConnection.signalingState}) для ${participant.socket_id}, OFFER не создан`);
                                 }
+                            } else {
+                                console.warn(`⚠️ [handleRoomInfo] Соединение не существует для ${participant.socket_id} после таймаута`);
                             }
                         }, 300);
+                    }
+                });
+            } else {
+                console.warn('⚠️ [handleRoomInfo] Локальный поток не доступен, OFFER не создаются');
+            }
                     }
                 });
             }
@@ -972,14 +1016,21 @@ class VideoCallManager {
             
             // 3. И только ПОСЛЕ этого создавай offer
             setTimeout(() => {
+                console.log(`⏰ [handleUserJoined] Таймаут для ${data.user_id}, проверяем соединение...`);
                 if (this.remoteUsers.has(data.user_id)) {
                     const peerConnection = this.remoteUsers.get(data.user_id);
                     const signalingState = peerConnection.signalingState;
-                    console.log(`📤 Создаем offer для нового пользователя ${data.user_id}, signalingState: ${signalingState}`);
+                    console.log(`📊 [handleUserJoined] Состояние соединения для ${data.user_id}:`);
+                    console.log(`   - signalingState: ${signalingState}`);
+                    console.log(`   - connectionState: ${peerConnection.connectionState}`);
+                    console.log(`   - iceConnectionState: ${peerConnection.iceConnectionState}`);
+                    console.log(`📤 [handleUserJoined] Создаем offer для нового пользователя ${data.user_id}, signalingState: ${signalingState}`);
                     
                         // Создаем offer только если соединение в стабильном состоянии
                         if (signalingState === 'stable') {
+                            console.log(`✅ [handleUserJoined] Signaling state stable, создаем OFFER для ${data.user_id}...`);
                             this.webrtcManager.createOffer(data.user_id).then(() => {
+                                console.log(`✅ [handleUserJoined] OFFER создан для ${data.user_id}`);
                                 // КРИТИЧНО: После создания offer проверяем receivers и синхронизируем треки
                                 // Это нужно чтобы увидеть видео нового пользователя
                                 // Делаем это несколько раз с разными задержками для надежности
@@ -1018,16 +1069,22 @@ class VideoCallManager {
                             syncAllExisting(3000);
                             syncAllExisting(5000);
                         }).catch(err => {
-                            console.error(`❌ Ошибка создания offer для ${data.user_id}:`, err);
+                            console.error(`❌ [handleUserJoined] Ошибка создания offer для ${data.user_id}:`, err);
+                            console.error(`   - Error name: ${err.name}`);
+                            console.error(`   - Error message: ${err.message}`);
                         });
                     } else {
+                        console.warn(`⚠️ [handleUserJoined] Signaling state не stable (${signalingState}) для ${data.user_id}, ждем...`);
                         // Если не stable, ждем и пробуем снова
                         setTimeout(() => {
+                            console.log(`⏰ [handleUserJoined] Повторная проверка для ${data.user_id}...`);
                             if (this.remoteUsers.has(data.user_id)) {
                                 const newState = this.remoteUsers.get(data.user_id).signalingState;
+                                console.log(`📊 [handleUserJoined] Новое состояние для ${data.user_id}: ${newState}`);
                                 if (newState === 'stable') {
-                                    console.log(`📤 Создаем offer для ${data.user_id} после ожидания`);
+                                    console.log(`✅ [handleUserJoined] Signaling state теперь stable, создаем OFFER для ${data.user_id}...`);
                                     this.webrtcManager.createOffer(data.user_id).then(() => {
+                                        console.log(`✅ [handleUserJoined] OFFER создан для ${data.user_id} после ожидания`);
                                         // КРИТИЧНО: После создания offer проверяем receivers и синхронизируем треки
                                         // Это нужно чтобы увидеть видео нового пользователя
                                         // Делаем это несколько раз с разными задержками для надежности
