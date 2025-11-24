@@ -277,14 +277,17 @@ class UIManager {
                 }
             } else {
                 // НЕТ АКТИВНОГО ВИДЕО - удаляем карточку полностью
+                // КРИТИЧНО: Очищаем srcObject ДО удаления карточки, чтобы не было черной плашки
                 if (videoElement) {
-                    videoElement.style.setProperty('display', 'none', 'important');
+                    console.log(`🗑️ [updateVideoOverlays] Удаляем карточку для ${userId} - очищаем видео элемент`);
                     videoElement.pause();
                     videoElement.srcObject = null;
                     // Полная очистка видео элемента
                     videoElement.load();
+                    videoElement.style.setProperty('display', 'none', 'important');
                 }
                 if (participantCard && participantCard.parentNode) {
+                    console.log(`🗑️ [updateVideoOverlays] Удаляем карточку ${userId} из DOM`);
                     participantCard.remove();
                 }
             }
@@ -444,17 +447,10 @@ class UIManager {
         
         const videoElement = document.getElementById(`remoteVideo-${userId}`);
         if (videoElement) {
-            // НЕ устанавливаем srcObject сразу - это сделает updateVideoOverlays когда карточка будет показана
-            // Устанавливаем только если есть активное видео
-            const videoTracks = stream.getVideoTracks();
-            const hasActiveVideo = videoTracks.length > 0 && 
-                                   videoTracks[0].readyState === 'live' && 
-                                   videoTracks[0].enabled;
+            // КРИТИЧНО: НЕ устанавливаем srcObject здесь!
+            // Карточка скрыта, и установка srcObject создаст черную плашку
+            // srcObject будет установлен в updateVideoOverlays когда карточка покажется
             
-            if (hasActiveVideo) {
-                videoElement.srcObject = stream;
-            }
-
             // ДОБАВЛЯЕМ ОБРАБОТЧИКИ ДЛЯ СЛЕДЕНИЯ ЗА СОСТОЯНИЕМ ТРЕКОВ
             stream.getTracks().forEach(track => {
                 track.onended = () => {
