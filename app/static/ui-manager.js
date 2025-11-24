@@ -336,16 +336,6 @@ class UIManager {
             return hasActiveTrack;
         }
         
-        // КРИТИЧНО: Сначала проверяем сохраненное состояние камеры (из сигнала)
-        // Это более надежно, чем полагаться только на состояние трека
-        // НО: если есть активный трек (например, демонстрация экрана), он имеет приоритет
-        const cameraState = this.videoCallManager.cameraStates.get(userId);
-        if (cameraState !== undefined) {
-            console.log(`   [hasActiveCamera] Найдено сохраненное состояние камеры для ${userId}: ${cameraState.cameraEnabled ? 'включена ✅' : 'выключена ❌'}`);
-        } else {
-            console.log(`   [hasActiveCamera] Сохраненное состояние камеры для ${userId} не найдено, проверяем трек...`);
-        }
-        
         // КРИТИЧНО: Проверяем треки из receivers - это актуальное состояние
         console.log(`   [hasActiveCamera] Получаем receivers для ${userId}...`);
         const receivers = peerConnection.getReceivers();
@@ -371,13 +361,11 @@ class UIManager {
                 return;
             }
             
-            // КРИТИЧНО: Проверяем readyState === 'live' И enabled === true
-            // ВАЖНО: Если трек muted (например, после replaceTrack(null)), он неактивен
-            // muted может быть временным состоянием браузера, но если трек muted И enabled=false,
-            // это означает что камера выключена
+            // КРИТИЧНО: Проверяем readyState === 'live' И enabled === true И НЕ muted
+            // Если трек muted (например, после replaceTrack(null)), он неактивен
             const isActive = track.readyState === 'live' && 
                             track.enabled && 
-                            !track.muted; // Если muted - трек неактивен (например, после replaceTrack(null))
+                            !track.muted;
             
             console.log(`   [hasActiveCamera] Receiver #${index} (id: ${track.id}):`);
             console.log(`      - readyState: ${track.readyState}`);
@@ -390,24 +378,17 @@ class UIManager {
             }
         });
         
-        // КРИТИЧНО: Если есть активный трек (например, демонстрация экрана), он имеет приоритет
-        // Если трек активен, значит есть видео (камера или экран), независимо от сигнала
-        if (activeTrackFound) {
-            console.log(`   [hasActiveCamera] Найден активный трек - есть видео (камера или экран) ✅`);
-            console.log(`   [hasActiveCamera] Результат: ✅ АКТИВЕН (есть активный трек)`);
-            console.log(`   [hasActiveCamera] ========== КОНЕЦ ПРОВЕРКИ УДАЛЕННОГО ПОТОКА ==========`);
-            return true;
-        }
-        
-        // Если трек неактивен, проверяем сохраненное состояние
-        // Если камера выключена по сигналу, возвращаем false
+        // КРИТИЧНО: Проверяем сохраненное состояние камеры (из сигнала)
+        // Если камера выключена по сигналу, возвращаем false (даже если трек активен - это может быть старый трек)
+        const cameraState = this.videoCallManager.cameraStates.get(userId);
         if (cameraState !== undefined && !cameraState.cameraEnabled) {
-            console.log(`   [hasActiveCamera] Трек неактивен И камера выключена по сигналу`);
+            console.log(`   [hasActiveCamera] Камера выключена по сигналу - возвращаем false`);
             console.log(`   [hasActiveCamera] Результат: ❌ НЕАКТИВЕН (выключена по сигналу)`);
             console.log(`   [hasActiveCamera] ========== КОНЕЦ ПРОВЕРКИ УДАЛЕННОГО ПОТОКА ==========`);
             return false;
         }
         
+        // Если камера включена по сигналу или сигнала нет, используем результат проверки трека
         console.log(`   [hasActiveCamera] Результат проверки всех receivers: ${activeTrackFound ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'}`);
         console.log(`   [hasActiveCamera] ========== КОНЕЦ ПРОВЕРКИ УДАЛЕННОГО ПОТОКА ==========`);
         return activeTrackFound;
