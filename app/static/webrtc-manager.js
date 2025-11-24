@@ -212,9 +212,20 @@ class WebRTCManager {
                 
                 // КРИТИЧНО: Отслеживаем изменение enabled через периодическую проверку
                 // WebRTC не предоставляет событие для изменения enabled
+                // ВАЖНО: Проверяем трек из receiver, а не из потока!
                 if (incomingTrack.kind === 'video') {
-                    let lastEnabled = incomingTrack.enabled;
-                    console.log(`🔍 [ontrack] Начальное состояние enabled для видео трека ${targetUserId}: ${lastEnabled}`);
+                    // Получаем трек из receiver для актуального состояния
+                    const getReceiverTrack = () => {
+                        const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
+                        if (!peerConnection) return null;
+                        const receivers = peerConnection.getReceivers();
+                        const receiver = receivers.find(r => r.track && r.track.id === incomingTrack.id);
+                        return receiver ? receiver.track : null;
+                    };
+                    
+                    let receiverTrack = getReceiverTrack();
+                    let lastEnabled = receiverTrack ? receiverTrack.enabled : incomingTrack.enabled;
+                    console.log(`🔍 [ontrack] Начальное состояние enabled для видео трека ${targetUserId}: ${lastEnabled} (из ${receiverTrack ? 'receiver' : 'потока'})`);
                     
                     // Используем периодическую проверку для отслеживания изменения enabled
                     const checkEnabledInterval = setInterval(() => {
@@ -224,15 +235,22 @@ class WebRTCManager {
                             return;
                         }
                         
-                        const currentEnabled = incomingTrack.enabled;
+                        // КРИТИЧНО: Проверяем enabled из receiver, а не из потока!
+                        receiverTrack = getReceiverTrack();
+                        const currentEnabled = receiverTrack ? receiverTrack.enabled : incomingTrack.enabled;
+                        
                         if (currentEnabled !== lastEnabled) {
                             console.log(`\n🔄🔄🔄 [ontrack ${targetUserId}] enabled ИЗМЕНИЛСЯ: ${lastEnabled} -> ${currentEnabled} 🔄🔄🔄`);
                             console.log(`   - track.id: ${incomingTrack.id}`);
-                            console.log(`   - track.readyState: ${incomingTrack.readyState}`);
-                            console.log(`   - track.muted: ${incomingTrack.muted}`);
+                            console.log(`   - track.readyState: ${receiverTrack ? receiverTrack.readyState : incomingTrack.readyState}`);
+                            console.log(`   - track.enabled (receiver): ${receiverTrack ? receiverTrack.enabled : 'N/A'}`);
+                            console.log(`   - track.enabled (stream): ${incomingTrack.enabled}`);
+                            console.log(`   - track.muted: ${receiverTrack ? receiverTrack.muted : incomingTrack.muted}`);
                             lastEnabled = currentEnabled;
-                                    this.videoCallManager.uiManager.updateVideoOverlays();
-                                }
+                            // НЕМЕДЛЕННО обновляем UI при изменении enabled
+                            console.log(`   🔄 [ontrack ${targetUserId}] Вызываем updateVideoOverlays() из-за изменения enabled`);
+                            this.videoCallManager.uiManager.updateVideoOverlays();
+                        }
                     }, 100); // Проверяем каждые 100ms для быстрой реакции
                     
                     // Очищаем интервал когда трек заканчивается
