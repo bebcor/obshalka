@@ -485,60 +485,74 @@ class WebRTCManager {
                 offerToReceiveVideo: true
             });
             
-            // КРИТИЧНО: Настраиваем transceivers ПОСЛЕ создания answer, но ДО setLocalDescription
-            // Это нужно чтобы видео transceiver был правильно настроен для приема видео
-            // WebRTC может изменить direction при создании answer, поэтому настраиваем после
+            // КРИТИЧНО: Модифицируем SDP ПЕРЕД setLocalDescription, чтобы гарантировать recvonly для видео
+            // WebRTC может установить inactive, если нет локального видео, но нам нужно recvonly
+            if (answer.sdp) {
+                // Ищем секцию видео в SDP
+                const videoMatch = answer.sdp.match(/m=video[\s\S]*?(?=m=|$)/);
+                if (videoMatch) {
+                    const videoSection = videoMatch[0];
+                    // Если есть a=inactive или нет a=recvonly, заменяем/добавляем a=recvonly
+                    if (videoSection.includes('a=inactive')) {
+                        answer.sdp = answer.sdp.replace(/m=video[\s\S]*?a=inactive/g, (match) => {
+                            return match.replace('a=inactive', 'a=recvonly');
+                        });
+                        console.log(`✅ [handleWebRTCOffer] SDP модифицирован: inactive -> recvonly для видео`);
+                    } else if (!videoSection.includes('a=recvonly') && !videoSection.includes('a=sendrecv') && !videoSection.includes('a=sendonly')) {
+                        // Если нет никакого direction, добавляем a=recvonly после a=rtcp
+                        answer.sdp = answer.sdp.replace(/(m=video[\s\S]*?)(a=rtcp[\s\S]*?\r\n)/, (match, videoPart, rtcpPart) => {
+                            return videoPart + rtcpPart + 'a=recvonly\r\n';
+                        });
+                        console.log(`✅ [handleWebRTCOffer] SDP модифицирован: добавлен a=recvonly для видео`);
+                    }
+                }
+            }
+            
+            // Настраиваем transceivers ПОСЛЕ модификации SDP
             peerConnection.getTransceivers().forEach((transceiver, index) => {
-                if (transceiver.receiver.track?.kind === 'video') {
-                    // Для видео receiver: если нет sender track, устанавливаем recvonly (принимаем видео)
-                    // Если есть sender track, устанавливаем sendrecv (отправляем и принимаем)
+                if (transceiver.receiver.track?.kind === 'video' || (!transceiver.receiver.track && transceiver.mid && answer.sdp.includes('m=video'))) {
                     if (!transceiver.sender.track) {
                         transceiver.direction = 'recvonly';
-                        console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на recvonly (нет локального видео), currentDirection: ${transceiver.currentDirection}`);
+                        console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на recvonly (нет локального видео)`);
                     } else {
                         transceiver.direction = 'sendrecv';
                         console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на sendrecv (есть локальное видео)`);
                     }
                 } else if (transceiver.receiver.track?.kind === 'audio') {
-                    // Для аудио receiver: аналогично
                     if (!transceiver.sender.track) {
                         transceiver.direction = 'recvonly';
                     } else {
                         transceiver.direction = 'sendrecv';
                     }
-                } else if (transceiver.sender.track) {
-                    // Если есть sender track, но нет receiver track - устанавливаем sendonly
-                    transceiver.direction = 'sendonly';
                 }
             });
-            
-            // ВАЖНО: Проверяем состояние transceivers после настройки
-            const videoTransceiver = peerConnection.getTransceivers().find(t => t.receiver.track?.kind === 'video' || t.receiver.track === null && t.receiver.track?.kind === 'video');
-            if (videoTransceiver) {
-                console.log(`🔍 [handleWebRTCOffer] Видео transceiver после настройки: direction=${videoTransceiver.direction}, currentDirection=${videoTransceiver.currentDirection}, receiver.track=${videoTransceiver.receiver.track ? 'exists' : 'null'}`);
-                
-                // Если currentDirection все еще inactive после настройки, пытаемся исправить через модификацию SDP
-                if (videoTransceiver.currentDirection === 'inactive' && answer.sdp) {
-                    console.warn(`⚠️ [handleWebRTCOffer] Видео transceiver все еще inactive, модифицируем SDP`);
-                    // Модифицируем SDP: заменяем "a=inactive" на "a=recvonly" для видео
-                    let modifiedSDP = answer.sdp;
-                    const videoMatch = modifiedSDP.match(/m=video[\s\S]*?(?=m=|$)/);
-                    if (videoMatch) {
-                        const videoSection = videoMatch[0];
-                        if (videoSection.includes('a=inactive')) {
-                            modifiedSDP = modifiedSDP.replace(/m=video[\s\S]*?a=inactive/g, (match) => {
-                                return match.replace('a=inactive', 'a=recvonly');
-                            });
-                            answer.sdp = modifiedSDP;
-                            console.log(`✅ [handleWebRTCOffer] SDP модифицирован: inactive -> recvonly для видео`);
-                        }
-                    }
-                }
-            }
             
             // Устанавливаем созданный ответ как локальное описание
             await peerConnection.setLocalDescription(answer);
             console.log('✅ [handleWebRTCOffer] Local description set, signalingState:', peerConnection.signalingState);
+            
+            // КРИТИЧНО: Настраиваем transceivers ПОСЛЕ setLocalDescription
+            // WebRTC может изменить direction при установке описания, поэтому настраиваем после
+            peerConnection.getTransceivers().forEach((transceiver, index) => {
+                if (transceiver.receiver.track?.kind === 'video' || (!transceiver.receiver.track && transceiver.mid)) {
+                    if (!transceiver.sender.track) {
+                        transceiver.direction = 'recvonly';
+                        console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на recvonly ПОСЛЕ setLocalDescription`);
+                    } else {
+                        transceiver.direction = 'sendrecv';
+                        console.log(`🔄 [handleWebRTCOffer] Настраиваем видео transceiver ${index} на sendrecv ПОСЛЕ setLocalDescription`);
+                    }
+                }
+            });
+            
+            // Проверяем состояние transceivers после настройки
+            const videoTransceiver = peerConnection.getTransceivers().find(t => 
+                t.receiver.track?.kind === 'video' || 
+                (!t.receiver.track && t.mid && peerConnection.localDescription?.sdp?.includes('m=video'))
+            );
+            if (videoTransceiver) {
+                console.log(`🔍 [handleWebRTCOffer] Видео transceiver после настройки: direction=${videoTransceiver.direction}, currentDirection=${videoTransceiver.currentDirection}`);
+            }
             
             // ВАЖНО: После установки local description треки должны прийти через ontrack
             // Но иногда они уже есть в receivers, поэтому проверяем их тоже
