@@ -181,17 +181,29 @@ class UIManager {
         const videoTracks = stream.getVideoTracks();
         if (videoTracks.length === 0) return false;
         
-        const track = videoTracks[0];
+        // Проверяем все треки, а не только первый
+        const hasActiveTrack = videoTracks.some(track => {
+            const isActive = track.readyState === 'live' && 
+                            track.enabled && 
+                            !track.muted;
+            return isActive;
+        });
         
-        // Проверяем также демонстрацию экрана
-        const isSharingScreen = this.videoCallManager.isSharingScreen || false;
-        if (isSharingScreen) return true;
+        // Если есть активный трек, возвращаем true
+        if (hasActiveTrack) return true;
         
-        const isActive = track.readyState === 'live' && 
-                        track.enabled && 
-                        !track.muted;
+        // Для локального потока: проверяем демонстрацию экрана
+        // Но только если трек существует (даже если неактивен)
+        const isLocalStream = stream === this.videoCallManager.localStream;
+        if (isLocalStream) {
+            const isSharingScreen = this.videoCallManager.isSharingScreen || false;
+            // При демонстрации экрана проверяем, что трек хотя бы существует и live
+            if (isSharingScreen) {
+                return videoTracks.some(track => track.readyState === 'live');
+            }
+        }
         
-        return isActive;
+        return false;
     }
     
     displayOnlyActiveCameras(activeCameras) {
