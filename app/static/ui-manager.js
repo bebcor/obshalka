@@ -266,16 +266,41 @@ class UIManager {
                         error: videoElement.error
                     });
                     
+                    // КРИТИЧНО: Проверяем, есть ли данные в потоке перед вызовом play()
+                    const videoTracksInSrcObject = videoElement.srcObject?.getVideoTracks() || [];
+                    const hasMutedTracks = videoTracksInSrcObject.some(t => t.muted);
+                    console.log(`🔍 [updateVideoOverlays] Проверка треков в srcObject для ${userId}:`, {
+                        videoTracksCount: videoTracksInSrcObject.length,
+                        hasMutedTracks: hasMutedTracks,
+                        tracks: videoTracksInSrcObject.map(t => ({
+                            id: t.id,
+                            enabled: t.enabled,
+                            muted: t.muted,
+                            readyState: t.readyState
+                        }))
+                    });
+                    
                     // КРИТИЧНО: Пробуем воспроизвести видео и логируем результат
                     // ВАЖНО: play() может вернуть Promise или undefined
                     try {
                         console.log(`🎬 [updateVideoOverlays] Вызываем play() для ${userId}`);
                         const playPromise = videoElement.play();
+                        console.log(`🔍 [updateVideoOverlays] play() вернул для ${userId}:`, {
+                            type: typeof playPromise,
+                            isPromise: playPromise instanceof Promise,
+                            value: playPromise
+                        });
                         
                         // Обрабатываем Promise если он есть
                         if (playPromise !== undefined && playPromise !== null) {
+                            // Добавляем таймаут для Promise - если он не разрешится за 5 секунд, логируем
+                            const timeoutId = setTimeout(() => {
+                                console.warn(`⚠️ [updateVideoOverlays] Promise от play() не разрешился за 5 секунд для ${userId}`);
+                            }, 5000);
+                            
                             playPromise
                                 .then(() => {
+                                    clearTimeout(timeoutId);
                                     console.log(`✅ [updateVideoOverlays] Видео успешно воспроизведено для ${userId}`);
                                     // Проверяем состояние видео элемента ПОСЛЕ play()
                                     setTimeout(() => {
@@ -299,6 +324,7 @@ class UIManager {
                                     }, 100);
                                 })
                                 .catch(err => {
+                                    clearTimeout(timeoutId);
                                     console.error(`❌ [updateVideoOverlays] Ошибка play для ${userId}:`, err);
                                     console.error(`❌ [updateVideoOverlays] Детали ошибки:`, {
                                         name: err.name,
@@ -319,6 +345,7 @@ class UIManager {
                         }
                     } catch (err) {
                         console.error(`❌ [updateVideoOverlays] Исключение при вызове play() для ${userId}:`, err);
+                        console.error(`❌ [updateVideoOverlays] Стек ошибки:`, err.stack);
                     }
                 } else {
                     console.warn(`⚠️ [updateVideoOverlays] videoElement не найден для ${userId}`);
