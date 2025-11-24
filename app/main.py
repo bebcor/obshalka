@@ -494,6 +494,44 @@ def handle_camera_state(data):
                       room=request.sid)
 
 
+@socketio.on('screen_state')
+def handle_screen_state(data):
+    try:
+        room_id = data.get('room_id')
+        screen_sharing = data.get('screenSharing', False)
+
+        # Валидация room_id
+        if not room_id or not validate_room_id(room_id):
+            emit('error', {'message': 'Invalid room ID'}, room=request.sid)
+            return
+
+        # Проверяем, что пользователь в комнате
+        redis_cli = get_redis_client()
+        room_data = redis_cli.get(f"room:{room_id}")
+        if not room_data:
+            emit('error', {'message': 'Room not found'}, room=request.sid)
+            return
+
+        room = json.loads(room_data)
+        if request.sid not in room.get('participants', {}):
+            emit('error', {'message': 'You are not in this room'}, room=request.sid)
+            return
+
+        # Отправляем состояние демонстрации экрана всем в комнате
+        socketio.emit('screen_state', {
+            'user_id': request.sid,
+            'screenSharing': screen_sharing
+        }, room=room_id)
+
+        logger.info(f"Screen state from {request.sid} in room {room_id}: {screen_sharing}")
+
+    except Exception as e:
+        logger.error(f"Error handling screen state: {e}")
+        socketio.emit('error',
+                      {'message': 'Failed to send screen state'},
+                      room=request.sid)
+
+
 if __name__ == '__main__':
     logger.info("Starting VideoMeet server...")
     socketio.run(

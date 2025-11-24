@@ -253,39 +253,20 @@ class UIManager {
         
         const isLocalStream = stream === this.videoCallManager.localStream;
         
-        // Для локального потока проверяем треки из потока
+        // Для локального потока проверяем состояние из сигналов
         if (isLocalStream) {
-            const videoTracks = stream.getVideoTracks();
-            if (videoTracks.length === 0) {
-                console.log(`   [hasActiveCamera] Локальный поток: нет видео треков - возвращаем false`);
-                return false;
-            }
+            // КРИТИЧНО: Проверяем состояние камеры И демонстрации экрана из сигналов
+            const hasCamera = this.videoCallManager.localCameraEnabled || false;
+            const hasScreen = this.videoCallManager.localScreenSharing || false;
             
-            // Проверяем все треки
-            const hasActiveTrack = videoTracks.some(track => {
-                const isActive = track.readyState === 'live' && 
-                                track.enabled && 
-                                !track.muted;
-                return isActive;
-            });
+            console.log(`   [hasActiveCamera] Локальный поток:`);
+            console.log(`      - Камера: ${hasCamera ? 'включена ✅' : 'выключена ❌'}`);
+            console.log(`      - Экран: ${hasScreen ? 'демонстрируется ✅' : 'не демонстрируется ❌'}`);
             
-            // Если есть активный трек, возвращаем true
-            if (hasActiveTrack) {
-                console.log(`   [hasActiveCamera] Локальный поток: найден активный трек - возвращаем true`);
-                return true;
-            }
-            
-            // Проверяем демонстрацию экрана
-            const isSharingScreen = this.videoCallManager.isSharingScreen || false;
-            console.log(`   [hasActiveCamera] Локальный поток, isSharingScreen: ${isSharingScreen}`);
-            if (isSharingScreen) {
-                const hasLiveTrack = videoTracks.some(track => track.readyState === 'live');
-                console.log(`   [hasActiveCamera] Демонстрация экрана, есть live трек: ${hasLiveTrack}`);
-                return hasLiveTrack;
-            }
-            
-            console.log(`   [hasActiveCamera] Локальный поток: нет активных треков - возвращаем false`);
-            return false;
+            // Показываем если есть камера ИЛИ экран
+            const hasActiveVideo = hasCamera || hasScreen;
+            console.log(`   [hasActiveCamera] Локальный поток: ${hasActiveVideo ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'} (камера или экран)`);
+            return hasActiveVideo;
         }
         
         // КРИТИЧНО: Для удаленных потоков проверяем треки из RECEIVERS, а не из потока!
@@ -352,46 +333,48 @@ class UIManager {
         
         console.log(`   [hasActiveCamera] Начинаем проверку ${videoReceivers.length} видео receivers...`);
         
-        // Проверяем все видео треки из receivers
-        let activeTrackFound = false;
-        videoReceivers.forEach((receiver, index) => {
-            const track = receiver.track;
-            if (!track) {
-                console.log(`   [hasActiveCamera] Receiver #${index}: трек отсутствует (null)`);
-                return;
-            }
-            
-            // КРИТИЧНО: Проверяем readyState === 'live' И enabled === true И НЕ muted
-            // Если трек muted (например, после replaceTrack(null)), он неактивен
-            const isActive = track.readyState === 'live' && 
-                            track.enabled && 
-                            !track.muted;
-            
-            console.log(`   [hasActiveCamera] Receiver #${index} (id: ${track.id}):`);
-            console.log(`      - readyState: ${track.readyState}`);
-            console.log(`      - enabled: ${track.enabled}`);
-            console.log(`      - muted: ${track.muted}`);
-            console.log(`      - активен: ${isActive ? '✅' : '❌'} (readyState=${track.readyState}, enabled=${track.enabled}, muted=${track.muted})`);
-            
-            if (isActive) {
-                activeTrackFound = true;
-            }
-        });
-        
-        // КРИТИЧНО: Проверяем сохраненное состояние камеры (из сигнала)
-        // Если камера выключена по сигналу, возвращаем false (даже если трек активен - это может быть старый трек)
+        // КРИТИЧНО: Проверяем сохраненное состояние камеры И демонстрации экрана (из сигналов)
+        // Используем ТОЛЬКО сигналы, не полагаемся на состояние треков
         const cameraState = this.videoCallManager.cameraStates.get(userId);
-        if (cameraState !== undefined && !cameraState.cameraEnabled) {
-            console.log(`   [hasActiveCamera] Камера выключена по сигналу - возвращаем false`);
-            console.log(`   [hasActiveCamera] Результат: ❌ НЕАКТИВЕН (выключена по сигналу)`);
+        const screenState = this.videoCallManager.screenStates.get(userId);
+        
+        const hasCamera = cameraState !== undefined ? cameraState.cameraEnabled : false;
+        const hasScreen = screenState !== undefined ? screenState.screenSharing : false;
+        
+        console.log(`   [hasActiveCamera] Состояние для ${userId} из сигналов:`);
+        console.log(`      - Камера: ${hasCamera ? 'включена ✅' : 'выключена ❌'} ${cameraState !== undefined ? '(из сигнала)' : '(сигнал не получен)'}`);
+        console.log(`      - Экран: ${hasScreen ? 'демонстрируется ✅' : 'не демонстрируется ❌'} ${screenState !== undefined ? '(из сигнала)' : '(сигнал не получен)'}`);
+        
+        // Показываем если есть камера ИЛИ экран
+        const hasActiveVideo = hasCamera || hasScreen;
+        
+        // Если сигналов нет, проверяем треки как fallback
+        if (cameraState === undefined && screenState === undefined) {
+            console.log(`   [hasActiveCamera] Сигналы не получены, проверяем треки как fallback...`);
+            let activeTrackFound = false;
+            videoReceivers.forEach((receiver, index) => {
+                const track = receiver.track;
+                if (!track) return;
+                
+                const isActive = track.readyState === 'live' && 
+                                track.enabled && 
+                                !track.muted;
+                
+                console.log(`   [hasActiveCamera] Receiver #${index} (id: ${track.id}): readyState=${track.readyState}, enabled=${track.enabled}, muted=${track.muted}, активен=${isActive}`);
+                
+                if (isActive) {
+                    activeTrackFound = true;
+                }
+            });
+            
+            console.log(`   [hasActiveCamera] Результат проверки треков (fallback): ${activeTrackFound ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'}`);
             console.log(`   [hasActiveCamera] ========== КОНЕЦ ПРОВЕРКИ УДАЛЕННОГО ПОТОКА ==========`);
-            return false;
+            return activeTrackFound;
         }
         
-        // Если камера включена по сигналу или сигнала нет, используем результат проверки трека
-        console.log(`   [hasActiveCamera] Результат проверки всех receivers: ${activeTrackFound ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'}`);
+        console.log(`   [hasActiveCamera] Результат: ${hasActiveVideo ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'} (камера или экран из сигналов)`);
         console.log(`   [hasActiveCamera] ========== КОНЕЦ ПРОВЕРКИ УДАЛЕННОГО ПОТОКА ==========`);
-        return activeTrackFound;
+        return hasActiveVideo;
     }
     
     displayOnlyActiveCameras(activeCameras) {

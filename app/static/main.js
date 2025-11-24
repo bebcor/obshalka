@@ -67,6 +67,12 @@ class VideoCallManager {
         // Локальное состояние камеры
         this.localCameraEnabled = false;
         
+        // КРИТИЧНО: Храним состояние демонстрации экрана для каждого пользователя (включая локальную)
+        // Ключ: userId, значение: { screenSharing: boolean }
+        this.screenStates = new Map();
+        // Локальное состояние демонстрации экрана
+        this.localScreenSharing = false;
+        
         // Конфигурация ICE серверов (УПРОЩЕННАЯ - только рабочие серверы)
         this.configuration = {
             iceServers: [
@@ -249,6 +255,21 @@ class VideoCallManager {
         console.log(`✅ [sendCameraState] Сигнал отправлен`);
     }
     
+    // КРИТИЧНО: Отправка состояния демонстрации экрана всем участникам
+    sendScreenState(screenSharing) {
+        if (!this.socket || !this.roomId) {
+            console.warn(`⚠️ [sendScreenState] Нет socket или roomId, не отправляем состояние экрана`);
+            return;
+        }
+        
+        console.log(`📤 [sendScreenState] Отправляем screen_state: ${screenSharing}`);
+        this.socket.emit('screen_state', {
+            room_id: this.roomId,
+            screenSharing: screenSharing
+        });
+        console.log(`✅ [sendScreenState] Сигнал отправлен`);
+    }
+    
     // КРИТИЧНО: Обработка получения состояния камеры от другого пользователя
     handleCameraState(data) {
         const userId = data.user_id;
@@ -261,6 +282,21 @@ class VideoCallManager {
         
         // НЕМЕДЛЕННО обновляем UI
         console.log(`🔄 [handleCameraState] Вызываем updateVideoOverlays() для обновления UI`);
+        this.uiManager.updateVideoOverlays();
+    }
+    
+    // КРИТИЧНО: Обработка получения состояния демонстрации экрана от другого пользователя
+    handleScreenState(data) {
+        const userId = data.user_id;
+        const screenSharing = data.screenSharing;
+        
+        console.log(`📥 [handleScreenState] Получено состояние экрана от ${userId}: ${screenSharing ? 'демонстрируется' : 'не демонстрируется'}`);
+        
+        // Сохраняем состояние демонстрации экрана для этого пользователя
+        this.screenStates.set(userId, { screenSharing: screenSharing });
+        
+        // НЕМЕДЛЕННО обновляем UI
+        console.log(`🔄 [handleScreenState] Вызываем updateVideoOverlays() для обновления UI`);
         this.uiManager.updateVideoOverlays();
     }
     
@@ -1082,6 +1118,12 @@ class VideoCallManager {
                 this.sendCameraState(this.localCameraEnabled);
             }
             
+            // КРИТИЧНО: Отправляем текущее состояние демонстрации экрана новому пользователю
+            if (this.localScreenSharing !== undefined) {
+                console.log(`📤 [handleUserJoined] Отправляем текущее состояние экрана новому пользователю ${data.user_id}: ${this.localScreenSharing}`);
+                this.sendScreenState(this.localScreenSharing);
+            }
+            
             // 3. И только ПОСЛЕ этого создавай offer
             console.log(`⏰ [handleUserJoined] Устанавливаем таймаут 200ms для создания OFFER для ${data.user_id}...`);
             setTimeout(() => {
@@ -1239,6 +1281,11 @@ class VideoCallManager {
             this.remoteStreams.delete(data.user_id);
             console.log('✅ RemoteStream удален для:', data.user_id);
         }
+        
+        // Удаляем состояния камеры и экрана для этого пользователя
+        this.cameraStates.delete(data.user_id);
+        this.screenStates.delete(data.user_id);
+        console.log('✅ Состояния камеры и экрана удалены для:', data.user_id);
         
         // Удаляем карточку и видео элемент
         const participantCard = document.getElementById(`participant-${data.user_id}`);
@@ -1451,6 +1498,12 @@ class VideoCallManager {
         this.isSharingScreen = false;
         this.previousStream = null;
         this.hasVideoTrack = false;
+        
+        // Очищаем состояния камер и экранов
+        this.cameraStates.clear();
+        this.screenStates.clear();
+        this.localCameraEnabled = false;
+        this.localScreenSharing = false;
         
         console.log('✅ Очистка звонка завершена');
         
