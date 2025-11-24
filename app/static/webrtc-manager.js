@@ -342,710 +342,86 @@ class WebRTCManager {
     }
 
     async createOffer(targetUserId) {
-        console.log(`🔵 [createOffer] ========== НАЧАЛО СОЗДАНИЯ OFFER для ${targetUserId} ==========`);
-        
-        // Проверяем signaling state - нельзя создавать offer в have-remote-offer
-        const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
-        if (!peerConnection) {
-            console.error(`❌ [createOffer] Нет peer connection для ${targetUserId}`);
-            console.log(`🔵 [createOffer] ========== КОНЕЦ (нет соединения) ==========`);
-            return;
-        }
-        
-        console.log(`📊 [createOffer] Текущее состояние соединения для ${targetUserId}:`);
-        console.log(`   - signalingState: ${peerConnection.signalingState}`);
-        console.log(`   - connectionState: ${peerConnection.connectionState}`);
-        console.log(`   - iceConnectionState: ${peerConnection.iceConnectionState}`);
-        console.log(`   - iceGatheringState: ${peerConnection.iceGatheringState}`);
-        console.log(`   - localDescription: ${peerConnection.localDescription ? peerConnection.localDescription.type : 'null'}`);
-        console.log(`   - remoteDescription: ${peerConnection.remoteDescription ? peerConnection.remoteDescription.type : 'null'}`);
-        
-        if (peerConnection.signalingState === 'have-remote-offer' || peerConnection.signalingState === 'have-local-pranswer') {
-            console.warn(`⚠️ [createOffer] Неправильный signaling state для создания offer: ${peerConnection.signalingState}`);
-            console.log(`🔵 [createOffer] ========== КОНЕЦ (неправильное состояние) ==========`);
-            return;
-        }
-        
         if (!this.videoCallManager.remoteUsers.has(targetUserId)) {
-            console.error(`❌ [createOffer] No peer connection for: ${targetUserId}`);
-            console.log(`🔵 [createOffer] ========== КОНЕЦ (нет соединения в Map) ==========`);
+            console.error('❌ [createOffer] No peer connection for:', targetUserId);
             return;
         }
-    
+        
         try {
             const peerConnection = this.videoCallManager.remoteUsers.get(targetUserId);
-            
-            // ВАЖНО: Проверяем состояние соединения перед созданием offer
-            const currentState = peerConnection.signalingState;
-            console.log(`📊 [createOffer] Signaling state before offer for ${targetUserId}:`, currentState);
-            
-            // ЕСЛИ соединение в failed - пересоздаем его
-            if (peerConnection.connectionState === 'failed' || peerConnection.iceConnectionState === 'failed') {
-                console.log('🔄 Connection failed, recreating for:', targetUserId);
-                try {
-                    peerConnection.close();
-                } catch (e) {
-                    console.error('Error closing failed connection:', e);
-                }
-                this.videoCallManager.remoteUsers.delete(targetUserId);
-                // Удаляем удаленный поток если есть
-                if (this.videoCallManager.remoteStreams.has(targetUserId)) {
-                    const stream = this.videoCallManager.remoteStreams.get(targetUserId);
-                    stream.getTracks().forEach(track => track.stop());
-                    this.videoCallManager.remoteStreams.delete(targetUserId);
-                }
-                // Удаляем UI элемент участника
-                const participantCard = document.getElementById(`participant-${targetUserId}`);
-                if (participantCard) {
-                    participantCard.remove();
-                }
-                // Пересоздаем соединение ТОЛЬКО если есть локальный поток
-                if (this.videoCallManager.localStream) {
-                    this.setupPeerConnection(targetUserId);
-                    // Ждем немного и создаем оффер
-                    setTimeout(() => {
-                        if (this.videoCallManager.remoteUsers.has(targetUserId)) {
-                            this.createOffer(targetUserId).catch(err => {
-                                console.error('Error creating offer after recreation:', err);
-                            });
-                        }
-                    }, 500);
-                } else {
-                    console.log('⚠️ No local stream, will recreate connection when stream is available');
-                }
-                return;
-            }
-            
-            // ВАЖНО: Если уже есть локальный offer, ждем его обработки
-            if (currentState === 'have-local-offer') {
-                console.log(`⏳ Already have local offer for ${targetUserId}, waiting...`);
-                // Ждем немного и проверяем снова
-                setTimeout(() => {
-                    if (this.videoCallManager.remoteUsers.has(targetUserId)) {
-                        const newState = this.videoCallManager.remoteUsers.get(targetUserId).signalingState;
-                        if (newState === 'stable') {
-                            console.log(`🔄 Signaling stable, creating new offer for ${targetUserId}`);
-                            this.createOffer(targetUserId).catch(console.error);
-                        }
-                    }
-                }, 1000);
-                return;
-            }
-            
-            // ВАЖНО: Убедимся что все треки добавлены перед созданием offer
-            console.log(`🔍 [createOffer] Проверка локального потока для ${targetUserId}:`);
-            console.log(`   - localStream exists: ${!!this.videoCallManager.localStream}`);
-            
-            if (this.videoCallManager.localStream) {
-                const existingSenders = peerConnection.getSenders();
-                console.log(`   - Existing senders count: ${existingSenders.length}`);
-                existingSenders.forEach((sender, idx) => {
-                    console.log(`     Sender ${idx}: kind=${sender.track?.kind}, enabled=${sender.track?.enabled}, id=${sender.track?.id}`);
-                });
-                
-                const videoTrack = this.videoCallManager.localStream.getVideoTracks()[0];
-                const audioTrack = this.videoCallManager.localStream.getAudioTracks()[0];
-                
-                console.log(`   - Video track: ${videoTrack ? `exists (enabled=${videoTrack.enabled}, readyState=${videoTrack.readyState})` : 'null'}`);
-                console.log(`   - Audio track: ${audioTrack ? `exists (enabled=${audioTrack.enabled}, readyState=${audioTrack.readyState})` : 'null'}`);
-                
-                // ВАЖНО: Добавляем видео трек если он есть, enabled и еще не добавлен
-                if (videoTrack && videoTrack.enabled && !existingSenders.some(s => s.track?.kind === 'video')) {
-                    console.log(`🎯 [createOffer] Adding missing video track to ${targetUserId} before offer`);
-                    try {
-                        peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
-                        console.log(`✅ [createOffer] Video track added before offer for ${targetUserId}`);
-                    } catch (error) {
-                        console.error(`❌ [createOffer] Error adding video track before offer:`, error);
-                    }
-                } else {
-                    console.log(`ℹ️ [createOffer] Video track not added: track=${!!videoTrack}, enabled=${videoTrack?.enabled}, hasSender=${existingSenders.some(s => s.track?.kind === 'video')}`);
-                }
-                
-                // ВАЖНО: Добавляем аудио трек если он есть, enabled и еще не добавлен
-                if (audioTrack && audioTrack.enabled && !existingSenders.some(s => s.track?.kind === 'audio')) {
-                    console.log(`🎯 [createOffer] Adding missing audio track to ${targetUserId} before offer`);
-                    try {
-                        peerConnection.addTrack(audioTrack, this.videoCallManager.localStream);
-                        console.log(`✅ [createOffer] Audio track added before offer for ${targetUserId}`);
-                    } catch (error) {
-                        console.error(`❌ [createOffer] Error adding audio track before offer:`, error);
-                    }
-                } else {
-                    console.log(`ℹ️ [createOffer] Audio track not added: track=${!!audioTrack}, enabled=${audioTrack?.enabled}, hasSender=${existingSenders.some(s => s.track?.kind === 'audio')}`);
-                }
-            } else {
-                console.warn(`⚠️ [createOffer] Нет локального потока для ${targetUserId}`);
-            }
-        
-            // Проверяем senders после добавления треков
-            const finalSenders = peerConnection.getSenders();
-            console.log(`🔍 [createOffer] Senders после проверки: ${finalSenders.length}`);
-            finalSenders.forEach((sender, idx) => {
-                console.log(`   Final Sender ${idx}: kind=${sender.track?.kind}, enabled=${sender.track?.enabled}, id=${sender.track?.id}`);
-            });
-        
-            // БАЗОВАЯ настройка - используем стандартные опции WebRTC
-            // WebRTC сам правильно настроит transceivers на основе добавленных треков
-            console.log(`🔄 [createOffer] Создаем offer для ${targetUserId}...`);
-            const offer = await peerConnection.createOffer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true
-            });
-            
-            console.log(`✅ [createOffer] Offer создан для ${targetUserId}:`);
-            console.log(`   - type: ${offer.type}`);
-            console.log(`   - SDP length: ${offer.sdp?.length || 0}`);
-            console.log(`   - SDP preview: ${offer.sdp?.substring(0, 200)}...`);
-        
-            console.log(`🔄 [createOffer] Устанавливаем local description для ${targetUserId}...`);
+            const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
-            console.log(`✅ [createOffer] Local description set for ${targetUserId}`);
-            console.log(`📊 [createOffer] Signaling state after setLocalDescription: ${peerConnection.signalingState}`);
-            console.log(`📊 [createOffer] ICE gathering state: ${peerConnection.iceGatheringState}`);
             
-            // Логируем transceivers
-            const transceivers = peerConnection.getTransceivers();
-            console.log(`📊 [createOffer] Transceivers count: ${transceivers.length}`);
-            transceivers.forEach((transceiver, idx) => {
-                console.log(`   Transceiver ${idx}: kind=${transceiver.receiver.track?.kind || 'no track'}, direction=${transceiver.direction}, currentDirection=${transceiver.currentDirection}`);
-            });
-        
-            console.log(`📤 [createOffer] Отправляем offer через socket для ${targetUserId}...`);
-            console.log(`   - Socket connected: ${this.videoCallManager.socket?.connected}`);
-            console.log(`   - Socket id: ${this.videoCallManager.socket?.id}`);
-        
+            console.log('📤 [createOffer] Sending offer to:', targetUserId);
             this.videoCallManager.socket.emit('webrtc_offer', {
                 target_user_id: targetUserId,
                 offer: offer
             });
-            console.log(`✅ [createOffer] Offer отправлен через socket для ${targetUserId}`);
-            console.log(`📊 [createOffer] Ожидаем answer от ${targetUserId}...`);
-            console.log(`🔵 [createOffer] ========== КОНЕЦ СОЗДАНИЯ OFFER ==========`);
-        
+            console.log('✅ [createOffer] Offer sent to:', targetUserId);
+            
         } catch (error) {
-            console.error(`❌ [createOffer] Ошибка создания offer для ${targetUserId}:`, error);
-            console.error(`   - Error name: ${error.name}`);
-            console.error(`   - Error message: ${error.message}`);
-            console.error(`   - Error stack: ${error.stack}`);
-            console.log(`🔵 [createOffer] ========== КОНЕЦ (ОШИБКА) ==========`);
+            console.error('❌ [createOffer] Error creating offer для', targetUserId, ':', error);
+            console.error('   - Error name:', error.name);
+            console.error('   - Error message:', error.message);
+            console.error('   - Error stack:', error.stack);
         }
     }
 
     async handleWebRTCOffer(data) {
         try {
-            console.log(`🟢 [handleWebRTCOffer] ========== НАЧАЛО ОБРАБОТКИ OFFER от ${data.sender_id} ==========`);
-            console.log(`📥 [handleWebRTCOffer] Received offer from: ${data.sender_id}`);
-            console.log(`📥 [handleWebRTCOffer] Offer data:`, {
-                hasOffer: !!data.offer,
-                offerType: data.offer?.type,
-                offerSdpLength: data.offer?.sdp?.length || 0,
-                offerSdpPreview: data.offer?.sdp?.substring(0, 200) || 'no SDP'
-            });
-            
-            const hasConnection = this.videoCallManager.remoteUsers.has(data.sender_id);
-            console.log(`📥 [handleWebRTCOffer] Peer connection exists: ${hasConnection}`);
-            if (hasConnection) {
-                const pc = this.videoCallManager.remoteUsers.get(data.sender_id);
-                console.log(`📥 [handleWebRTCOffer] Current signaling state: ${pc.signalingState}`);
-                console.log(`📥 [handleWebRTCOffer] Current connection state: ${pc.connectionState}`);
-                console.log(`📥 [handleWebRTCOffer] Current ICE state: ${pc.iceConnectionState}`);
-                console.log(`📥 [handleWebRTCOffer] Local description: ${pc.localDescription ? pc.localDescription.type : 'null'}`);
-                console.log(`📥 [handleWebRTCOffer] Remote description: ${pc.remoteDescription ? pc.remoteDescription.type : 'null'}`);
-            }
-        
-            // КРИТИЧНО: ЕСЛИ нет локального потока - сначала создай его
-            if (!this.videoCallManager.localStream) {
-                console.log('🔄 Нет локального потока, создаем перед обработкой offer...');
-                await this.videoCallManager.mediaController.startVideo();
-                
-                // ПЕРЕСОЗДАЙ соединение с правильными треками
-                if (this.videoCallManager.remoteUsers.has(data.sender_id)) {
-                    this.videoCallManager.remoteUsers.get(data.sender_id).close();
-                    this.videoCallManager.remoteUsers.delete(data.sender_id);
-                }
-                this.setupPeerConnection(data.sender_id);
-            }
+            console.log('📥 [handleWebRTCOffer] Received offer from:', data.sender_id);
             
             // Если соединение с этим пользователем еще не создано, создаем его
             if (!this.videoCallManager.remoteUsers.has(data.sender_id)) {
-                console.log('🔄 Peer connection не существует для', data.sender_id, ', создаем...');
+                console.log('🔄 [handleWebRTCOffer] Peer connection не существует, создаем для', data.sender_id);
                 this.setupPeerConnection(data.sender_id);
             }
             
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
             
-            // ВАЖНО: Проверяем текущее состояние signaling
-            const currentSignalingState = peerConnection.signalingState;
-            console.log('📥 Current signaling state before setting remote description:', currentSignalingState);
-            
-            // ВАЖНО: Проверяем, что remote description еще не установлен
-            if (peerConnection.remoteDescription) {
-                console.warn('⚠️ [handleWebRTCOffer] Remote description already set, skipping');
-                return;
-            }
-            
-            // Если уже есть локальный offer, значит мы уже отправили offer этому пользователю
-            // В этом случае нужно обработать race condition
-            if (currentSignalingState === 'have-local-offer') {
-                console.log('⚠️ Уже есть локальный offer для', data.sender_id, ', обрабатываем race condition...');
-                // Устанавливаем remote description - это может вызвать renegotiation
-                await peerConnection.setRemoteDescription(data.offer);
-                // БАЗОВАЯ настройка - используем стандартные опции WebRTC
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                this.videoCallManager.socket.emit('webrtc_answer', {
-                    target_user_id: data.sender_id,
-                    answer: answer
-                });
-                console.log('✅ Отправлен answer после race condition для', data.sender_id);
-                return;
-            }
-            
-            // ВАЖНО: Убеждаемся, что локальные треки добавлены ПЕРЕД установкой remote description
-            // Это нужно чтобы answer содержал информацию о наших треках
-            if (this.videoCallManager.localStream) {
-                console.log('🔄 Проверяем локальные треки перед обработкой offer...');
-                const existingSenders = peerConnection.getSenders();
-                const hasVideoSender = existingSenders.some(s => s.track && s.track.kind === 'video');
-                const hasAudioSender = existingSenders.some(s => s.track && s.track.kind === 'audio');
-                
-                console.log('🔄 Existing senders:', { hasVideoSender, hasAudioSender });
-                
-                if (!hasVideoSender) {
-                    const videoTrack = this.videoCallManager.localStream.getVideoTracks()[0];
-                    if (videoTrack && videoTrack.enabled) {
-                        peerConnection.addTrack(videoTrack, this.videoCallManager.localStream);
-                        console.log('✅ Added video track when handling offer');
-                    } else {
-                        console.log('⚠️ Video track не доступен или disabled');
-                    }
-                }
-                
-                if (!hasAudioSender) {
-                    const audioTrack = this.videoCallManager.localStream.getAudioTracks()[0];
-                    if (audioTrack && audioTrack.enabled) {
-                        peerConnection.addTrack(audioTrack, this.videoCallManager.localStream);
-                        console.log('✅ Added audio track when handling offer');
-                    } else {
-                        console.log('⚠️ Audio track не доступен или disabled');
-                    }
-                }
-            } else {
-                console.log('⚠️ Локальный поток не доступен при обработке offer');
-            }
-            
-            // ВАЖНО: Проверяем, что remote description еще не установлен
-            if (peerConnection.remoteDescription) {
-                console.warn('⚠️ [handleWebRTCOffer] Remote description already set, skipping');
-                // Если remote description уже установлен, возможно нужно пересоздать соединение
-                return;
-            }
-            
             // Устанавливаем полученное предложение (offer) как удаленное описание
-            try {
-                await peerConnection.setRemoteDescription(data.offer);
-                console.log('✅ Remote description установлено для', data.sender_id);
-                
-                // ВАЖНО: Добавляем отложенные ICE кандидаты после установки remote description
-                if (peerConnection._pendingIceCandidates && peerConnection._pendingIceCandidates.length > 0) {
-                    console.log(`🔄 [handleWebRTCOffer] Adding ${peerConnection._pendingIceCandidates.length} pending ICE candidates`);
-                    for (const candidate of peerConnection._pendingIceCandidates) {
-                        try {
-                            await peerConnection.addIceCandidate(candidate);
-                        } catch (err) {
-                            console.warn('⚠️ [handleWebRTCOffer] Error adding pending ICE candidate:', err);
-                        }
-                    }
-                    peerConnection._pendingIceCandidates = [];
-                }
-            } catch (error) {
-                // Обрабатываем ошибку "Remote description changes the media type"
-                if (error.message && error.message.includes('changes the media type')) {
-                    console.warn('⚠️ [handleWebRTCOffer] Remote description changes media type, recreating connection');
-                    // Пересоздаем соединение
-                    peerConnection.close();
-                    this.videoCallManager.remoteUsers.delete(data.sender_id);
-                    // Создаем новое соединение
-                    this.setupPeerConnection(data.sender_id);
-                    // Повторяем обработку offer
-                    return this.handleWebRTCOffer(data);
-                }
-                throw error;
-            }
-        
-            // БАЗОВАЯ настройка - используем стандартные опции WebRTC
-            console.log(`🔄 [handleWebRTCOffer] Создаем answer для ${data.sender_id}...`);
+            await peerConnection.setRemoteDescription(data.offer);
+            console.log('✅ [handleWebRTCOffer] Remote description установлено для', data.sender_id);
+            
+            // Создаем answer
             const answer = await peerConnection.createAnswer();
-            
-            console.log(`✅ [handleWebRTCOffer] Answer создан для ${data.sender_id}:`);
-            console.log(`   - type: ${answer.type}`);
-            console.log(`   - SDP length: ${answer.sdp?.length || 0}`);
-            console.log(`   - SDP preview: ${answer.sdp?.substring(0, 200)}...`);
-            
-            // Логируем transceivers перед установкой local description
-            const transceiversBefore = peerConnection.getTransceivers();
-            console.log(`📊 [handleWebRTCOffer] Transceivers before setLocalDescription: ${transceiversBefore.length}`);
-            transceiversBefore.forEach((transceiver, idx) => {
-                console.log(`   Transceiver ${idx}: kind=${transceiver.receiver.track?.kind || 'no track'}, direction=${transceiver.direction}, currentDirection=${transceiver.currentDirection}`);
-            });
-            
-            // Устанавливаем созданный ответ как локальное описание
-            console.log(`🔄 [handleWebRTCOffer] Устанавливаем local description для ${data.sender_id}...`);
             await peerConnection.setLocalDescription(answer);
-            console.log('✅ [handleWebRTCOffer] Local description set, signalingState:', peerConnection.signalingState);
-            console.log(`📊 [handleWebRTCOffer] ICE gathering state: ${peerConnection.iceGatheringState}`);
+            console.log('✅ [handleWebRTCOffer] Answer создан и установлен для', data.sender_id);
             
-            // Логируем transceivers после установки local description
-            const transceiversAfter = peerConnection.getTransceivers();
-            console.log(`📊 [handleWebRTCOffer] Transceivers after setLocalDescription: ${transceiversAfter.length}`);
-            transceiversAfter.forEach((transceiver, idx) => {
-                console.log(`   Transceiver ${idx}: kind=${transceiver.receiver.track?.kind || 'no track'}, direction=${transceiver.direction}, currentDirection=${transceiver.currentDirection}`);
-            });
-            
-            // ВАЖНО: После установки local description треки должны прийти через ontrack
-            // Но иногда они уже есть в receivers, поэтому проверяем их тоже
-            // КРИТИЧНО: Добавляем треки из receivers в поток, если их там еще нет
-            // ВАЖНО: Делаем несколько проверок с задержками для надежности
-            const checkReceivers = (delay) => {
-                setTimeout(() => {
-                    const receivers = peerConnection.getReceivers();
-                    console.log(`🔍 [handleWebRTCOffer] Проверка receivers после установки local description для ${data.sender_id} (delay=${delay}ms):`, receivers.length);
-                    console.log(`🔍 [handleWebRTCOffer] Текущие remoteStreams:`, Array.from(this.videoCallManager.remoteStreams.keys()));
-                    
-                    // ВАЖНО: Проверяем, есть ли уже remoteStream для этого пользователя
-                    if (!this.videoCallManager.remoteStreams.has(data.sender_id)) {
-                        const remoteStream = new MediaStream();
-                        this.videoCallManager.remoteStreams.set(data.sender_id, remoteStream);
-                        // ВАЖНО: НЕ создаем карточку сразу - она будет создана только когда появится активный видео трек
-                        // this.videoCallManager.uiManager.createRemoteVideoElement(data.sender_id, remoteStream);
-                    }
-                    const remoteStream = this.videoCallManager.remoteStreams.get(data.sender_id);
-                    
-                    let tracksUpdated = false;
-                    receivers.forEach((receiver, index) => {
-                        const track = receiver.track;
-                        console.log(`  [handleWebRTCOffer] Receiver ${index}: kind=${receiver.track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
-                        
-                        // ВАЖНО: Если track null, не обрабатываем его
-                        if (!track) {
-                            console.log(`⚠️ [handleWebRTCOffer] Receiver ${index} имеет null track, пропускаем`);
-                            return;
-                        }
-                        
-                        // КРИТИЧНО: Добавляем треки ТОЛЬКО если enabled=true (камера/микрофон включены)
-                        // Если enabled=false, устройство выключено пользователем - не добавляем
-                        // ВАЖНО: muted - это временное состояние браузера, не влияет на добавление трека
-                        if (track.kind === 'video') {
-                        // Для видео: добавляем ТОЛЬКО если enabled=true и live
-                        // Если enabled=false - камера выключена пользователем
-                        // muted - временное состояние, не блокируем добавление
-                        if (track.readyState === 'live' && track.enabled) {
-                            // ВАЖНО: Создаем карточку только когда появляется активный видео трек (enabled=true)
-                            const participantCard = document.getElementById(`participant-${data.sender_id}`);
-                            if (!participantCard) {
-                                console.log(`✅ [handleWebRTCOffer] Создаем карточку для ${data.sender_id} - появился активный видео трек (enabled=true)`);
-                                this.videoCallManager.uiManager.createRemoteVideoElement(data.sender_id, remoteStream);
-                            }
-                                const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
-                                if (!existingTrack) {
-                                    remoteStream.addTrack(track);
-                                    tracksUpdated = true;
-                                    console.log(`✅ [handleWebRTCOffer] Видео трек ${track.id} для ${data.sender_id} добавлен в поток (delay=${delay}ms, enabled=${track.enabled}, muted=${track.muted})`);
-                                } else if (existingTrack !== track) {
-                                    // Трек заменен - обновляем
-                                    remoteStream.removeTrack(existingTrack);
-                                    remoteStream.addTrack(track);
-                                    tracksUpdated = true;
-                                    console.log(`🔄 [handleWebRTCOffer] Видео трек ${track.id} для ${data.sender_id} заменен в потоке`);
-                                }
-                                
-                                // КРИТИЧНО: Убеждаемся, что videoElement существует и обновляем его srcObject
-                                const videoElement = document.getElementById(`remoteVideo-${data.sender_id}`);
-                                if (videoElement) {
-                                    if (videoElement.srcObject !== remoteStream) {
-                                        console.log(`🔄 [handleWebRTCOffer] Устанавливаем srcObject для videoElement ${data.sender_id}`);
-                                        videoElement.srcObject = remoteStream;
-                                    }
-                                    // Пробуем воспроизвести видео
-                                    videoElement.play().catch(err => {
-                                        if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
-                                            console.warn(`⚠️ [handleWebRTCOffer] Ошибка play для ${data.sender_id}:`, err);
-                                        }
-                                    });
-                                }
-                            } else {
-                                console.log(`❌ [handleWebRTCOffer] НЕ создаем карточку и НЕ добавляем трек для ${data.sender_id} - видео трек неактивен (enabled=${track.enabled}, readyState=${track.readyState})`);
-                            }
-                        } else if (track.kind === 'audio') {
-                            // Для аудио: добавляем если live
-                            if (track.readyState === 'live') {
-                                const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
-                                if (!existingTrack) {
-                                    remoteStream.addTrack(track);
-                                    tracksUpdated = true;
-                                    console.log(`✅ [handleWebRTCOffer] Аудио трек ${track.id} для ${data.sender_id} добавлен в поток`);
-                                } else if (existingTrack !== track) {
-                                    // Трек заменен - обновляем
-                                    remoteStream.removeTrack(existingTrack);
-                                    remoteStream.addTrack(track);
-                                    tracksUpdated = true;
-                                    console.log(`🔄 [handleWebRTCOffer] Аудио трек ${track.id} для ${data.sender_id} заменен в потоке`);
-                                }
-                            }
-                        }
-                    });
-                    
-                    // КРИТИЧНО: Всегда сбрасываем кэш и обновляем UI
-                    // Это нужно чтобы UI обновился даже если треки уже были в потоке
-                    if (tracksUpdated || delay >= 500) {
-                        this.videoCallManager.uiManager.updateVideoOverlays();
-                    }
-                }, delay);
-            };
-            
-            // Проверяем несколько раз с разными задержками для надежности
-            checkReceivers(100);
-            checkReceivers(300);
-            checkReceivers(500);
-            
-            // КРИТИЧНО: После создания answer принудительно синхронизируем треки
-            // Это нужно чтобы увидеть треки нового пользователя сразу
-            setTimeout(() => {
-                this.syncTracksAfterUserJoined(data.sender_id);
-            }, 300);
-            setTimeout(() => {
-                this.syncTracksAfterUserJoined(data.sender_id);
-            }, 1000);
-            setTimeout(() => {
-                this.syncTracksAfterUserJoined(data.sender_id);
-            }, 2000);
-        
-            console.log(`📤 [handleWebRTCOffer] Отправляем answer через socket для ${data.sender_id}...`);
-            console.log(`   - Socket connected: ${this.videoCallManager.socket?.connected}`);
-            console.log(`   - Socket id: ${this.videoCallManager.socket?.id}`);
-            console.log(`   - Answer type: ${answer.type}`);
-            console.log(`   - Answer SDP length: ${answer.sdp ? answer.sdp.length : 0}`);
-            
-            // Отправляем ответ обратно инициатору через signaling-сервер
+            // Отправляем answer
+            console.log('📤 [handleWebRTCOffer] Отправляем answer для', data.sender_id);
             this.videoCallManager.socket.emit('webrtc_answer', {
                 target_user_id: data.sender_id,
                 answer: answer
             });
+            console.log('✅ [handleWebRTCOffer] Answer отправлен для', data.sender_id);
             
-            console.log(`✅ [handleWebRTCOffer] Answer отправлен через socket для ${data.sender_id}`);
-            console.log(`🟢 [handleWebRTCOffer] ========== КОНЕЦ ОБРАБОТКИ OFFER ==========`);
-        
         } catch (error) {
-            console.error('Error handling WebRTC offer:', error);
+            console.error('❌ [handleWebRTCOffer] Ошибка обработки offer от', data.sender_id, ':', error);
+            console.error('   - Error name:', error.name);
+            console.error('   - Error message:', error.message);
+            console.error('   - Error stack:', error.stack);
         }
     }
 
     async handleWebRTCAnswer(data) {
         try {
-            console.log(`🟡 [handleWebRTCAnswer] ========== НАЧАЛО ОБРАБОТКИ ANSWER от ${data.sender_id} ==========`);
-            console.log(`📥 [handleWebRTCAnswer] Received ANSWER from: ${data.sender_id}`);
-            console.log(`📥 [handleWebRTCAnswer] Answer data:`, {
-                hasAnswer: !!data.answer,
-                answerType: data.answer?.type,
-                answerSdpLength: data.answer?.sdp?.length || 0,
-                answerSdpPreview: data.answer?.sdp?.substring(0, 200) || 'no SDP'
-            });
-        
+            console.log('📥 [handleWebRTCAnswer] Received ANSWER from:', data.sender_id);
+            
             if (!this.videoCallManager.remoteUsers.has(data.sender_id)) {
                 console.error('❌ [handleWebRTCAnswer] No peer connection for:', data.sender_id);
                 return;
             }
-        
+            
             const peerConnection = this.videoCallManager.remoteUsers.get(data.sender_id);
-            console.log(`📥 [handleWebRTCAnswer] Текущее состояние соединения для ${data.sender_id}:`);
-            console.log(`   - signalingState: ${peerConnection.signalingState}`);
-            console.log(`   - connectionState: ${peerConnection.connectionState}`);
-            console.log(`   - iceConnectionState: ${peerConnection.iceConnectionState}`);
-            console.log(`   - iceGatheringState: ${peerConnection.iceGatheringState}`);
-            console.log(`   - localDescription: ${peerConnection.localDescription ? peerConnection.localDescription.type : 'null'}`);
-            console.log(`   - remoteDescription: ${peerConnection.remoteDescription ? peerConnection.remoteDescription.type : 'null'}`);
+            await peerConnection.setRemoteDescription(data.answer);
+            console.log('✅ [handleWebRTCAnswer] Remote description set successfully для', data.sender_id);
             
-            // ВАЖНО: Проверяем signalingState - answer можно устанавливать только в have-local-offer
-            if (peerConnection.signalingState !== 'have-local-offer') {
-                console.warn(`⚠️ [handleWebRTCAnswer] SignalingState is ${peerConnection.signalingState}, expected have-local-offer, skipping`);
-                // Если состояние stable, возможно answer уже был установлен
-                if (peerConnection.signalingState === 'stable') {
-                    console.log('✅ [handleWebRTCAnswer] Connection already stable, answer was already processed');
-                }
-                return;
-            }
-            
-            // ВАЖНО: Проверяем, что remote description еще не установлен (или это старый offer)
-            if (peerConnection.remoteDescription) {
-                // Если remoteDescription уже установлен и это answer - пропускаем
-                if (peerConnection.remoteDescription.type === 'answer') {
-                    console.warn('⚠️ [handleWebRTCAnswer] Answer already set, skipping');
-                    return;
-                }
-                // Если это старый offer - заменяем на answer
-                console.log('🔄 [handleWebRTCAnswer] Replacing old remote description with answer');
-            }
-            
-            try {
-                console.log(`🔄 [handleWebRTCAnswer] Устанавливаем remote description для ${data.sender_id}...`);
-                await peerConnection.setRemoteDescription(data.answer);
-                console.log(`✅ [handleWebRTCAnswer] Remote description set successfully для ${data.sender_id}`);
-                console.log(`📊 [handleWebRTCAnswer] Новое состояние после setRemoteDescription:`);
-                console.log(`   - signalingState: ${peerConnection.signalingState}`);
-                console.log(`   - connectionState: ${peerConnection.connectionState}`);
-                console.log(`   - iceConnectionState: ${peerConnection.iceConnectionState}`);
-                
-                // Логируем transceivers
-                const transceivers = peerConnection.getTransceivers();
-                console.log(`📊 [handleWebRTCAnswer] Transceivers count: ${transceivers.length}`);
-                transceivers.forEach((transceiver, idx) => {
-                    console.log(`   Transceiver ${idx}: kind=${transceiver.receiver.track?.kind || 'no track'}, direction=${transceiver.direction}, currentDirection=${transceiver.currentDirection}`);
-                });
-                
-                console.log(`🟡 [handleWebRTCAnswer] ========== КОНЕЦ ОБРАБОТКИ ANSWER ==========`);
-            } catch (error) {
-                console.error(`❌ [handleWebRTCAnswer] Ошибка установки remote description для ${data.sender_id}:`, error);
-                console.error(`   - Error name: ${error.name}`);
-                console.error(`   - Error message: ${error.message}`);
-                console.error(`   - Error stack: ${error.stack}`);
-                console.log(`🟡 [handleWebRTCAnswer] ========== КОНЕЦ (ОШИБКА) ==========`);
-                throw error;
-            }
-            
-            // ВАЖНО: Добавляем отложенные ICE кандидаты после установки remote description
-            if (peerConnection._pendingIceCandidates && peerConnection._pendingIceCandidates.length > 0) {
-                console.log(`🔄 [handleWebRTCAnswer] Adding ${peerConnection._pendingIceCandidates.length} pending ICE candidates`);
-                for (const candidate of peerConnection._pendingIceCandidates) {
-                    try {
-                        await peerConnection.addIceCandidate(candidate);
-                    } catch (err) {
-                        console.warn('⚠️ [handleWebRTCAnswer] Error adding pending ICE candidate:', err);
-                    }
-                }
-                peerConnection._pendingIceCandidates = [];
-            }
-            
-            // ВАЖНО: Проверяем, есть ли уже треки в соединении после установки remote description
-            
-            // ВАЖНО: После установки remote description треки должны прийти через ontrack
-            // Но иногда они уже есть в receivers, поэтому проверяем их тоже
-            // ВАЖНО: Делаем несколько проверок с задержками для надежности
-            const checkReceivers = (delay) => {
-                setTimeout(() => {
-                    const receivers = peerConnection.getReceivers();
-                    console.log(`🔍 [handleWebRTCAnswer] Проверка receivers после установки remote description для ${data.sender_id} (delay=${delay}ms):`, receivers.length);
-                    console.log(`🔍 [handleWebRTCAnswer] Текущие remoteStreams:`, Array.from(this.videoCallManager.remoteStreams.keys()));
-                    
-                    // ВАЖНО: Проверяем, есть ли уже remoteStream для этого пользователя
-                    if (!this.videoCallManager.remoteStreams.has(data.sender_id)) {
-                        const remoteStream = new MediaStream();
-                        this.videoCallManager.remoteStreams.set(data.sender_id, remoteStream);
-                        // ВАЖНО: НЕ создаем карточку сразу - она будет создана только когда появится активный видео трек
-                        // this.videoCallManager.uiManager.createRemoteVideoElement(data.sender_id, remoteStream);
-                    }
-                    const remoteStream = this.videoCallManager.remoteStreams.get(data.sender_id);
-                    
-                    let tracksUpdated = false;
-                    receivers.forEach((receiver, index) => {
-                        const track = receiver.track;
-                        console.log(`  [handleWebRTCAnswer] Receiver ${index}: kind=${receiver.track?.kind}, track=${track ? 'exists' : 'null'}, enabled=${track?.enabled}, muted=${track?.muted}, readyState=${track?.readyState}`);
-                        // ВАЖНО: Если track null, не обрабатываем его
-                        if (!track) {
-                            console.log(`⚠️ [handleWebRTCAnswer] Receiver ${index} имеет null track, пропускаем`);
-                            return;
-                        }
-                        
-                        // КРИТИЧНО: Добавляем треки ТОЛЬКО если enabled=true (камера/микрофон включены)
-                        // Если enabled=false, устройство выключено пользователем - не добавляем
-                        // ВАЖНО: muted - это временное состояние браузера, не влияет на добавление трека
-                        if (track.kind === 'video') {
-                        // Для видео: добавляем ТОЛЬКО если enabled=true и live
-                        // Если enabled=false - камера выключена пользователем
-                        // muted - временное состояние, не блокируем добавление
-                        if (track.readyState === 'live' && track.enabled) {
-                            // ВАЖНО: Создаем карточку только когда появляется активный видео трек (enabled=true)
-                            const participantCard = document.getElementById(`participant-${data.sender_id}`);
-                            if (!participantCard) {
-                                console.log(`✅ [handleWebRTCAnswer] Создаем карточку для ${data.sender_id} - появился активный видео трек (enabled=true)`);
-                                this.videoCallManager.uiManager.createRemoteVideoElement(data.sender_id, remoteStream);
-                            }
-                                const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
-                                if (!existingTrack) {
-                                    remoteStream.addTrack(track);
-                                    tracksUpdated = true;
-                                    console.log(`✅ [handleWebRTCAnswer] Видео трек ${track.id} для ${data.sender_id} добавлен в поток (delay=${delay}ms, enabled=${track.enabled}, muted=${track.muted})`);
-                                } else if (existingTrack !== track) {
-                                    // Трек заменен - обновляем
-                                    remoteStream.removeTrack(existingTrack);
-                                    remoteStream.addTrack(track);
-                                    tracksUpdated = true;
-                                    console.log(`🔄 [handleWebRTCAnswer] Видео трек ${track.id} для ${data.sender_id} заменен в потоке`);
-                                }
-                                
-                                // КРИТИЧНО: Убеждаемся, что videoElement существует и обновляем его srcObject
-                                const videoElement = document.getElementById(`remoteVideo-${data.sender_id}`);
-                                if (videoElement) {
-                                    if (videoElement.srcObject !== remoteStream) {
-                                        console.log(`🔄 [handleWebRTCAnswer] Устанавливаем srcObject для videoElement ${data.sender_id}`);
-                                        videoElement.srcObject = remoteStream;
-                                    }
-                                    // Пробуем воспроизвести видео
-                                    videoElement.play().catch(err => {
-                                        if (err.name !== 'AbortError' && err.message && !err.message.includes('aborted')) {
-                                            console.warn(`⚠️ [handleWebRTCAnswer] Ошибка play для ${data.sender_id}:`, err);
-                                        }
-                                    });
-                                }
-                            } else {
-                                console.log(`❌ [handleWebRTCAnswer] НЕ создаем карточку и НЕ добавляем трек для ${data.sender_id} - видео трек неактивен (enabled=${track.enabled}, readyState=${track.readyState})`);
-                            }
-                        } else if (track.kind === 'audio') {
-                            // Для аудио: добавляем если live
-                            if (track.readyState === 'live') {
-                                const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
-                                if (!existingTrack) {
-                                    remoteStream.addTrack(track);
-                                    tracksUpdated = true;
-                                    console.log(`✅ [handleWebRTCAnswer] Аудио трек ${track.id} для ${data.sender_id} добавлен в поток`);
-                                } else if (existingTrack !== track) {
-                                    // Трек заменен - обновляем
-                                    remoteStream.removeTrack(existingTrack);
-                                    remoteStream.addTrack(track);
-                                    tracksUpdated = true;
-                                    console.log(`🔄 [handleWebRTCAnswer] Аудио трек ${track.id} для ${data.sender_id} заменен в потоке`);
-                                }
-                            }
-                        }
-                    });
-                    
-                    // КРИТИЧНО: Всегда сбрасываем кэш и обновляем UI
-                    // Это нужно чтобы UI обновился даже если треки уже были в потоке
-                    if (tracksUpdated || delay >= 500) {
-                        this.videoCallManager.uiManager.updateVideoOverlays();
-                    }
-                }, delay);
-            };
-            
-            // Проверяем несколько раз с разными задержками для надежности
-            checkReceivers(100);
-            checkReceivers(300);
-            checkReceivers(500);
-            
-            // КРИТИЧНО: После получения answer принудительно синхронизируем треки
-            // Это нужно чтобы увидеть треки существующего пользователя сразу
-            setTimeout(() => {
-                this.syncTracksAfterUserJoined(data.sender_id);
-            }, 300);
-            setTimeout(() => {
-                this.syncTracksAfterUserJoined(data.sender_id);
-            }, 1000);
-            setTimeout(() => {
-                this.syncTracksAfterUserJoined(data.sender_id);
-            }, 2000);
-        
         } catch (error) {
-            console.error('Error handling WebRTC answer:', error);
+            console.error('❌ [handleWebRTCAnswer] Ошибка обработки answer от', data.sender_id, ':', error);
+            console.error('   - Error name:', error.name);
+            console.error('   - Error message:', error.message);
+            console.error('   - Error stack:', error.stack);
         }
     }
     

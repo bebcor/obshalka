@@ -1012,6 +1012,7 @@ class VideoCallManager {
             this.webrtcManager.setupPeerConnection(data.user_id);
             
             // 3. И только ПОСЛЕ этого создавай offer
+            console.log(`⏰ [handleUserJoined] Устанавливаем таймаут 200ms для создания OFFER для ${data.user_id}...`);
             setTimeout(() => {
                 console.log(`⏰ [handleUserJoined] Таймаут для ${data.user_id}, проверяем соединение...`);
                 if (this.remoteUsers.has(data.user_id)) {
@@ -1172,12 +1173,46 @@ class VideoCallManager {
 
     handleWebRTCOffer(data) {
         console.log('📥 [main] handleWebRTCOffer вызван для:', data.sender_id);
-        this.webrtcManager.handleWebRTCOffer(data);
+        console.log('📥 [main] handleWebRTCOffer data:', {
+            sender_id: data.sender_id,
+            hasOffer: !!data.offer,
+            offerType: data.offer?.type
+        });
+        try {
+            this.webrtcManager.handleWebRTCOffer(data).catch(err => {
+                console.error(`❌ [main] Ошибка в handleWebRTCOffer для ${data.sender_id}:`, err);
+                console.error(`   - Error name: ${err.name}`);
+                console.error(`   - Error message: ${err.message}`);
+                console.error(`   - Error stack: ${err.stack}`);
+            });
+        } catch (error) {
+            console.error(`❌ [main] Синхронная ошибка в handleWebRTCOffer для ${data.sender_id}:`, error);
+            console.error(`   - Error name: ${error.name}`);
+            console.error(`   - Error message: ${error.message}`);
+            console.error(`   - Error stack: ${error.stack}`);
+        }
     }
 
     handleWebRTCAnswer(data) {
         console.log('📥 [main] handleWebRTCAnswer вызван для:', data.sender_id);
-        this.webrtcManager.handleWebRTCAnswer(data);
+        console.log('📥 [main] handleWebRTCAnswer data:', {
+            sender_id: data.sender_id,
+            hasAnswer: !!data.answer,
+            answerType: data.answer?.type
+        });
+        try {
+            this.webrtcManager.handleWebRTCAnswer(data).catch(err => {
+                console.error(`❌ [main] Ошибка в handleWebRTCAnswer для ${data.sender_id}:`, err);
+                console.error(`   - Error name: ${err.name}`);
+                console.error(`   - Error message: ${err.message}`);
+                console.error(`   - Error stack: ${err.stack}`);
+            });
+        } catch (error) {
+            console.error(`❌ [main] Синхронная ошибка в handleWebRTCAnswer для ${data.sender_id}:`, error);
+            console.error(`   - Error name: ${error.name}`);
+            console.error(`   - Error message: ${error.message}`);
+            console.error(`   - Error stack: ${error.stack}`);
+        }
     }
 
     handleICECandidate(data) {
