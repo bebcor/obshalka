@@ -136,6 +136,7 @@ class UIManager {
         // Скрыть локальную карточку
         const localCard = document.getElementById('localParticipantCard');
         if (localCard) {
+            console.log(`   🚫 Скрываем локальную карточку`);
             localCard.style.setProperty('display', 'none', 'important');
             localCard.style.setProperty('visibility', 'hidden', 'important');
             localCard.style.setProperty('opacity', '0', 'important');
@@ -145,9 +146,17 @@ class UIManager {
         this.videoCallManager.remoteStreams.forEach((stream, userId) => {
             const remoteCard = document.getElementById(`participant-${userId}`);
             if (remoteCard) {
+                console.log(`   🚫 Скрываем удаленную карточку ${userId}`);
                 remoteCard.style.setProperty('display', 'none', 'important');
                 remoteCard.style.setProperty('visibility', 'hidden', 'important');
                 remoteCard.style.setProperty('opacity', '0', 'important');
+                
+                // КРИТИЧНО: Сбрасываем srcObject чтобы не было черной плашки
+                const videoElement = document.getElementById(`remoteVideo-${userId}`);
+                if (videoElement && videoElement.srcObject) {
+                    console.log(`   🗑️ Сбрасываем srcObject для ${userId} (карточка скрыта)`);
+                    videoElement.srcObject = null;
+                }
             }
         });
         
@@ -161,25 +170,63 @@ class UIManager {
         if (this.hasActiveCamera(this.videoCallManager.localStream)) {
             activeCameras.set('local', this.videoCallManager.localStream);
             console.log(`✅ Локальная камера активна`);
+        } else {
+            console.log(`❌ Локальная камера неактивна`);
         }
         
         // Удаленные камеры
         this.videoCallManager.remoteStreams.forEach((stream, userId) => {
-            if (this.hasActiveCamera(stream)) {
+            console.log(`\n🔍 Проверка удаленного потока ${userId}:`);
+            
+            if (!stream) {
+                console.log(`   ❌ Поток отсутствует`);
+                return;
+            }
+            
+            const videoTracks = stream.getVideoTracks();
+            console.log(`   📹 Количество видео треков: ${videoTracks.length}`);
+            
+            if (videoTracks.length === 0) {
+                console.log(`   ❌ Нет видео треков - поток неактивен`);
+                return;
+            }
+            
+            // Детальная информация о каждом треке
+            videoTracks.forEach((track, index) => {
+                console.log(`   📹 Трек #${index} (id: ${track.id}):`);
+                console.log(`      - readyState: ${track.readyState}`);
+                console.log(`      - enabled: ${track.enabled}`);
+                console.log(`      - muted: ${track.muted}`);
+                
+                const isActive = track.readyState === 'live' && 
+                                track.enabled && 
+                                !track.muted;
+                console.log(`      - активен: ${isActive ? '✅' : '❌'}`);
+            });
+            
+            const isActive = this.hasActiveCamera(stream);
+            console.log(`   🎯 Итоговый результат для ${userId}: ${isActive ? '✅ АКТИВЕН' : '❌ НЕАКТИВЕН'}`);
+            
+            if (isActive) {
                 activeCameras.set(userId, stream);
-                console.log(`✅ Удаленная камера ${userId} активна`);
             }
         });
         
-        console.log(`📹 Активные камеры: ${activeCameras.size} (локальная: ${activeCameras.has('local')})`);
+        console.log(`\n📹 Активные камеры: ${activeCameras.size} (локальная: ${activeCameras.has('local')})`);
         return activeCameras;
     }
     
     hasActiveCamera(stream) {
-        if (!stream) return false;
+        if (!stream) {
+            console.log(`   [hasActiveCamera] Поток отсутствует - возвращаем false`);
+            return false;
+        }
         
         const videoTracks = stream.getVideoTracks();
-        if (videoTracks.length === 0) return false;
+        if (videoTracks.length === 0) {
+            console.log(`   [hasActiveCamera] Нет видео треков - возвращаем false`);
+            return false;
+        }
         
         // Проверяем все треки, а не только первый
         const hasActiveTrack = videoTracks.some(track => {
@@ -190,38 +237,73 @@ class UIManager {
         });
         
         // Если есть активный трек, возвращаем true
-        if (hasActiveTrack) return true;
+        if (hasActiveTrack) {
+            console.log(`   [hasActiveCamera] Найден активный трек - возвращаем true`);
+            return true;
+        }
         
         // Для локального потока: проверяем демонстрацию экрана
-        // Но только если трек существует (даже если неактивен)
+        // ВАЖНО: для удаленных потоков эта проверка не выполняется
         const isLocalStream = stream === this.videoCallManager.localStream;
         if (isLocalStream) {
             const isSharingScreen = this.videoCallManager.isSharingScreen || false;
+            console.log(`   [hasActiveCamera] Локальный поток, isSharingScreen: ${isSharingScreen}`);
             // При демонстрации экрана проверяем, что трек хотя бы существует и live
             if (isSharingScreen) {
-                return videoTracks.some(track => track.readyState === 'live');
+                const hasLiveTrack = videoTracks.some(track => track.readyState === 'live');
+                console.log(`   [hasActiveCamera] Демонстрация экрана, есть live трек: ${hasLiveTrack}`);
+                return hasLiveTrack;
             }
+        } else {
+            console.log(`   [hasActiveCamera] Удаленный поток - проверка isSharingScreen пропущена`);
         }
         
+        console.log(`   [hasActiveCamera] Нет активных треков - возвращаем false`);
         return false;
     }
     
     displayOnlyActiveCameras(activeCameras) {
-        console.log(`🔄 Отображаем ${activeCameras.size} активных камер`);
+        console.log(`🔄 [displayOnlyActiveCameras] Отображаем ${activeCameras.size} активных камер`);
         
         // Локальная камера
         if (activeCameras.has('local')) {
+            console.log(`   ✅ [displayOnlyActiveCameras] Показываем локальную камеру`);
             this.showLocalCamera(activeCameras.get('local'));
+        } else {
+            console.log(`   ❌ [displayOnlyActiveCameras] Локальная камера неактивна, не показываем`);
         }
         
         // Удаленные камеры
         activeCameras.forEach((stream, userId) => {
             if (userId !== 'local') {
+                console.log(`   ✅ [displayOnlyActiveCameras] Показываем удаленную камеру ${userId}`);
                 this.showRemoteCamera(userId, stream);
             }
         });
         
-        console.log(`✅ Отображение камер завершено`);
+        // ВАЖНО: Убеждаемся, что все НЕактивные карточки скрыты и srcObject сброшен
+        this.videoCallManager.remoteStreams.forEach((stream, userId) => {
+            if (!activeCameras.has(userId)) {
+                const remoteCard = document.getElementById(`participant-${userId}`);
+                if (remoteCard) {
+                    const computedStyle = window.getComputedStyle(remoteCard);
+                    if (computedStyle.display !== 'none') {
+                        console.log(`   ⚠️ [displayOnlyActiveCameras] Карточка ${userId} неактивна, но все еще видима! Принудительно скрываем`);
+                        remoteCard.style.setProperty('display', 'none', 'important');
+                        remoteCard.style.setProperty('visibility', 'hidden', 'important');
+                        remoteCard.style.setProperty('opacity', '0', 'important');
+                        
+                        const videoElement = document.getElementById(`remoteVideo-${userId}`);
+                        if (videoElement && videoElement.srcObject) {
+                            console.log(`   🗑️ [displayOnlyActiveCameras] Сбрасываем srcObject для неактивной карточки ${userId}`);
+                            videoElement.srcObject = null;
+                        }
+                    }
+                }
+            }
+        });
+        
+        console.log(`✅ [displayOnlyActiveCameras] Отображение камер завершено`);
     }
     
     showLocalCamera(stream) {
@@ -258,12 +340,13 @@ class UIManager {
     }
     
     showRemoteCamera(userId, stream) {
-        console.log(`🔄 Показываем удаленную камеру ${userId}`);
+        console.log(`🔄 [showRemoteCamera] Показываем удаленную камеру ${userId}`);
         
         let card = document.getElementById(`participant-${userId}`);
         
         // Создать карточку если не существует
         if (!card) {
+            console.log(`   🆕 [showRemoteCamera] Карточка ${userId} не существует, создаем`);
             this.createRemoteVideoElement(userId, stream);
             card = document.getElementById(`participant-${userId}`);
         }
@@ -272,6 +355,7 @@ class UIManager {
             const videoElement = document.getElementById(`remoteVideo-${userId}`);
             const overlay = card.querySelector('.video-overlay');
             
+            console.log(`   ✅ [showRemoteCamera] Показываем карточку ${userId} (display: block)`);
             card.style.setProperty('display', 'block', 'important');
             card.style.removeProperty('visibility');
             card.style.removeProperty('opacity');
@@ -280,7 +364,10 @@ class UIManager {
             
             if (videoElement) {
                 if (videoElement.srcObject !== stream) {
+                    console.log(`   📹 [showRemoteCamera] Устанавливаем srcObject для ${userId}`);
                     videoElement.srcObject = stream;
+                } else {
+                    console.log(`   ✅ [showRemoteCamera] srcObject уже установлен для ${userId}`);
                 }
                 videoElement.style.setProperty('display', 'block', 'important');
                 
@@ -288,13 +375,17 @@ class UIManager {
                 videoElement.play().catch(err => {
                     console.warn(`⚠️ Ошибка play для удаленного видео ${userId}:`, err);
                 });
+            } else {
+                console.warn(`   ⚠️ [showRemoteCamera] Видео элемент не найден для ${userId}`);
             }
             
             if (overlay) {
                 overlay.style.setProperty('display', 'none', 'important');
             }
             
-            console.log(`✅ Удаленная камера ${userId} показана`);
+            console.log(`✅ [showRemoteCamera] Удаленная камера ${userId} показана`);
+        } else {
+            console.error(`   ❌ [showRemoteCamera] Не удалось найти или создать карточку для ${userId}`);
         }
     }
     
